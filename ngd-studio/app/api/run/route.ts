@@ -1,25 +1,12 @@
 import { NextRequest } from "next/server";
 import { runClaude, transformToSSE, type SSEEvent } from "@/lib/claude";
 import { buildCreatePrompt, buildReviewPrompt } from "@/lib/prompts";
-import { writeFile, mkdir, readdir } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
 const DATA_DIR = path.join(process.cwd(), "data/jobs");
 const BASE_DIR = path.resolve(process.cwd(), "..");
-
-async function findHwpxTemplate(): Promise<string | null> {
-  const dir = path.join(BASE_DIR, "inputs/시험지 제작");
-  try {
-    const entries = await readdir(dir);
-    const hwpx = entries.find((f) => f.toLowerCase().endsWith(".hwpx"));
-    if (hwpx) return `inputs/시험지 제작/${hwpx}`;
-    const hwp = entries.find((f) => f.toLowerCase().endsWith(".hwp"));
-    if (hwp) return `inputs/시험지 제작/${hwp}`;
-    return null;
-  } catch {
-    return null;
-  }
-}
+const HWPX_TEMPLATE = process.env.HWPX_TEMPLATE_PATH ?? "";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,18 +32,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // For create mode, auto-detect hwpx template if not provided
-    let resolvedFiles = { pdf: files.pdf, hwpx: files.hwpx ?? "" };
-    if (mode === "create" && !files.hwpx) {
-      const template = await findHwpxTemplate();
-      if (!template) {
-        return new Response(
-          JSON.stringify({ error: "양식 HWPX 파일을 inputs/시험지 제작/ 폴더에서 찾을 수 없습니다." }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
-      }
-      resolvedFiles.hwpx = template;
-    }
+    // For create mode, use fixed template path from env
+    const resolvedFiles = {
+      pdf: files.pdf,
+      hwpx: files.hwpx ?? HWPX_TEMPLATE,
+    };
 
     const prompt =
       mode === "create"
