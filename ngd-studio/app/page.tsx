@@ -1,10 +1,43 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { DemoPreview } from "@/components/shared/DemoPreview";
+import { Badge } from "@/components/ui/badge";
+
+interface Job {
+  id: string;
+  mode: "create" | "review";
+  status: string;
+  inputFiles?: string[];
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+interface SystemStatus {
+  cli: { available: boolean; version: string };
+  queue: { running: string | null; queueLength: number };
+}
 
 export default function DashboardPage() {
+  const [recentJobs, setRecentJobs] = useState<Job[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+
+  useEffect(() => {
+    fetch("/api/jobs?limit=5")
+      .then((r) => r.json())
+      .then((d) => setRecentJobs(d.jobs ?? []))
+      .catch(() => {});
+
+    fetch("/api/status")
+      .then((r) => r.json())
+      .then((d) => setSystemStatus(d))
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="space-y-8">
+      {/* Quick start */}
       <div className="grid grid-cols-2 gap-4">
         <Link href="/create">
           <Card className="hover:border-primary/40 transition-colors cursor-pointer">
@@ -28,7 +61,109 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <DemoPreview />
+      {/* System status */}
+      <Card className="p-4">
+        <h3 className="text-sm font-medium mb-3">시스템 상태</h3>
+        <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-2">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                systemStatus?.cli.available
+                  ? "bg-[var(--color-status-success)]"
+                  : "bg-[var(--color-status-error)]"
+              }`}
+            />
+            <span>Claude CLI</span>
+            {systemStatus?.cli.available ? (
+              <span className="text-xs text-muted-foreground">
+                {systemStatus.cli.version || "연결됨"}
+              </span>
+            ) : (
+              <span className="text-xs text-[var(--color-status-error)]">
+                {systemStatus === null ? "확인중..." : "미설치"}
+              </span>
+            )}
+          </div>
+          <div className="w-px h-4 bg-border" />
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground">대기열</span>
+            <span>
+              {systemStatus?.queue.running ? "1건 진행중" : "유휴"}
+              {(systemStatus?.queue.queueLength ?? 0) > 0 &&
+                ` / ${systemStatus!.queue.queueLength}건 대기`}
+            </span>
+          </div>
+        </div>
+      </Card>
+
+      {/* Recent jobs */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-muted-foreground">최근 작업</h3>
+          <Link
+            href="/history"
+            className="text-xs text-primary hover:underline"
+          >
+            전체 보기
+          </Link>
+        </div>
+
+        {recentJobs.length === 0 ? (
+          <Card className="p-8">
+            <p className="text-sm text-muted-foreground text-center">
+              아직 작업 기록이 없습니다.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-1">
+            {recentJobs.map((job) => (
+              <div
+                key={job.id}
+                className="flex items-center gap-3 px-4 py-3 rounded-md hover:bg-secondary transition-colors"
+              >
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    job.status === "done"
+                      ? "bg-[var(--color-status-success)]"
+                      : job.status === "failed"
+                        ? "bg-[var(--color-status-error)]"
+                        : "bg-[var(--color-status-info)] animate-pulse"
+                  }`}
+                />
+                <Badge variant="secondary" className="text-xs shrink-0">
+                  {job.mode === "create" ? "제작" : "오검"}
+                </Badge>
+                <span className="text-sm truncate flex-1">
+                  {getJobTitle(job)}
+                </span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {formatRelative(job.startedAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+function getJobTitle(job: Job): string {
+  if (job.inputFiles && job.inputFiles.length > 0) {
+    const pdf = job.inputFiles.find((f) => f.endsWith(".pdf"));
+    if (pdf) return pdf.split("/").pop() ?? pdf;
+  }
+  return `작업 ${job.id.slice(0, 8)}`;
+}
+
+function formatRelative(iso?: string): string {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return "방금 전";
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  return `${day}일 전`;
 }
