@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { DemoPreview } from "@/components/shared/DemoPreview";
 
 export default function DashboardPage() {
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">대시보드</h1>
+    <div className="space-y-8">
       <div className="grid grid-cols-2 gap-4">
         <Link href="/create">
           <Card className="hover:border-primary/40 transition-colors cursor-pointer">
@@ -27,6 +27,8 @@ export default function DashboardPage() {
           </Card>
         </Link>
       </div>
+
+      <DemoPreview />
     </div>
   );
 }
