@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useJobStore, type JobState } from "./store";
 import type { SSEEvent } from "./claude";
+import { parseReviewReport } from "./reviewParser";
 
 export function useJobRunner() {
   const store = useJobStore();
@@ -82,6 +83,14 @@ export function useJobRunner() {
             message: "작업이 완료되었습니다.",
             level: "info",
           });
+
+          // Parse review report from logs if in review mode
+          if (mode === "review") {
+            const state = useJobStore.getState();
+            const allText = state.logs.map((l) => l.message).join("\n");
+            const reviewItems = parseReviewReport(allText);
+            store.setReviewItems(reviewItems);
+          }
         }
       } catch (err) {
         store.setStatus("failed");

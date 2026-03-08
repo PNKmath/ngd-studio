@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { PipelineStage } from "@/components/pipeline/PipelineView";
 import type { LogEntry } from "@/components/log/LogStream";
+import type { ReviewItem } from "@/lib/reviewParser";
 
 export interface JobState {
   jobId: string | null;
@@ -11,6 +12,7 @@ export interface JobState {
   files: { name: string; size: number; path?: string }[];
   intermediateFiles: { type: string; name: string; path: string }[];
   result: { status: string; outputPath?: string; summary?: string } | null;
+  reviewItems: ReviewItem[];
 
   // Actions
   reset: () => void;
@@ -23,6 +25,7 @@ export interface JobState {
   addLog: (log: LogEntry) => void;
   addIntermediateFile: (file: { type: string; name: string; path: string }) => void;
   setResult: (result: JobState["result"]) => void;
+  setReviewItems: (items: ReviewItem[]) => void;
 }
 
 const createStages: PipelineStage[] = [
@@ -46,6 +49,7 @@ export const useJobStore = create<JobState>((set) => ({
   files: [],
   intermediateFiles: [],
   result: null,
+  reviewItems: [],
 
   reset: () =>
     set({
@@ -57,6 +61,7 @@ export const useJobStore = create<JobState>((set) => ({
       files: [],
       intermediateFiles: [],
       result: null,
+      reviewItems: [],
     }),
 
   setJobId: (id) => set({ jobId: id }),
@@ -86,4 +91,5 @@ export const useJobStore = create<JobState>((set) => ({
     })),
 
   setResult: (result) => set({ result }),
+  setReviewItems: (items) => set({ reviewItems: items }),
 }));
