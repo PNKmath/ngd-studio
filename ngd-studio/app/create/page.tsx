@@ -8,6 +8,7 @@ import { PipelineView } from "@/components/pipeline/PipelineView";
 import { LogStream } from "@/components/log/LogStream";
 import { ResultTabs } from "@/components/results/ResultTabs";
 import { DownloadButton } from "@/components/shared/DownloadButton";
+import { FollowupChat } from "@/components/shared/FollowupChat";
 import { useJobStore } from "@/lib/store";
 import { useJobRunner } from "@/lib/useJobRunner";
 
@@ -109,6 +110,11 @@ export default function CreatePage() {
           <ResultTabs />
           <LogStream logs={logs} />
         </div>
+      )}
+
+      {/* Followup chat */}
+      {isDone && (
+        <FollowupChat disabled={isRunning} />
       )}
     </div>
   );

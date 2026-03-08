@@ -8,6 +8,7 @@ import { PipelineView } from "@/components/pipeline/PipelineView";
 import { LogStream } from "@/components/log/LogStream";
 import { ReviewReport } from "@/components/results/ReviewReport";
 import { DownloadButton } from "@/components/shared/DownloadButton";
+import { FollowupChat } from "@/components/shared/FollowupChat";
 import { useJobStore } from "@/lib/store";
 import { useJobRunner } from "@/lib/useJobRunner";
 import { summarizeReport } from "@/lib/reviewParser";
@@ -140,6 +141,11 @@ export default function ReviewPage() {
           </div>
           <LogStream logs={logs} />
         </div>
+      )}
+
+      {/* Followup chat */}
+      {isDone && (
+        <FollowupChat disabled={isRunning} />
       )}
     </div>
   );
