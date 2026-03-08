@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FileDropzone } from "@/components/upload/FileDropzone";
+import type { UploadedFile } from "@/components/upload/FileDropzone";
 import { PipelineView } from "@/components/pipeline/PipelineView";
 import { LogStream } from "@/components/log/LogStream";
 import { ResultTabs } from "@/components/results/ResultTabs";
@@ -20,20 +21,15 @@ export default function CreatePage() {
   const jobId = useJobStore((s) => s.jobId);
   const result = useJobStore((s) => s.result);
 
-  const [uploadedFiles, setUploadedFiles] = useState<
-    { name: string; size: number; path?: string }[]
-  >([]);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
 
   const pdfFile = uploadedFiles.find((f) => f.name.toLowerCase().endsWith(".pdf"));
-  const hwpxFile = uploadedFiles.find(
-    (f) => f.name.toLowerCase().endsWith(".hwpx") || f.name.toLowerCase().endsWith(".hwp")
-  );
-  const canStart = !!pdfFile && !!hwpxFile && status === "idle";
+  const canStart = !!pdfFile && status === "idle";
 
   const handleStart = useCallback(async () => {
-    if (!pdfFile?.path || !hwpxFile?.path) return;
-    await startJob("create", { pdf: pdfFile.path, hwpx: hwpxFile.path });
-  }, [pdfFile, hwpxFile, startJob]);
+    if (!pdfFile?.path) return;
+    await startJob("create", { pdf: pdfFile.path });
+  }, [pdfFile, startJob]);
 
   const isRunning = status === "running";
   const isDone = status === "done" || status === "failed";
@@ -53,12 +49,6 @@ export default function CreatePage() {
                   {pdfFile ? "✓" : "○"}
                 </span>
                 원본 PDF {pdfFile ? `— ${pdfFile.name}` : "(필수)"}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className={hwpxFile ? "text-[var(--color-status-success)]" : ""}>
-                  {hwpxFile ? "✓" : "○"}
-                </span>
-                양식 HWPX {hwpxFile ? `— ${hwpxFile.name}` : "(필수)"}
               </div>
             </div>
 

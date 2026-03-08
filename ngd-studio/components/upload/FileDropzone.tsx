@@ -3,10 +3,10 @@
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
 
-interface UploadedFile {
+export interface UploadedFile {
   name: string;
   size: number;
-  path?: string;
+  path: string;
 }
 
 interface FileDropzoneProps {
@@ -17,23 +17,28 @@ interface FileDropzoneProps {
 
 export function FileDropzone({
   mode,
-  accept = [".pdf", ".hwpx", ".hwp"],
+  accept = [".pdf"],
   onFilesChange,
 }: FileDropzoneProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const uploadFiles = useCallback(
     async (fileList: FileList | File[]) => {
       const filtered = Array.from(fileList).filter((f) =>
         accept.some((ext) => f.name.toLowerCase().endsWith(ext))
       );
-      if (filtered.length === 0) return;
+      if (filtered.length === 0) {
+        setError(`지원하지 않는 파일 형식입니다. (${accept.join(", ")}만 가능)`);
+        return;
+      }
 
       setIsUploading(true);
       setProgress(0);
+      setError(null);
 
       const formData = new FormData();
       formData.append("mode", mode);
@@ -46,18 +51,22 @@ export function FileDropzone({
         });
         setProgress(100);
 
-        if (res.ok) {
-          const data = await res.json();
-          const uploaded: UploadedFile[] = data.files ?? filtered.map((f) => ({
-            name: f.name,
-            size: f.size,
-          }));
-          const newFiles = [...files, ...uploaded];
-          setFiles(newFiles);
-          onFilesChange?.(newFiles);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error ?? `업로드 실패 (${res.status})`);
         }
-      } catch {
-        // error handled silently for now
+
+        const data = await res.json();
+        if (!Array.isArray(data.files) || data.files.length === 0) {
+          throw new Error("서버 응답에 파일 정보가 없습니다.");
+        }
+
+        const uploaded: UploadedFile[] = data.files;
+        const newFiles = [...files, ...uploaded];
+        setFiles(newFiles);
+        onFilesChange?.(newFiles);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "업로드 중 오류가 발생했습니다.");
       } finally {
         setIsUploading(false);
         setProgress(0);
@@ -141,6 +150,10 @@ export function FileDropzone({
           </p>
         </div>
       </div>
+
+      {error && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
 
       {isUploading && (
         <div className="h-1.5 bg-muted rounded-full overflow-hidden">

@@ -9,7 +9,7 @@ export function useJobRunner() {
   const store = useJobStore();
 
   const startJob = useCallback(
-    async (mode: "create" | "review", files: { pdf: string; hwpx: string }) => {
+    async (mode: "create" | "review", files: { pdf: string; hwpx?: string }) => {
       const jobId = crypto.randomUUID();
 
       store.reset();

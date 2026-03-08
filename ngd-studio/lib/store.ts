@@ -9,7 +9,7 @@ export interface JobState {
   status: "idle" | "uploading" | "running" | "done" | "failed";
   stages: PipelineStage[];
   logs: LogEntry[];
-  files: { name: string; size: number; path?: string }[];
+  files: { name: string; size: number; path: string }[];
   intermediateFiles: { type: string; name: string; path: string }[];
   result: { status: string; outputPath?: string; summary?: string } | null;
   reviewItems: ReviewItem[];
