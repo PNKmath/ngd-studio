@@ -23,6 +23,9 @@ skills:
 - content.hpf 템플릿: `base_hwpx/content_hpf_template.xml`
 - 루트 엘리먼트: `base_hwpx/root_element.xml`
 - 보기 테이블 템플릿: `base_hwpx/bogi_table_3items.xml`, `bogi_table_6items.xml`
+- 조건/보기 사각형 템플릿: `base_hwpx/condition_rect_template.xml` (hp:rect)
+- 빈박스 템플릿: `base_hwpx/empty_box_template.xml` (hp:rect)
+- 증명틀 템플릿: `base_hwpx/proof_table_template.xml` (hp:tbl)
 - Sample 분석: `.claude/skills/ngd-exam-create/sample_analysis.md`
 
 ## ZIP 구조 규칙 (파일이 열리지 않으면 여기가 원인!)
@@ -128,28 +131,55 @@ builder가 받는 JSON은 다음 구조를 따른다:
 
 ### p[0] 필수 요소 (이것이 없으면 파일이 안 열림!)
 
-p[0]는 단일 문단에 모든 헤더 요소를 포함:
+p[0]는 단일 문단에 헤더/푸터/정보테이블을 모두 포함:
 ```
 p[0] (paraPrIDRef="1", id="고유값")
   └─ run[0] charPrIDRef="7"
        ├─ <hp:secPr> (섹션속성: 용지,여백,미주설정,pageBorderFill)
-       ├─ <hp:ctrl><hp:colPr> (2단 설정)
-       ├─ <hp:endNote number="0"> (빈 미주 — 필수!)
-       │    └─ <hp:subList><hp:p>빈줄</hp:p></hp:subList>
-       ├─ <hp:equation> (저작권 수식, textColor=#FFFFFF, baseUnit=600, treatAsChar=1)
-       ├─ <hp:equation> (저작권 수식2, textColor=#FFFFFF, BEHIND_TEXT, treatAsChar=0)
-       ├─ <hp:tbl> (정보테이블1: 2행3열 — 년도,학교,과목,범위)
-       ├─ <hp:tbl> (정보테이블2: 저작권표시 — 제작일,제작자,법률,경고)
-       └─ <hp:pic> (NGD 로고, image2, 6912x6912)
-  └─ run[1] charPrIDRef="7" (빈)
+       └─ <hp:ctrl><hp:colPr> (2단 설정)
+  └─ run[1] charPrIDRef="7"
+       ├─ <hp:ctrl><hp:footer id="3" applyPageType="BOTH">  (페이지 하단)
+       │    └─ <hp:subList>
+       │         ├─ <hp:p> 빈줄
+       │         ├─ <hp:p> 저작권 수식 (textColor=#FFFFFF, baseUnit=600, treatAsChar=1)
+       │         └─ <hp:p> 쪽번호 (charPrIDRef="8", autoNum PAGE)
+       │
+       ├─ <hp:ctrl><hp:header id="3" applyPageType="BOTH">  (페이지 상단)
+       │    └─ <hp:subList>
+       │         └─ <hp:p>
+       │              ├─ <hp:tbl> (정보테이블: 2행3열 — 년도,학교,과목,범위)
+       │              ├─ <hp:equation> (숨김 저작권, BEHIND_TEXT, textColor=#FFFFFF)
+       │              └─ <hp:t/>
+       │
+       ├─ <hp:tbl> (저작권표시: 제작일,제작자,법률,경고 + NGD 로고)
+       └─ <hp:t/>
 ```
 
-**이 구조는 `base_hwpx/header_area_template.xml`에 포함되어 있다.** 플레이스홀더만 치환하면 됨:
-- `{{YEAR_SEMESTER}}`: `"2025년 1학기 중간"`
+**이 구조는 `base_hwpx/header_area_template.xml`에 그대로 포함되어 있다.**
+- 정보테이블은 `<hp:header>` 컨트롤 **안에** 있으므로 매 페이지 상단에 반복 표시됨
+- 저작권 수식은 `<hp:footer>` 컨트롤 안에 있으므로 매 페이지 하단에 반복 표시됨
+- 플레이스홀더만 치환하면 됨:
+- `{{YEAR_SEMESTER}}`: `"2025년 1학기 중간"` — **형식**: `"{year}년 {semester} {exam_type}"`
 - `{{SCHOOL_NAME}}`: `"운유 고등학교"` — **학교명 규칙**: "고등학교" 앞에 공백 1개 (예: "운유 고등학교", "광명 고등학교")
-- `{{GRADE_SUBJECT}}`: `"2학년 수학 I"` (교과서명 있으면 `"2학년 확률과 통계 (신사고)"`)
-- `{{RANGE}}`: `"지수 ~ 삼각함수그래프"` — **범위 규칙**: `~` 앞뒤에 공백 1개 (예: "여러가지순열 ~ 확률의 뜻과 활용")
-- `{{CREATED_DATE}}`: `"2025년 2월 27일"`
+- `{{GRADE_SUBJECT}}`: `"2학년 수학 I"` — **형식**: `"{grade}학년 {subject}"` (교과서명 있으면 `"2학년 확률과 통계 (신사고)"`)
+- `{{RANGE}}`: `"지수 ~ 삼각함수의 그래프"` — **범위 규칙**: `~` 앞뒤에 공백 1개 (예: "여러가지순열 ~ 확률의 뜻과 활용")
+- `{{CREATED_DATE}}`: `"2025년 2월 27일"` — **형식**: 현재 날짜
+
+### 정보테이블 셀 배치 (charPrIDRef 확인!)
+
+정보테이블은 `<hp:header>` 컨트롤 안의 2행3열 테이블이다:
+
+| 위치 | 내용 | charPrIDRef | paraPrIDRef | vertAlign | rowSpan |
+|------|------|-------------|-------------|-----------|---------|
+| (0,0) | 년도/학기/차수 | **3** (17pt bold) | 2 (CENTER) | CENTER | **2** |
+| (1,0) | 학교명 | **6** (24pt ExtraBold) | 2 (CENTER) | CENTER | **2** |
+| (2,0) | 학년/과목 | **5** (12pt bold) | 2 (CENTER) | CENTER | 1 |
+| (2,1) | 범위 | **5** (12pt bold) | 2 (CENTER) | CENTER | 1 |
+
+- 첫 두 열(년도, 학교명)은 `rowSpan="2"`로 2행 병합
+- 세 번째 열은 상단(학년/과목), 하단(범위)으로 분리
+- 모든 셀: `vertAlign="CENTER"`, `paraPrIDRef="2"` (CENTER 정렬)
+- **borderFillIDRef**: col0=6(초록 굵은선), col1=7(좌우 초록+하단), col2-top=8(초록+하단 DASH), col2-bot=9(초록+상단 DASH)
 
 ### Parts → XML 변환 (핵심 로직!)
 
@@ -281,16 +311,23 @@ Sample 패턴: `T:"①" | EQ:값 | TABx3 | T:"②" | EQ:값 | TABx3 | T:"③" | 
       </hp:run>
       <hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1200" textheight="1200" baseline="1020" spacing="720" horzpos="0" horzsize="30188" flags="393216"/></hp:linesegarray>
     </hp:p>
-    <!-- 해설 문단 (explanation_parts → XML) -->
+    <!-- 해설 문단들 (explanation_parts → 여러 <hp:p>로 분리) -->
+    <!-- {"br": true}가 있으면 그 지점에서 새 <hp:p>를 시작한다 -->
     <hp:p id="0" paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
       <hp:run charPrIDRef="7">
-        <!-- explanation_parts를 parts→XML 변환과 동일하게 처리 -->
-        <hp:t>해설 텍스트 </hp:t>
-        <hp:equation ...><hp:script>수식</hp:script></hp:equation>
-        <hp:t>이다.</hp:t>
+        <hp:t>첫 번째 풀이 단계 </hp:t>
+        <hp:equation ...><hp:script>수식1</hp:script></hp:equation>
       </hp:run>
       <hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1125" textheight="1125" baseline="956" spacing="600" horzpos="0" horzsize="30188" flags="393216"/></hp:linesegarray>
     </hp:p>
+    <!-- {"br": true} 이후 새 문단 -->
+    <hp:p id="0" paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+      <hp:run charPrIDRef="7">
+        <hp:equation ...><hp:script>= 수식2</hp:script></hp:equation>
+      </hp:run>
+      <hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1125" textheight="1125" baseline="956" spacing="600" horzpos="0" horzsize="30188" flags="393216"/></hp:linesegarray>
+    </hp:p>
+    <!-- 필요한 만큼 문단 반복 -->
   </hp:subList>
 </hp:endNote>
 ```
@@ -299,6 +336,31 @@ Sample 패턴: `T:"①" | EQ:값 | TABx3 | T:"②" | EQ:값 | TABx3 | T:"③" | 
 - `suffixChar`: "46" (= '.') 고정
 - `instId`: 고유 ID (1654899642부터 시작, +1씩)
 - 정답: 선택형 `④` (원숫자), 서답형 `24` (숫자값)
+
+### explanation_parts → 다중 문단 변환 (핵심!)
+
+`explanation_parts` 배열에서 `{"br": true}`를 기준으로 여러 `<hp:p>` 문단으로 분리한다.
+
+**변환 규칙**:
+1. `{"br": true}` 마커가 없으면 → 해설 전체를 1개 `<hp:p>` 문단에 넣음
+2. `{"br": true}` 마커가 있으면 → 마커 위치에서 끊어 별도 `<hp:p>` 문단 생성
+3. 각 해설 문단: `id="0"`, `paraPrIDRef="1"`, `charPrIDRef="7"`
+4. 각 문단의 parts→XML 변환은 문제 본문과 동일한 방식
+
+**예시**:
+```python
+explanation_parts = [
+    {"eq": "f'(x) = 3x^2 - 3"},
+    {"br": true},           # ← 여기서 문단 분리
+    {"eq": "f'(x) = 0"},
+    {"t": "에서 "},
+    {"eq": "x = 1"},
+    {"br": true},           # ← 여기서 문단 분리
+    {"t": "따라서 극댓값은 "},
+    {"eq": "f(-1) = 2"}
+]
+# → 3개의 <hp:p> 문단으로 생성
+```
 
 ### 문단 id 규칙
 - 내용 있는 문단: `id="2147483648"` (0x80000000)
@@ -353,46 +415,59 @@ JSON에 `condition_box`가 있으면 보기 테이블을 삽입한다.
 
 템플릿의 `{{ITEM_X_CONTENT}}` 플레이스홀더를 각 항목의 parts→XML 변환 결과로 치환.
 
-#### type="condition" ((가)/(나)/(다) 항목)
-조건이 테두리 박스 안에 들어가야 하는 경우 (보기와 다름).
+#### type="condition" ((가)/(나)/(다) 항목) — hp:rect 사용
 
-**구현**: borderFill이 있는 단일 셀 테이블로 조건박스를 생성한다:
+조건/보기가 테두리 박스(사각형) 안에 들어가는 경우.
+
+**구현**: `base_hwpx/condition_rect_template.xml` 템플릿 사용.
+- `hp:rect`(사각형 도형)의 drawText 안에 각 항목을 `<hp:p>` 문단으로 배치
+- 검정 실선 테두리(width=113, SOLID), 흰 배경
+
 ```xml
-<hp:tbl id="..." zOrder="..." numberingType="TABLE"
-  textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0"
-  dropcapstyle="None" treat="0" rowCnt="1" colCnt="1"
-  cellSpacing="0" borderFillIDRef="5">
-  <hp:sz width="29622" widthRelTo="ABSOLUTE" height="..." heightRelTo="ABSOLUTE" protect="0"/>
-  <hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0"
-    holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP"
-    horzAlign="LEFT" vertOffset="0" horzOffset="0"/>
-  <hp:outMargin left="0" right="0" top="141" bottom="141"/>
-  <hp:inMargin left="567" right="567" top="141" bottom="141"/>
-  <hp:cellzoneList/>
-  <hp:tr>
-    <hp:tc name="" header="0" hasMargin="1" borderFillIDRef="10" editable="0">
-      <hp:cellAddr colAddr="0" rowAddr="0"/>
-      <hp:cellSpan colSpan="1" rowSpan="1"/>
-      <hp:cellSz width="29622" height="..."/>
-      <hp:cellMargin left="567" right="567" top="141" bottom="141"/>
-      <hp:subList ...>
-        <!-- 각 조건 항목을 개별 문단으로 -->
-        <hp:p paraPrIDRef="1" ...>
-          <hp:run charPrIDRef="7">
-            <hp:t>(가) </hp:t>
-            <!-- parts → XML 변환 -->
-          </hp:run>
-        </hp:p>
-        <!-- (나), (다) 동일 패턴 -->
-      </hp:subList>
-    </hp:tc>
-  </hp:tr>
-</hp:tbl>
+<!-- condition_rect_template.xml의 {{ITEMS_CONTENT}} 부분에 삽입할 내용 -->
+<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+  <hp:run charPrIDRef="7">
+    <hp:t>(가) </hp:t>
+    <!-- 해당 item의 parts → XML 변환 -->
+  </hp:run>
+  <hp:linesegarray><hp:lineseg textpos="0" vertpos="0" vertsize="1000" textheight="1000" baseline="850" spacing="600" horzpos="0" horzsize="27736" flags="393216"/></hp:linesegarray>
+</hp:p>
+<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">
+  <hp:run charPrIDRef="7">
+    <hp:t>(나) </hp:t>
+    <!-- parts → XML -->
+  </hp:run>
+  <hp:linesegarray><hp:lineseg textpos="0" vertpos="1600" vertsize="1000" textheight="1000" baseline="850" spacing="600" horzpos="0" horzsize="27736" flags="393216"/></hp:linesegarray>
+</hp:p>
+<!-- (다) 동일 패턴 -->
 ```
 
-- borderFillIDRef="10" (SOLID 0.12mm + 흰 배경)으로 테두리 표시
-- 각 조건 항목의 label ((가), (나), (다))을 텍스트로 삽입 후 parts 내용 추가
-- 조건박스 너비: 29622 (단 폭의 약 절반)
+**높이 계산**: `height = 항목수 × 1600 + 2000` (HWPUNIT). 수식 포함 시 vertsize 증가분 반영.
+
+**주의**: sample HWPX의 rect drawText 내부는 `charPrIDRef="11"` 등 동적 charPr를 사용하지만, 우리 base header.xml은 charPr 0~9만 정의한다. rect 내부 콘텐츠는 반드시 `charPrIDRef="7"` (본문)을 사용한다.
+
+#### type="empty_box" (빈박스) — hp:rect 사용
+
+학생 답안 작성용 빈 공간. `base_hwpx/empty_box_template.xml` 템플릿 사용.
+
+**플레이스홀더**:
+- `{{HEIGHT}}`: 박스 높이 (기본 5059)
+- `{{CENTER_Y}}`: height / 2
+- `{{SCA_Y}}`: height / 12587 (원본 높이 대비 스케일)
+
+#### type="proof" (증명틀) — hp:tbl 사용
+
+"[ 증 명 ]" 헤더가 있는 증명 테이블. `base_hwpx/proof_table_template.xml` 템플릿 사용.
+
+**플레이스홀더**:
+- `{{PROOF_CONTENT}}`: 증명 내용 문단들 (items의 parts → XML 변환)
+- `{{CONTENT_HEIGHT}}`: 내용 영역 높이 (항목수 × 1600 + 500)
+- `{{TABLE_HEIGHT}}`: 전체 높이 (header + content + footer)
+
+#### type="image_choice" (그림보기틀) — hp:rect 사용
+
+그림이 포함된 보기. `condition_rect_template.xml` 사용하되 높이를 크게 설정 (10000~15000).
+- 그림 설명 텍스트만 넣고, 실제 그림은 별도 `<hp:pic>` 문단으로 삽입
 
 #### 보기/조건 테이블 삽입 위치
 보기 테이블은 문제 본문 문단과 선지 사이에 삽입:
