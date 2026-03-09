@@ -9,7 +9,7 @@ import { DownloadButton } from "@/components/shared/DownloadButton";
 interface Job {
   id: string;
   mode: "create" | "review";
-  status: "queued" | "running" | "done" | "failed";
+  status: "queued" | "running" | "done" | "failed" | "cancelled";
   inputFiles?: string[];
   outputFile?: string;
   startedAt?: string;
@@ -18,7 +18,7 @@ interface Job {
 }
 
 type FilterMode = "all" | "create" | "review";
-type FilterStatus = "all" | "done" | "failed";
+type FilterStatus = "all" | "done" | "failed" | "cancelled";
 
 export default function HistoryPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -68,14 +68,14 @@ export default function HistoryPage() {
         </div>
         <div className="w-px h-5 bg-border" />
         <div className="flex gap-1">
-          {(["all", "done", "failed"] as FilterStatus[]).map((s) => (
+          {(["all", "done", "failed", "cancelled"] as FilterStatus[]).map((s) => (
             <Button
               key={s}
               variant={filterStatus === s ? "default" : "secondary"}
               size="sm"
               onClick={() => setFilterStatus(s)}
             >
-              {s === "all" ? "전체" : s === "done" ? "완료" : "실패"}
+              {s === "all" ? "전체" : s === "done" ? "완료" : s === "failed" ? "실패" : "중단"}
             </Button>
           ))}
         </div>
@@ -109,9 +109,11 @@ export default function HistoryPage() {
                       ? "bg-[var(--color-status-success)]"
                       : job.status === "failed"
                         ? "bg-[var(--color-status-error)]"
-                        : job.status === "running"
-                          ? "bg-[var(--color-status-info)] animate-pulse"
-                          : "bg-muted-foreground/30"
+                        : job.status === "cancelled"
+                          ? "bg-[var(--color-status-warning,orange)]"
+                          : job.status === "running"
+                            ? "bg-[var(--color-status-info)] animate-pulse"
+                            : "bg-muted-foreground/30"
                   }`}
                 />
 
@@ -228,6 +230,7 @@ function statusLabel(status: string): string {
   switch (status) {
     case "done": return "완료";
     case "failed": return "실패";
+    case "cancelled": return "중단";
     case "running": return "진행중";
     case "queued": return "대기";
     default: return status;

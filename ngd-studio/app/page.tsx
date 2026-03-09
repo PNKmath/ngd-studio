@@ -127,7 +127,9 @@ export default function DashboardPage() {
                       ? "bg-[var(--color-status-success)]"
                       : job.status === "failed"
                         ? "bg-[var(--color-status-error)]"
-                        : "bg-[var(--color-status-info)] animate-pulse"
+                        : job.status === "cancelled"
+                          ? "bg-orange-400"
+                          : "bg-[var(--color-status-info)] animate-pulse"
                   }`}
                 />
                 <Badge variant="secondary" className="text-xs shrink-0">

@@ -131,7 +131,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   send({ event: "log", data: { stage: "system", message: `CLI 프로세스 시작됨 (PID: ${proc.pid}). API 연결 대기중...`, timestamp: new Date().toISOString(), level: "info" } });
 
   // Kill on client disconnect
+  let clientDisconnected = false;
   req.on("close", () => {
+    clientDisconnected = true;
     proc.kill("SIGTERM");
   });
 
@@ -146,6 +148,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   const currentStage = { name: "" };
   let outputFile = "";
   let resultSummary = "";
+  let finalStatus: "done" | "failed" | "cancelled" = "done";
+  let hadResultEvent = false;
 
   try {
     for await (const event of events) {
@@ -156,13 +160,17 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         if (sse.event === "file" && sse.data.type === "hwpx") {
           outputFile = sse.data.path as string;
         }
-        // result 이벤트에서 요약 텍스트 추적
+        // result 이벤트에서 요약 텍스트 및 상태 추적
         if (sse.event === "result") {
+          hadResultEvent = true;
           resultSummary = (sse.data.result as string) ?? "";
-          // outputPath가 있으면 사용
+          finalStatus = sse.data.status === "success" ? "done" : "failed";
           if (sse.data.outputPath) {
             outputFile = sse.data.outputPath as string;
           }
+        }
+        if (sse.event === "error") {
+          finalStatus = "failed";
         }
         send(sse);
       }
@@ -171,12 +179,19 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     const code = await exitCode;
     if (code !== 0 && !currentStage.name) {
       send({ event: "error", data: { message: `Claude CLI exited with code ${code}` } });
+      finalStatus = "failed";
+    }
+
+    // result 이벤트 없이 정상 종료 + 클라이언트 중단 → cancelled
+    if (!hadResultEvent && clientDisconnected) {
+      finalStatus = "cancelled";
     }
   } catch (err) {
     send({
       event: "error",
       data: { message: err instanceof Error ? err.message : "Unknown error" },
     });
+    finalStatus = "failed";
   } finally {
     // outputFile이 없으면 outputs/ 폴더에서 최신 .hwpx 스캔
     if (!outputFile && mode === "create") {
@@ -217,7 +232,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         path.join(DATA_DIR, `${jobId}.json`),
         JSON.stringify({
           ...jobData,
-          status: "done",
+          status: finalStatus,
           finishedAt: new Date().toISOString(),
           outputFile: outputFile || undefined,
           resultSummary: resultSummary || undefined,
