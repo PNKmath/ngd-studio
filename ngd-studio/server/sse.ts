@@ -114,6 +114,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   // Flush headers right away
   res.flushHeaders();
 
+  // Send initial event so client knows connection is live
+  res.write(`data: ${JSON.stringify({ event: "log", data: { stage: "system", message: "CLI 연결됨. 작업을 준비합니다...", timestamp: new Date().toISOString(), level: "info" } })}\n\n`);
+
   const send = (sseEvent: SSEEvent) => {
     if (!res.destroyed) {
       res.write(`data: ${JSON.stringify(sseEvent)}\n\n`);

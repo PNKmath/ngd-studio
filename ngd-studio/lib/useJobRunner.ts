@@ -5,6 +5,9 @@ import { useJobStore, type JobState } from "./store";
 import type { SSEEvent } from "./claude";
 import { parseReviewReport } from "./reviewParser";
 
+// SSE server runs on a separate port to avoid Next.js response buffering
+const SSE_BASE = process.env.NEXT_PUBLIC_SSE_URL ?? "http://localhost:3021";
+
 export function useJobRunner() {
   const store = useJobStore();
 
@@ -32,7 +35,7 @@ export function useJobRunner() {
       });
 
       try {
-        const res = await fetch("/api/run", {
+        const res = await fetch(`${SSE_BASE}/api/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mode, files, jobId }),
