@@ -45,6 +45,11 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Kill any existing processes on our ports
+fuser -k "${SSE_PORT}/tcp" 2>/dev/null || true
+fuser -k "${PORT}/tcp" 2>/dev/null || true
+sleep 1
+
 # Start SSE server (separate process to avoid Next.js buffering)
 echo "SSE 서버 시작 (port ${SSE_PORT})..."
 env -u CLAUDECODE SSE_PORT="$SSE_PORT" pnpm dev:sse &
