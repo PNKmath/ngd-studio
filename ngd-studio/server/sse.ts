@@ -5,7 +5,7 @@
  * Usage: pnpm tsx server/sse.ts
  */
 import http from "http";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, readdir, stat } from "fs/promises";
 import path from "path";
 
 // Import from relative paths (tsx doesn't support @/ alias)
@@ -144,12 +144,26 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   });
 
   const currentStage = { name: "" };
+  let outputFile = "";
+  let resultSummary = "";
 
   try {
     for await (const event of events) {
       if (res.destroyed) break;
       const sseEvents = transformToSSE(event, currentStage);
       for (const sse of sseEvents) {
+        // hwpx 파일 이벤트에서 outputFile 추적
+        if (sse.event === "file" && sse.data.type === "hwpx") {
+          outputFile = sse.data.path as string;
+        }
+        // result 이벤트에서 요약 텍스트 추적
+        if (sse.event === "result") {
+          resultSummary = (sse.data.result as string) ?? "";
+          // outputPath가 있으면 사용
+          if (sse.data.outputPath) {
+            outputFile = sse.data.outputPath as string;
+          }
+        }
         send(sse);
       }
     }
@@ -164,10 +178,50 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       data: { message: err instanceof Error ? err.message : "Unknown error" },
     });
   } finally {
+    // outputFile이 없으면 outputs/ 폴더에서 최신 .hwpx 스캔
+    if (!outputFile && mode === "create") {
+      try {
+        const outputsDir = path.join(BASE_DIR, "outputs");
+        const files = await readdir(outputsDir);
+        const hwpxFiles = files.filter((f) => f.endsWith(".hwpx"));
+        if (hwpxFiles.length > 0) {
+          // 가장 최근 수정된 파일 선택
+          let latest = { name: "", mtime: 0 };
+          for (const f of hwpxFiles) {
+            const s = await stat(path.join(outputsDir, f));
+            if (s.mtimeMs > latest.mtime) {
+              latest = { name: f, mtime: s.mtimeMs };
+            }
+          }
+          // 작업 시작 이후에 생성된 파일만 사용
+          const jobStart = new Date(jobData.startedAt).getTime();
+          if (latest.mtime > jobStart) {
+            outputFile = `outputs/${latest.name}`;
+          }
+        }
+      } catch { /* outputs/ 폴더가 없을 수 있음 */ }
+    }
+
+    // outputFile 경로를 상대경로로 정규화
+    if (outputFile) {
+      // 절대경로면 BASE_DIR 기준 상대경로로 변환
+      if (path.isAbsolute(outputFile)) {
+        outputFile = path.relative(BASE_DIR, outputFile);
+      }
+      // outputPath를 프론트엔드에 전달
+      send({ event: "file", data: { type: "hwpx", name: path.basename(outputFile), path: outputFile } });
+    }
+
     try {
       await writeFile(
         path.join(DATA_DIR, `${jobId}.json`),
-        JSON.stringify({ ...jobData, status: "done", finishedAt: new Date().toISOString() }, null, 2)
+        JSON.stringify({
+          ...jobData,
+          status: "done",
+          finishedAt: new Date().toISOString(),
+          outputFile: outputFile || undefined,
+          resultSummary: resultSummary || undefined,
+        }, null, 2)
       );
     } catch { /* ignore */ }
     res.end();

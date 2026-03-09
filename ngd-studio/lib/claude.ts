@@ -27,20 +27,47 @@ export interface SSEEvent {
 
 // --- Stage Detection ---
 
+// 텍스트 기반 스테이지 감지 — 에이전트 이름 패턴 우선, 일반 키워드는 폴백
 const stagePatterns: { name: string; patterns: RegExp[] }[] = [
-  { name: "reader",  patterns: [/reader/i, /PDF.*읽/i, /추출/i, /exam_data/i] },
-  { name: "solver",  patterns: [/solver/i, /해설/i, /풀이/i, /보완/i] },
-  { name: "figure",  patterns: [/figure/i, /그림/i, /이미지/i, /crop/i, /nano-banana/i, /워터마크/i] },
-  { name: "builder", patterns: [/builder/i, /HWPX/i, /조립/i, /XML/i, /section0/i] },
-  { name: "checker", patterns: [/checker/i, /검수/i, /검증/i, /품질/i] },
+  // 에이전트 이름 매칭 (가장 정확)
+  { name: "reader",  patterns: [/ngd-exam-reader/i, /reader\s*(에이전트|agent)/i] },
+  { name: "solver",  patterns: [/ngd-exam-solver/i, /solver\s*(에이전트|agent)/i] },
+  { name: "figure",  patterns: [/ngd-exam-figure/i, /figure\s*(에이전트|agent)/i] },
+  { name: "builder", patterns: [/ngd-exam-builder/i, /builder\s*(에이전트|agent)/i] },
+  { name: "checker", patterns: [/ngd-exam-checker/i, /checker\s*(에이전트|agent)/i] },
+  { name: "reviewer", patterns: [/ngd-exam-reviewer/i, /reviewer\s*(에이전트|agent)/i] },
+];
+
+// 일반 키워드 폴백 (에이전트 이름이 없을 때만)
+const stageFallbackPatterns: { name: string; patterns: RegExp[] }[] = [
+  { name: "reader",  patterns: [/PDF.*읽/i, /exam_data.*추출/i] },
+  { name: "solver",  patterns: [/해설.*생성/i, /해설.*보완/i, /풀이.*생성/i] },
+  { name: "figure",  patterns: [/그림.*처리/i, /crop/i, /nano-banana/i, /워터마크/i] },
+  { name: "builder", patterns: [/HWPX.*조립/i, /section0.*xml/i] },
+  { name: "checker", patterns: [/품질.*검수/i, /체크리스트.*검증/i] },
 ];
 
 export function detectStage(text: string): string | null {
+  // 1순위: 에이전트 이름 매칭
   for (const { name, patterns } of stagePatterns) {
+    if (patterns.some((p) => p.test(text))) return name;
+  }
+  // 2순위: 일반 키워드 (더 엄격한 패턴)
+  for (const { name, patterns } of stageFallbackPatterns) {
     if (patterns.some((p) => p.test(text))) return name;
   }
   return null;
 }
+
+// Agent subagent_type → stage 매핑
+const agentTypeToStage: Record<string, string> = {
+  "ngd-exam-reader":   "reader",
+  "ngd-exam-solver":   "solver",
+  "ngd-exam-figure":   "figure",
+  "ngd-exam-builder":  "builder",
+  "ngd-exam-checker":  "checker",
+  "ngd-exam-reviewer": "reviewer",
+};
 
 export function detectStageFromTool(toolName: string, input?: Record<string, unknown>): string | null {
   const filePath = (input?.file_path ?? input?.command ?? "") as string;
@@ -48,11 +75,27 @@ export function detectStageFromTool(toolName: string, input?: Record<string, unk
   if (toolName === "Read" && /\.pdf/i.test(filePath)) return "reader";
   if (toolName === "Write" && /exam_data.*\.json/i.test(filePath)) return "reader";
   if (toolName === "Agent") {
+    // 1순위: subagent_type으로 정확히 매칭
+    const subType = (input?.subagent_type ?? "") as string;
+    if (agentTypeToStage[subType]) return agentTypeToStage[subType];
+
+    // 2순위: description에서 에이전트 이름 매칭
+    const desc = (input?.description ?? "") as string;
+    for (const [agentName, stage] of Object.entries(agentTypeToStage)) {
+      const shortName = agentName.replace("ngd-exam-", "");
+      if (desc.toLowerCase().includes(shortName)) return stage;
+    }
+
+    // 3순위: prompt에서 에이전트 이름 패턴 매칭 (폴백)
     const prompt = (input?.prompt ?? "") as string;
-    if (/figure|그림/i.test(prompt)) return "figure";
-    if (/solver|해설/i.test(prompt)) return "solver";
-    if (/builder|HWPX/i.test(prompt)) return "builder";
-    if (/checker|검수/i.test(prompt)) return "checker";
+    for (const [agentName, stage] of Object.entries(agentTypeToStage)) {
+      if (prompt.includes(agentName)) return stage;
+    }
+  }
+  if (toolName === "Skill") {
+    const skillName = (input?.skill ?? "") as string;
+    if (skillName === "ngd-exam-create") return "reader"; // 오케스트레이터 시작 = reader 시작
+    if (skillName === "nano-banana") return "figure";
   }
   if (toolName === "Write" && /\.hwpx|section0|content\.hpf/i.test(filePath)) return "builder";
   return null;
@@ -184,6 +227,17 @@ export function transformToSSE(event: ClaudeEvent, currentStage: { name: string 
             results.push({ event: "file", data: { type: "image", name: fp.split("/").pop(), path: fp } });
           } else if (/\.json$/i.test(fp)) {
             results.push({ event: "file", data: { type: "json", name: fp.split("/").pop(), path: fp } });
+          } else if (/\.hwpx$/i.test(fp)) {
+            results.push({ event: "file", data: { type: "hwpx", name: fp.split("/").pop(), path: fp } });
+          }
+        }
+
+        // Bash로 zip/cp/mv 등으로 .hwpx 생성하는 경우도 감지
+        if (block.name === "Bash" && block.input?.command) {
+          const cmd = block.input.command as string;
+          const hwpxMatch = cmd.match(/(?:zip|cp|mv)\s+.*?([\w/.-]+\.hwpx)/i);
+          if (hwpxMatch) {
+            results.push({ event: "file", data: { type: "hwpx", name: hwpxMatch[1].split("/").pop(), path: hwpxMatch[1] } });
           }
         }
       }

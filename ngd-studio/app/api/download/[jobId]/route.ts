@@ -25,9 +25,12 @@ export async function GET(
       return NextResponse.json({ error: "No output file" }, { status: 404 });
     }
 
-    const fullPath = path.join(BASE_DIR, outputPath);
+    // 절대경로와 상대경로 모두 처리
+    const fullPath = path.isAbsolute(outputPath)
+      ? outputPath
+      : path.join(BASE_DIR, outputPath);
     if (!existsSync(fullPath)) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
+      return NextResponse.json({ error: `File not found: ${fullPath}` }, { status: 404 });
     }
 
     const buffer = await readFile(fullPath);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import type { PipelineStage } from "./PipelineView";
 
@@ -53,6 +54,14 @@ export function StageCard({ stage, isLast }: StageCardProps) {
   const colors = stageColors[stage.name] ?? { dot: "bg-muted-foreground", bg: "bg-muted" };
   const status = statusConfig[stage.status];
   const isActive = stage.status === "running" || stage.status === "done";
+
+  // running 상태일 때 1초마다 강제 리렌더하여 타이머 실시간 갱신
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (stage.status !== "running") return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [stage.status]);
 
   const elapsed = getElapsed(stage.startedAt, stage.finishedAt);
 
