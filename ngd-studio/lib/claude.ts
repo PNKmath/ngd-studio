@@ -66,13 +66,17 @@ export function runClaude(
   prompt: string,
   options?: { maxTurns?: number; cwd?: string }
 ): { process: ChildProcess; events: AsyncIterable<ClaudeEvent>; exitCode: Promise<number> } {
+  // Remove CLAUDECODE env var to avoid "nested session" block
+  // when the server itself runs inside a Claude Code session
+  const { CLAUDECODE: _, ...cleanEnv } = process.env;
+
   const proc = spawn("claude", [
     "-p", prompt,
     "--output-format", "stream-json",
     "--max-turns", String(options?.maxTurns ?? 100),
   ], {
     cwd: options?.cwd ?? process.cwd(),
-    env: { ...process.env },
+    env: cleanEnv,
   });
 
   // Capture exit code early so we never miss the close event
