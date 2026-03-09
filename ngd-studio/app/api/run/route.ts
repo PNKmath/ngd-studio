@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     );
 
     // Spawn Claude CLI
-    const { process: proc, events } = runClaude(prompt, {
+    const { process: proc, events, exitCode } = runClaude(prompt, {
       cwd: BASE_DIR,
       maxTurns: mode === "create" ? 100 : 50,
     });
@@ -85,14 +85,12 @@ export async function POST(req: NextRequest) {
           }
 
           // Process exited — check exit code
-          const exitCode = await new Promise<number>((resolve) => {
-            proc.on("close", (code) => resolve(code ?? 1));
-          });
+          const code = await exitCode;
 
-          if (exitCode !== 0 && !currentStage.name) {
+          if (code !== 0 && !currentStage.name) {
             send({
               event: "error",
-              data: { message: `Claude CLI exited with code ${exitCode}` },
+              data: { message: `Claude CLI exited with code ${code}` },
             });
           }
         } catch (err) {

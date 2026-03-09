@@ -65,7 +65,7 @@ export function detectStageFromTool(toolName: string, input?: Record<string, unk
 export function runClaude(
   prompt: string,
   options?: { maxTurns?: number; cwd?: string }
-): { process: ChildProcess; events: AsyncIterable<ClaudeEvent> } {
+): { process: ChildProcess; events: AsyncIterable<ClaudeEvent>; exitCode: Promise<number> } {
   const proc = spawn("claude", [
     "-p", prompt,
     "--output-format", "stream-json",
@@ -75,11 +75,22 @@ export function runClaude(
     env: { ...process.env },
   });
 
-  const events = parseStreamJson(proc);
-  return { process: proc, events };
+  // Capture exit code early so we never miss the close event
+  const exitCode = new Promise<number>((resolve) => {
+    proc.on("close", (code) => resolve(code ?? 1));
+  });
+
+  // Collect stderr for error reporting
+  const stderrChunks: string[] = [];
+  proc.stderr?.on("data", (chunk: Buffer) => {
+    stderrChunks.push(chunk.toString());
+  });
+
+  const events = parseStreamJson(proc, stderrChunks);
+  return { process: proc, events, exitCode };
 }
 
-async function* parseStreamJson(proc: ChildProcess): AsyncIterable<ClaudeEvent> {
+async function* parseStreamJson(proc: ChildProcess, stderrChunks: string[]): AsyncIterable<ClaudeEvent> {
   let buffer = "";
 
   for await (const chunk of proc.stdout!) {
@@ -95,6 +106,18 @@ async function* parseStreamJson(proc: ChildProcess): AsyncIterable<ClaudeEvent> 
           // non-JSON lines ignored
         }
       }
+    }
+  }
+
+  // If no stdout was produced, yield an error from stderr
+  if (stderrChunks.length > 0) {
+    const stderr = stderrChunks.join("").trim();
+    if (stderr) {
+      yield {
+        type: "result",
+        subtype: "error",
+        result: `CLI error: ${stderr.slice(0, 500)}`,
+      } as ClaudeEvent;
     }
   }
 }
