@@ -52,7 +52,7 @@ sleep 1
 
 # Start SSE server (separate process to avoid Next.js buffering)
 echo "SSE 서버 시작 (port ${SSE_PORT})..."
-env -u CLAUDECODE SSE_PORT="$SSE_PORT" pnpm dev:sse &
+SSE_PORT="$SSE_PORT" pnpm dev:sse &
 SSE_PID=$!
 sleep 2
 

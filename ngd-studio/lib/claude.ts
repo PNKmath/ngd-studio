@@ -42,8 +42,6 @@ export function detectStage(text: string): string | null {
   return null;
 }
 
-// --- Tool-based stage detection ---
-
 export function detectStageFromTool(toolName: string, input?: Record<string, unknown>): string | null {
   const filePath = (input?.file_path ?? input?.command ?? "") as string;
 
@@ -66,25 +64,21 @@ export function runClaude(
   prompt: string,
   options?: { maxTurns?: number; cwd?: string }
 ): { process: ChildProcess; events: AsyncIterable<ClaudeEvent>; exitCode: Promise<number> } {
-  // Remove CLAUDECODE env var to avoid "nested session" block
-  // when the server itself runs inside a Claude Code session
-  const { CLAUDECODE: _, ...cleanEnv } = process.env;
-
   const proc = spawn("claude", [
     "-p", prompt,
     "--output-format", "stream-json",
+    "--verbose",
+    "--dangerously-skip-permissions",
     "--max-turns", String(options?.maxTurns ?? 100),
   ], {
     cwd: options?.cwd ?? process.cwd(),
-    env: cleanEnv,
+    stdio: ["ignore", "pipe", "pipe"],  // stdin을 닫아야 CLI가 멈추지 않음
   });
 
-  // Capture exit code early so we never miss the close event
   const exitCode = new Promise<number>((resolve) => {
     proc.on("close", (code) => resolve(code ?? 1));
   });
 
-  // Collect stderr for error reporting
   const stderrChunks: string[] = [];
   proc.stderr?.on("data", (chunk: Buffer) => {
     stderrChunks.push(chunk.toString());
@@ -113,7 +107,6 @@ async function* parseStreamJson(proc: ChildProcess, stderrChunks: string[]): Asy
     }
   }
 
-  // If no stdout was produced, yield an error from stderr
   if (stderrChunks.length > 0) {
     const stderr = stderrChunks.join("").trim();
     if (stderr) {
@@ -131,7 +124,6 @@ async function* parseStreamJson(proc: ChildProcess, stderrChunks: string[]): Asy
 export function transformToSSE(event: ClaudeEvent, currentStage: { name: string }): SSEEvent[] {
   const results: SSEEvent[] = [];
 
-  // System init event — CLI가 시작되었음을 알림
   if (event.type === "system" && event.subtype === "init") {
     results.push({
       event: "log",
@@ -186,7 +178,6 @@ export function transformToSSE(event: ClaudeEvent, currentStage: { name: string 
           },
         });
 
-        // Detect file creation
         if (block.name === "Write" && block.input?.file_path) {
           const fp = block.input.file_path as string;
           if (/\.(png|jpg|jpeg|bmp)$/i.test(fp)) {
