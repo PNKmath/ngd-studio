@@ -114,14 +114,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   // Flush headers right away
   res.flushHeaders();
 
-  // Send initial event so client knows connection is live
-  res.write(`data: ${JSON.stringify({ event: "log", data: { stage: "system", message: "CLI 연결됨. 작업을 준비합니다...", timestamp: new Date().toISOString(), level: "info" } })}\n\n`);
-
   const send = (sseEvent: SSEEvent) => {
     if (!res.destroyed) {
       res.write(`data: ${JSON.stringify(sseEvent)}\n\n`);
     }
   };
+
+  send({ event: "log", data: { stage: "system", message: "CLI 프로세스를 시작합니다...", timestamp: new Date().toISOString(), level: "info" } });
 
   // Spawn Claude CLI
   const { process: proc, events, exitCode } = runClaude(prompt, {
@@ -129,9 +128,19 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     maxTurns: mode === "create" ? 100 : 50,
   });
 
+  send({ event: "log", data: { stage: "system", message: `CLI 프로세스 시작됨 (PID: ${proc.pid}). API 연결 대기중...`, timestamp: new Date().toISOString(), level: "info" } });
+
   // Kill on client disconnect
   req.on("close", () => {
     proc.kill("SIGTERM");
+  });
+
+  // Forward stderr as log messages (auth errors, warnings, etc.)
+  proc.stderr?.on("data", (chunk: Buffer) => {
+    const msg = chunk.toString().trim();
+    if (msg) {
+      send({ event: "log", data: { stage: "system", message: `[stderr] ${msg.slice(0, 300)}`, timestamp: new Date().toISOString(), level: "warn" } });
+    }
   });
 
   const currentStage = { name: "" };

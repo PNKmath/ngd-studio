@@ -131,6 +131,20 @@ async function* parseStreamJson(proc: ChildProcess, stderrChunks: string[]): Asy
 export function transformToSSE(event: ClaudeEvent, currentStage: { name: string }): SSEEvent[] {
   const results: SSEEvent[] = [];
 
+  // System init event — CLI가 시작되었음을 알림
+  if (event.type === "system" && event.subtype === "init") {
+    results.push({
+      event: "log",
+      data: {
+        stage: "system",
+        message: `Claude CLI 시작됨 (model: ${(event as unknown as Record<string, unknown>).model ?? "unknown"})`,
+        timestamp: new Date().toISOString(),
+        level: "info",
+      },
+    });
+    return results;
+  }
+
   if (event.type === "assistant" && event.message?.content) {
     for (const block of event.message.content) {
       if (block.type === "text" && block.text) {
