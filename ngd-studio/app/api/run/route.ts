@@ -1,8 +1,12 @@
 import { NextRequest } from "next/server";
+import { Readable, PassThrough } from "stream";
 import { runClaude, transformToSSE, type SSEEvent } from "@/lib/claude";
 import { buildCreatePrompt, buildReviewPrompt } from "@/lib/prompts";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const DATA_DIR = path.join(process.cwd(), "data/jobs");
 const BASE_DIR = path.resolve(process.cwd(), "..");
@@ -66,67 +70,72 @@ export async function POST(req: NextRequest) {
     });
 
     const currentStage = { name: "" };
-    const encoder = new TextEncoder();
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        const send = (sseEvent: SSEEvent) => {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(sseEvent)}\n\n`)
-          );
-        };
+    // Use Node.js PassThrough stream — avoids Next.js buffering of Web Streams
+    const passthrough = new PassThrough();
 
-        try {
-          for await (const event of events) {
-            const sseEvents = transformToSSE(event, currentStage);
-            for (const sse of sseEvents) {
-              send(sse);
-            }
-          }
+    const send = (sseEvent: SSEEvent) => {
+      passthrough.write(`data: ${JSON.stringify(sseEvent)}\n\n`);
+    };
 
-          // Process exited — check exit code
-          const code = await exitCode;
-
-          if (code !== 0 && !currentStage.name) {
-            send({
-              event: "error",
-              data: { message: `Claude CLI exited with code ${code}` },
-            });
-          }
-        } catch (err) {
-          send({
-            event: "error",
-            data: {
-              message: err instanceof Error ? err.message : "Unknown error",
-            },
-          });
-        } finally {
-          // Update job file
-          try {
-            const finalJob = {
-              ...jobData,
-              status: "done",
-              finishedAt: new Date().toISOString(),
-            };
-            await writeFile(
-              path.join(DATA_DIR, `${jobId}.json`),
-              JSON.stringify(finalJob, null, 2)
-            );
-          } catch {
-            // ignore write errors on cleanup
-          }
-          controller.close();
-        }
-      },
-      cancel() {
-        proc.kill("SIGTERM");
-      },
+    // Kill CLI process if client disconnects
+    req.signal.addEventListener("abort", () => {
+      proc.kill("SIGTERM");
+      passthrough.end();
     });
 
-    return new Response(stream, {
+    // Process events in background — don't block the response
+    (async () => {
+      try {
+        for await (const event of events) {
+          const sseEvents = transformToSSE(event, currentStage);
+          for (const sse of sseEvents) {
+            send(sse);
+          }
+        }
+
+        // Process exited — check exit code
+        const code = await exitCode;
+
+        if (code !== 0 && !currentStage.name) {
+          send({
+            event: "error",
+            data: { message: `Claude CLI exited with code ${code}` },
+          });
+        }
+      } catch (err) {
+        send({
+          event: "error",
+          data: {
+            message: err instanceof Error ? err.message : "Unknown error",
+          },
+        });
+      } finally {
+        // Update job file
+        try {
+          const finalJob = {
+            ...jobData,
+            status: "done",
+            finishedAt: new Date().toISOString(),
+          };
+          await writeFile(
+            path.join(DATA_DIR, `${jobId}.json`),
+            JSON.stringify(finalJob, null, 2)
+          );
+        } catch {
+          // ignore write errors on cleanup
+        }
+        passthrough.end();
+      }
+    })();
+
+    // Convert Node stream to Web ReadableStream and return immediately
+    const webStream = Readable.toWeb(passthrough) as ReadableStream;
+
+    return new Response(webStream, {
       headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
       },
     });

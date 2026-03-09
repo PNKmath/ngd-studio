@@ -11,39 +11,60 @@ cd "$PROJECT_DIR"
 
 # Check Node.js
 if ! command -v node &> /dev/null; then
-  echo "❌ Node.js가 설치되어 있지 않습니다."
+  echo "Node.js가 설치되어 있지 않습니다."
   echo "   https://nodejs.org 에서 설치해주세요."
   exit 1
 fi
 
 # Check pnpm
 if ! command -v pnpm &> /dev/null; then
-  echo "📦 pnpm 설치중..."
+  echo "pnpm 설치중..."
   npm install -g pnpm
 fi
 
 # Check Claude CLI
 if ! command -v claude &> /dev/null; then
-  echo "⚠️  Claude CLI가 설치되어 있지 않습니다."
+  echo "Claude CLI가 설치되어 있지 않습니다."
   echo "   작업 실행은 불가하지만 UI는 확인 가능합니다."
 fi
 
 # Install dependencies
-echo "📦 의존성 설치중..."
+echo "의존성 설치중..."
 pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 
-# Build
-echo "🔨 빌드중..."
-pnpm build
-
-# Start
+# Ports
 HOST="${HOST:-0.0.0.0}"
-PORT="${PORT:-3000}"
+PORT="${PORT:-3020}"
+SSE_PORT="${SSE_PORT:-3021}"
+MODE="${1:-dev}"
 
-echo ""
-echo "🚀 NGD Studio 시작"
-echo "   로컬:  http://localhost:${PORT}"
-echo "   네트워크: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${PORT}"
-echo ""
+# Cleanup on exit
+cleanup() {
+  [ -n "$SSE_PID" ] && kill "$SSE_PID" 2>/dev/null
+  exit
+}
+trap cleanup EXIT INT TERM
 
-pnpm start -H "$HOST" -p "$PORT"
+# Start SSE server (separate process to avoid Next.js buffering)
+echo "SSE 서버 시작 (port ${SSE_PORT})..."
+env -u CLAUDECODE SSE_PORT="$SSE_PORT" pnpm dev:sse &
+SSE_PID=$!
+sleep 2
+
+if [ "$MODE" = "prod" ]; then
+  echo "빌드중..."
+  pnpm build
+  echo ""
+  echo "NGD Studio 시작 (프로덕션)"
+  echo "   로컬:  http://localhost:${PORT}"
+  echo "   네트워크: http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo 'localhost'):${PORT}"
+  echo ""
+  pnpm start -H "$HOST" -p "$PORT"
+else
+  echo ""
+  echo "NGD Studio 시작 (개발 모드)"
+  echo "   UI:   http://localhost:${PORT}"
+  echo "   SSE:  http://localhost:${SSE_PORT}"
+  echo ""
+  pnpm dev -H "$HOST" -p "$PORT"
+fi
