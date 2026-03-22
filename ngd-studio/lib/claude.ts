@@ -162,10 +162,11 @@ export function runClaude(
   const cwd = options?.cwd ?? process.cwd();
 
   // Windows: wsl 경유로 claude 실행, cwd를 WSL 경로로 변환
-  // 프롬프트에 따옴표가 포함될 수 있으므로 bash -c 로 감싸고 args는 개별 전달
+  // bash -lc (login shell) 필수 — non-login shell은 Windows PATH를 상속하여
+  // WSL claude 대신 Windows claude shim을 실행해 "node: not found" 에러 발생
   const proc = IS_WINDOWS
     ? spawn("wsl.exe", [
-        "--", "bash", "-c",
+        "--", "bash", "-lc",
         `cd ${shellEscape(toWslPath(cwd))} && claude ${claudeArgs.map(shellEscape).join(" ")}`,
       ], {
         stdio: ["ignore", "pipe", "pipe"],
