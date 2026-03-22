@@ -35,31 +35,65 @@ const server = http.createServer((req, res) => {
   });
 });
 
-// 서버 종료 시 모든 Claude CLI 프로세스 kill
+// 서버 종료 시 모든 Claude CLI 프로세스 + Next.js 서버도 kill
+import { execSync } from "child_process";
+import os from "os";
+
 function shutdown() {
   console.log(`\nShutting down... killing ${activeProcesses.size} active process(es)`);
   for (const proc of activeProcesses) {
     try { proc.kill("SIGTERM"); } catch { /* already dead */ }
   }
+
+  // Next.js dev 서버도 종료 (포트 3020)
+  try {
+    if (os.platform() === "win32") {
+      execSync('for /f "tokens=5" %a in (\'netstat -ano ^| findstr ":3020" ^| findstr "LISTENING"\') do taskkill /pid %a /f', { stdio: "ignore", shell: "cmd.exe" });
+    } else {
+      execSync("lsof -ti:3020 | xargs -r kill", { stdio: "ignore" });
+    }
+  } catch { /* ignore */ }
+
   server.close(() => process.exit(0));
-  // 3초 후 강제 종료
   setTimeout(() => process.exit(1), 3000);
 }
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
+// --- Heartbeat: 브라우저 연결 감시 ---
+// 브라우저가 10초마다 heartbeat를 보냄.
+// 30초간 heartbeat 없고 + 실행 중인 작업 없으면 서버 자동 종료.
+const HEARTBEAT_TIMEOUT = 30_000;
+let lastHeartbeat = Date.now();
+
+setInterval(() => {
+  const elapsed = Date.now() - lastHeartbeat;
+  if (elapsed > HEARTBEAT_TIMEOUT && activeProcesses.size === 0) {
+    console.log(`No heartbeat for ${Math.round(elapsed / 1000)}s and no active jobs. Auto-shutdown.`);
+    shutdown();
+  }
+}, 10_000);
+
 async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
 
   // CORS for Next.js dev server
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
     res.writeHead(204);
     res.end();
+    return;
+  }
+
+  // Heartbeat — 브라우저가 살아있는지 확인
+  if (req.method === "GET" && req.url === "/api/heartbeat") {
+    lastHeartbeat = Date.now();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true }));
     return;
   }
 
