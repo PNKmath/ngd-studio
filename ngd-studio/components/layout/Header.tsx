@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 const pageTitles: Record<string, { title: string; breadcrumb?: string[] }> = {
   "/": { title: "대시보드" },
   "/create": { title: "시험지 제작", breadcrumb: ["대시보드", "시험지 제작"] },
+  "/create-v2": { title: "시험지 제작 v2", breadcrumb: ["대시보드", "시험지 제작 v2"] },
   "/review": { title: "오검 (오류검수)", breadcrumb: ["대시보드", "오검"] },
   "/history": { title: "작업 히스토리", breadcrumb: ["대시보드", "히스토리"] },
 };

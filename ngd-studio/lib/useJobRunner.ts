@@ -27,7 +27,7 @@ export function useJobRunner() {
   }, [store]);
 
   const startJob = useCallback(
-    async (mode: "create" | "review", files: { pdf: string; hwpx?: string }) => {
+    async (mode: "create" | "review", files: { pdf: string; hwpx?: string; questionImages?: number[] }) => {
       const jobId = crypto.randomUUID();
       const abortController = new AbortController();
       abortRef.current = abortController;
@@ -97,6 +97,10 @@ export function useJobRunner() {
 
         // If status is still running, mark as done
         if (useJobStore.getState().status === "running") {
+          const state = useJobStore.getState();
+          if (!state.result) {
+            store.setResult({ status: "success" });
+          }
           store.setStatus("done");
           store.addLog({
             timestamp: new Date().toISOString(),

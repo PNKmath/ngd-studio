@@ -110,7 +110,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     req.on("end", () => resolve(data));
   });
 
-  let body: { mode: string; files: { pdf: string; hwpx?: string }; jobId: string };
+  let body: { mode: string; files: { pdf: string; hwpx?: string; questionImages?: number[] }; jobId: string };
   try {
     body = JSON.parse(rawBody);
   } catch {
@@ -121,9 +121,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
   const { mode, files, jobId } = body;
 
-  if (!mode || !files?.pdf || !jobId) {
+  if (!mode || !jobId) {
     res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Missing required fields" }));
+    res.end(JSON.stringify({ error: "Missing required fields: mode, jobId" }));
+    return;
+  }
+
+  if (mode !== "create" && !files?.pdf) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Missing required fields: pdf" }));
     return;
   }
 
@@ -134,13 +140,14 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
 
   const resolvedFiles = {
-    pdf: files.pdf,
-    hwpx: files.hwpx ?? HWPX_TEMPLATE,
+    pdf: files?.pdf || "",
+    hwpx: files?.hwpx ?? HWPX_TEMPLATE,
   };
 
   // Claude CLI는 WSL에서 실행되므로 파일 경로를 WSL 형식으로 변환
   // 상대경로는 cwd(BASE_DIR) 기준이므로 절대경로로 만든 뒤 변환
   const toAbsWsl = (p: string) => {
+    if (!p) return "";
     const abs = path.isAbsolute(p) ? p : path.join(BASE_DIR, p);
     return toWslPath(abs);
   };
@@ -149,9 +156,19 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     hwpx: toAbsWsl(resolvedFiles.hwpx),
   };
 
+  // 문제별 이미지 경로 생성
+  const questionImages = files?.questionImages ?? [];
+  const questionImagePaths = questionImages.map((num: number) => {
+    const padded = String(num).padStart(2, "0");
+    return {
+      number: num,
+      path: toAbsWsl(path.join("inputs", "시험지 제작", "question_images", `q${padded}.png`)),
+    };
+  });
+
   const prompt =
     mode === "create"
-      ? buildCreatePrompt(wslFiles)
+      ? buildCreatePrompt(wslFiles, questionImagePaths)
       : buildReviewPrompt(wslFiles);
 
   // Save initial job data
