@@ -30,8 +30,7 @@ export default function ReviewPage() {
   );
   const hwpxFile = uploadedFiles.find(
     (f) =>
-      f.name.toLowerCase().endsWith(".hwpx") ||
-      f.name.toLowerCase().endsWith(".hwp")
+      f.name.toLowerCase().endsWith(".hwpx")
   );
   const canStart = !!pdfFile && !!hwpxFile && status === "idle";
 
@@ -52,7 +51,7 @@ export default function ReviewPage() {
         <div className="space-y-4">
           <Card className="p-4 space-y-4">
             <h3 className="text-sm font-medium">입력 파일</h3>
-            <FileDropzone mode="review" accept={[".pdf", ".hwpx", ".hwp"]} onFilesChange={setUploadedFiles} />
+            <FileDropzone mode="review" accept={[".pdf", ".hwpx"]} onFilesChange={setUploadedFiles} />
 
             <div className="space-y-1.5 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">

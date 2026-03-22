@@ -9,11 +9,14 @@ import { writeFile, mkdir, readdir, stat } from "fs/promises";
 import path from "path";
 
 // Import from relative paths (tsx doesn't support @/ alias)
-import { runClaude, transformToSSE, type SSEEvent } from "../lib/claude";
+import { runClaude, transformToSSE, toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
 import { buildCreatePrompt, buildReviewPrompt } from "../lib/prompts";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
-const __server_dir = path.dirname(new URL(import.meta.url).pathname);
+// Windows에서 import.meta.url → file:///C:/... → pathname이 /C:/... 가 되므로 fileURLToPath 사용
+import { fileURLToPath } from "url";
+const __server_file = fileURLToPath(import.meta.url);
+const __server_dir = path.dirname(__server_file);
 const BASE_DIR = path.resolve(__server_dir, "../..");
 const DATA_DIR = path.join(__server_dir, "../data/jobs");
 const HWPX_TEMPLATE = process.env.HWPX_TEMPLATE_PATH ?? "";
@@ -83,10 +86,21 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     hwpx: files.hwpx ?? HWPX_TEMPLATE,
   };
 
+  // Claude CLI는 WSL에서 실행되므로 파일 경로를 WSL 형식으로 변환
+  // 상대경로는 cwd(BASE_DIR) 기준이므로 절대경로로 만든 뒤 변환
+  const toAbsWsl = (p: string) => {
+    const abs = path.isAbsolute(p) ? p : path.join(BASE_DIR, p);
+    return toWslPath(abs);
+  };
+  const wslFiles = {
+    pdf: toAbsWsl(resolvedFiles.pdf),
+    hwpx: toAbsWsl(resolvedFiles.hwpx),
+  };
+
   const prompt =
     mode === "create"
-      ? buildCreatePrompt(resolvedFiles)
-      : buildReviewPrompt(resolvedFiles as { pdf: string; hwpx: string });
+      ? buildCreatePrompt(wslFiles)
+      : buildReviewPrompt(wslFiles);
 
   // Save initial job data
   await mkdir(DATA_DIR, { recursive: true });
@@ -157,8 +171,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       const sseEvents = transformToSSE(event, currentStage);
       for (const sse of sseEvents) {
         // hwpx 파일 이벤트에서 outputFile 추적
+        // CLI(WSL)가 보낸 경로는 /mnt/c/... 형태일 수 있으므로 즉시 변환
         if (sse.event === "file" && sse.data.type === "hwpx") {
-          outputFile = sse.data.path as string;
+          outputFile = fromWslPath(sse.data.path as string);
         }
         // result 이벤트에서 요약 텍스트 및 상태 추적
         if (sse.event === "result") {
@@ -166,7 +181,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           resultSummary = (sse.data.result as string) ?? "";
           finalStatus = sse.data.status === "success" ? "done" : "failed";
           if (sse.data.outputPath) {
-            outputFile = sse.data.outputPath as string;
+            outputFile = fromWslPath(sse.data.outputPath as string);
           }
         }
         if (sse.event === "error") {
@@ -193,32 +208,38 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     });
     finalStatus = "failed";
   } finally {
-    // outputFile이 없으면 outputs/ 폴더에서 최신 .hwpx 스캔
-    if (!outputFile && mode === "create") {
+    // outputFile이 없으면 폴백: 모드별로 결과 파일 탐색
+    if (!outputFile) {
       try {
-        const outputsDir = path.join(BASE_DIR, "outputs");
-        const files = await readdir(outputsDir);
-        const hwpxFiles = files.filter((f) => f.endsWith(".hwpx"));
-        if (hwpxFiles.length > 0) {
-          // 가장 최근 수정된 파일 선택
-          let latest = { name: "", mtime: 0 };
-          for (const f of hwpxFiles) {
-            const s = await stat(path.join(outputsDir, f));
-            if (s.mtimeMs > latest.mtime) {
-              latest = { name: f, mtime: s.mtimeMs };
+        if (mode === "create") {
+          // 제작 모드: outputs/ 폴더에서 최신 .hwpx 스캔
+          const outputsDir = path.join(BASE_DIR, "outputs");
+          const dirFiles = await readdir(outputsDir);
+          const hwpxFiles = dirFiles.filter((f) => f.endsWith(".hwpx"));
+          if (hwpxFiles.length > 0) {
+            let latest = { name: "", mtime: 0 };
+            for (const f of hwpxFiles) {
+              const s = await stat(path.join(outputsDir, f));
+              if (s.mtimeMs > latest.mtime) {
+                latest = { name: f, mtime: s.mtimeMs };
+              }
+            }
+            const jobStart = new Date(jobData.startedAt).getTime();
+            if (latest.mtime > jobStart) {
+              outputFile = `outputs/${latest.name}`;
             }
           }
-          // 작업 시작 이후에 생성된 파일만 사용
-          const jobStart = new Date(jobData.startedAt).getTime();
-          if (latest.mtime > jobStart) {
-            outputFile = `outputs/${latest.name}`;
-          }
+        } else if (mode === "review") {
+          // 오검 모드: 입력 HWPX를 직접 수정하므로 입력 파일이 곧 결과물
+          outputFile = resolvedFiles.hwpx;
         }
-      } catch { /* outputs/ 폴더가 없을 수 있음 */ }
+      } catch { /* 폴더가 없을 수 있음 */ }
     }
 
     // outputFile 경로를 상대경로로 정규화
     if (outputFile) {
+      // WSL 경로(/mnt/c/...)가 올 수 있으므로 Windows 경로로 변환
+      outputFile = fromWslPath(outputFile);
       // 절대경로면 BASE_DIR 기준 상대경로로 변환
       if (path.isAbsolute(outputFile)) {
         outputFile = path.relative(BASE_DIR, outputFile);

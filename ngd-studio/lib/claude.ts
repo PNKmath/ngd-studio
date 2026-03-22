@@ -1,4 +1,48 @@
 import { spawn, type ChildProcess } from "child_process";
+import path from "path";
+import os from "os";
+
+// --- Path Conversion (Windows ↔ WSL) ---
+
+const IS_WINDOWS = os.platform() === "win32";
+
+/**
+ * Windows 경로를 WSL 경로로 변환.
+ * 예: C:\NGD\inputs\file.pdf → /mnt/c/NGD/inputs/file.pdf
+ * 이미 WSL 경로(/mnt/...)면 그대로 반환.
+ */
+export function toWslPath(winPath: string): string {
+  if (!IS_WINDOWS) return winPath;
+  if (winPath.startsWith("/mnt/")) return winPath;
+  // 상대경로면 그대로 (cwd 기준으로 해석됨)
+  if (!path.isAbsolute(winPath)) return winPath.replace(/\\/g, "/");
+  // C:\foo → /mnt/c/foo
+  const normalized = winPath.replace(/\\/g, "/");
+  const match = normalized.match(/^([A-Za-z]):\/(.*)/);
+  if (match) {
+    return `/mnt/${match[1].toLowerCase()}/${match[2]}`;
+  }
+  return normalized;
+}
+
+/**
+ * WSL 경로를 Windows 경로로 변환.
+ * 예: /mnt/c/NGD/inputs/file.pdf → C:\NGD\inputs\file.pdf
+ * Windows가 아니거나 WSL 경로가 아니면 그대로 반환.
+ */
+export function fromWslPath(wslPath: string): string {
+  if (!IS_WINDOWS) return wslPath;
+  const match = wslPath.match(/^\/mnt\/([a-z])\/(.*)/);
+  if (match) {
+    return `${match[1].toUpperCase()}:\\${match[2].replace(/\//g, "\\")}`;
+  }
+  return wslPath;
+}
+
+/** Bash 쉘 이스케이프 — 작은따옴표로 감싸기 */
+function shellEscape(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
 
 // --- Types ---
 
@@ -107,16 +151,29 @@ export function runClaude(
   prompt: string,
   options?: { maxTurns?: number; cwd?: string }
 ): { process: ChildProcess; events: AsyncIterable<ClaudeEvent>; exitCode: Promise<number> } {
-  const proc = spawn("claude", [
+  const claudeArgs = [
     "-p", prompt,
     "--output-format", "stream-json",
     "--verbose",
     "--dangerously-skip-permissions",
     "--max-turns", String(options?.maxTurns ?? 100),
-  ], {
-    cwd: options?.cwd ?? process.cwd(),
-    stdio: ["ignore", "pipe", "pipe"],  // stdin을 닫아야 CLI가 멈추지 않음
-  });
+  ];
+
+  const cwd = options?.cwd ?? process.cwd();
+
+  // Windows: wsl 경유로 claude 실행, cwd를 WSL 경로로 변환
+  // 프롬프트에 따옴표가 포함될 수 있으므로 bash -c 로 감싸고 args는 개별 전달
+  const proc = IS_WINDOWS
+    ? spawn("wsl.exe", [
+        "--", "bash", "-c",
+        `cd ${shellEscape(toWslPath(cwd))} && claude ${claudeArgs.map(shellEscape).join(" ")}`,
+      ], {
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+    : spawn("claude", claudeArgs, {
+        cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
   const exitCode = new Promise<number>((resolve) => {
     proc.on("close", (code) => resolve(code ?? 1));
