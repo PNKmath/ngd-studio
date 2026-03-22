@@ -14,7 +14,7 @@ import { useJobStore } from "@/lib/store";
 import { useJobRunner } from "@/lib/useJobRunner";
 
 export default function CreatePage() {
-  const { startJob } = useJobRunner();
+  const { startJob, stopJob } = useJobRunner();
   const status = useJobStore((s) => s.status);
   const stages = useJobStore((s) => s.stages);
   const logs = useJobStore((s) => s.logs);
@@ -52,13 +52,23 @@ export default function CreatePage() {
               </div>
             </div>
 
-            <Button
-              onClick={handleStart}
-              disabled={!canStart}
-              className="w-full"
-            >
-              {isRunning ? "진행중..." : "제작 시작"}
-            </Button>
+            {isRunning ? (
+              <Button
+                onClick={stopJob}
+                variant="destructive"
+                className="w-full"
+              >
+                중단
+              </Button>
+            ) : (
+              <Button
+                onClick={handleStart}
+                disabled={!canStart}
+                className="w-full"
+              >
+                제작 시작
+              </Button>
+            )}
           </Card>
 
           {isDone && result && (

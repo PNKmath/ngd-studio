@@ -15,7 +15,7 @@ import { useJobRunner } from "@/lib/useJobRunner";
 import { summarizeReport } from "@/lib/reviewParser";
 
 export default function ReviewPage() {
-  const { startJob } = useJobRunner();
+  const { startJob, stopJob } = useJobRunner();
   const status = useJobStore((s) => s.status);
   const stages = useJobStore((s) => s.stages);
   const logs = useJobStore((s) => s.logs);
@@ -76,13 +76,23 @@ export default function ReviewPage() {
               </div>
             </div>
 
-            <Button
-              onClick={handleStart}
-              disabled={!canStart}
-              className="w-full"
-            >
-              {isRunning ? "검수 진행중..." : "검수 시작"}
-            </Button>
+            {isRunning ? (
+              <Button
+                onClick={stopJob}
+                variant="destructive"
+                className="w-full"
+              >
+                중단
+              </Button>
+            ) : (
+              <Button
+                onClick={handleStart}
+                disabled={!canStart}
+                className="w-full"
+              >
+                검수 시작
+              </Button>
+            )}
           </Card>
 
           {/* Result summary card */}

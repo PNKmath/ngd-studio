@@ -21,6 +21,10 @@ const BASE_DIR = path.resolve(__server_dir, "../..");
 const DATA_DIR = path.join(__server_dir, "../data/jobs");
 const HWPX_TEMPLATE = process.env.HWPX_TEMPLATE_PATH ?? "";
 
+// 실행 중인 Claude CLI 프로세스 추적
+import type { ChildProcess } from "child_process";
+const activeProcesses = new Set<ChildProcess>();
+
 const server = http.createServer((req, res) => {
   handleRequest(req, res).catch((err) => {
     console.error("Request handler error:", err);
@@ -30,6 +34,20 @@ const server = http.createServer((req, res) => {
     }
   });
 });
+
+// 서버 종료 시 모든 Claude CLI 프로세스 kill
+function shutdown() {
+  console.log(`\nShutting down... killing ${activeProcesses.size} active process(es)`);
+  for (const proc of activeProcesses) {
+    try { proc.kill("SIGTERM"); } catch { /* already dead */ }
+  }
+  server.close(() => process.exit(0));
+  // 3초 후 강제 종료
+  setTimeout(() => process.exit(1), 3000);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
 
 async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -141,14 +159,16 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     cwd: BASE_DIR,
     maxTurns: mode === "create" ? 100 : 50,
   });
+  activeProcesses.add(proc);
+  proc.on("close", () => activeProcesses.delete(proc));
 
   send({ event: "log", data: { stage: "system", message: `CLI 프로세스 시작됨 (PID: ${proc.pid}). API 연결 대기중...`, timestamp: new Date().toISOString(), level: "info" } });
 
-  // Kill on client disconnect
+  // Kill on client disconnect (중단 버튼 또는 브라우저 닫기)
   let clientDisconnected = false;
   req.on("close", () => {
     clientDisconnected = true;
-    proc.kill("SIGTERM");
+    try { proc.kill("SIGTERM"); } catch { /* already dead */ }
   });
 
   // Forward stderr as log messages (auth errors, warnings, etc.)

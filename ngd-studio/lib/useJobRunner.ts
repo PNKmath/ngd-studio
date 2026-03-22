@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useJobStore, type JobState } from "./store";
 import type { SSEEvent } from "./claude";
 import { parseReviewReport } from "./reviewParser";
@@ -10,10 +10,27 @@ const SSE_BASE = process.env.NEXT_PUBLIC_SSE_URL ?? "http://localhost:3021";
 
 export function useJobRunner() {
   const store = useJobStore();
+  const abortRef = useRef<AbortController | null>(null);
+
+  const stopJob = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    store.setStatus("failed");
+    store.addLog({
+      timestamp: new Date().toISOString(),
+      stage: "system",
+      message: "작업이 중단되었습니다.",
+      level: "warn",
+    });
+  }, [store]);
 
   const startJob = useCallback(
     async (mode: "create" | "review", files: { pdf: string; hwpx?: string }) => {
       const jobId = crypto.randomUUID();
+      const abortController = new AbortController();
+      abortRef.current = abortController;
 
       store.reset();
       store.setJobId(jobId);
@@ -39,6 +56,7 @@ export function useJobRunner() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mode, files, jobId }),
+          signal: abortController.signal,
         });
 
         if (!res.ok || !res.body) {
@@ -96,6 +114,8 @@ export function useJobRunner() {
           }
         }
       } catch (err) {
+        // AbortError는 사용자가 중단한 것이므로 무시
+        if (err instanceof DOMException && err.name === "AbortError") return;
         store.setStatus("failed");
         store.addLog({
           timestamp: new Date().toISOString(),
@@ -103,12 +123,14 @@ export function useJobRunner() {
           message: `연결 오류: ${err instanceof Error ? err.message : "알 수 없음"}`,
           level: "error",
         });
+      } finally {
+        abortRef.current = null;
       }
     },
     [store]
   );
 
-  return { startJob };
+  return { startJob, stopJob };
 }
 
 function handleSSEEvent(event: SSEEvent, store: JobState) {
