@@ -274,6 +274,7 @@ export function QuestionSlotGrid({
             }}
             onDragLeave={() => setDraggingOver(null)}
             onDrop={(e) => handleDrop(e, i)}
+            onMouseEnter={() => setSelectedSlot(slot.number)}
             tabIndex={0}
             onKeyDown={(e) => {
               if (e.key === "Delete" || e.key === "Backspace") {
@@ -281,7 +282,6 @@ export function QuestionSlotGrid({
               }
             }}
             onClick={(e) => {
-              // Select this slot for paste
               setSelectedSlot(slot.number);
               if (slot.previewUrl) {
                 // Double-click to expand
