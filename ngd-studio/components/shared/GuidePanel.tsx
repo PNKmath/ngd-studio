@@ -171,6 +171,93 @@ function Example({ label, children }: { label?: string; children: React.ReactNod
 }
 
 // ============================================================
+//  단원 분류표 컴포넌트
+// ============================================================
+
+const unitData = [
+  { code: "수상", name: "고등수학", units: [
+    { code: "A", name: "다항식", topics: ["다항식의 연산", "나머지 정리", "인수분해"] },
+    { code: "B", name: "방정식과 부등식", topics: ["복소수", "이차방정식", "다항함수", "고차방정식", "연립방정식", "부등식"] },
+    { code: "C", name: "도형의 방정식", topics: ["평면좌표", "직선의 방정식", "원의 방정식", "도형의 이동"] },
+    { code: "D", name: "집합과 명제", topics: ["집합", "명제", "절대부등식"] },
+    { code: "E", name: "함수", topics: ["함수", "합성함수", "역함수", "유리식과 유리함수", "무리식과 무리함수"] },
+    { code: "F", name: "경우의 수", topics: ["경우의 수", "순열", "조합"] },
+  ]},
+  { code: "수1", name: "수학 I", units: [
+    { code: "G", name: "지수함수와 로그함수", topics: ["지수", "로그", "상용로그", "지수함수", "로그함수", "지수함수와 로그함수의 활용"] },
+    { code: "H", name: "삼각함수", topics: ["삼각함수", "삼각함수의 그래프", "삼각형에의 활용"] },
+    { code: "I", name: "수열", topics: ["등차수열", "등비수열", "수열의 합", "수학적 귀납법"] },
+  ]},
+  { code: "수2", name: "수학 II", units: [
+    { code: "J", name: "함수의 극한과 연속", topics: ["함수의 극한", "함수의 연속"] },
+    { code: "K", name: "미분법", topics: ["미분계수와 도함수", "도함수활용-1 접선-평균값정리(수II)", "도함수활용-2 극대극소-최대최소(수II)", "도함수활용-3 방정식-부등식(수II)", "도함수활용-4 변화율-속도-가속도(수II)"] },
+    { code: "L", name: "적분법", topics: ["부정적분", "정적분", "정적분의 활용(수II)"] },
+  ]},
+  { code: "미적", name: "미적분", units: [
+    { code: "M", name: "수열의 극한", topics: ["수열의 극한", "급수"] },
+    { code: "N", name: "미분법", topics: ["여러 가지 함수의 미분", "여러 가지 함수의 미분법", "도함수활용-1 접선-평균값정리(미적)", "도함수활용-2 극대극소-최대최소(미적)", "도함수활용-3 방정식-부등식(미적)", "도함수활용-4 변화율-속도-가속도(미적)"] },
+    { code: "O", name: "적분법", topics: ["여러 가지 적분법", "정적분의 활용(미적)"] },
+  ]},
+  { code: "확통", name: "확률과 통계", units: [
+    { code: "P", name: "경우의 수", topics: ["여러가지순열", "중복조합", "이항정리"] },
+    { code: "Q", name: "확률", topics: ["확률의 뜻과 활용", "조건부 확률"] },
+    { code: "R", name: "통계", topics: ["확률분포", "이항분포", "정규분포", "통계적 추정"] },
+  ]},
+  { code: "기하", name: "기하", units: [
+    { code: "S", name: "이차곡선", topics: ["포물선", "타원", "쌍곡선", "이차곡선의 접선"] },
+    { code: "T", name: "평면벡터", topics: ["벡터의 연산", "평면벡터의 성분과 내적", "도형의 방정식"] },
+    { code: "U", name: "공간도형과 공간좌표", topics: ["공간도형", "공간좌표"] },
+  ]},
+];
+
+function UnitClassificationTable() {
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        중단원명은 아래 표의 값을 그대로 사용해야 합니다. 임의로 변형하지 마세요.
+      </p>
+      {unitData.map((subject) => (
+        <div key={subject.code} className="border rounded-md overflow-hidden">
+          <div className="bg-muted/70 px-3 py-1.5 text-xs font-semibold flex items-center gap-2">
+            <code className="text-primary">{subject.code}</code>
+            <span>{subject.name}</span>
+          </div>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/30">
+                <th className="px-3 py-1 text-left w-8">코드</th>
+                <th className="px-3 py-1 text-left w-28">대단원</th>
+                <th className="px-3 py-1 text-left">중단원 (topics)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subject.units.map((unit) => (
+                <tr key={unit.code} className="border-b last:border-b-0">
+                  <td className="px-3 py-1.5 text-primary font-mono">{unit.code}</td>
+                  <td className="px-3 py-1.5 font-medium">{unit.name}</td>
+                  <td className="px-3 py-1.5">
+                    <div className="flex flex-wrap gap-1">
+                      {unit.topics.map((topic) => (
+                        <span
+                          key={topic}
+                          className="inline-block bg-muted rounded px-1.5 py-0.5 text-[11px]"
+                        >
+                          {topic}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
 //  시험지 제작 참고사항
 // ============================================================
 
@@ -441,6 +528,10 @@ P(0≤Z≤3)=0.4987로 계산하다.) [4.3점]`}
       </>
     ),
   },
+  {
+    title: "8. 단원 분류표 (2015 개정교육과정)",
+    content: <UnitClassificationTable />,
+  },
 ];
 
 // ============================================================
@@ -591,5 +682,9 @@ export const reviewGuidePages: GuidePage[] = [
         </Section>
       </>
     ),
+  },
+  {
+    title: "4. 단원 분류표 (2015 개정교육과정)",
+    content: <UnitClassificationTable />,
   },
 ];
