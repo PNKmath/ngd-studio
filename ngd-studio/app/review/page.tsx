@@ -10,6 +10,7 @@ import { LogStream } from "@/components/log/LogStream";
 import { ReviewReport } from "@/components/results/ReviewReport";
 import { DownloadButton } from "@/components/shared/DownloadButton";
 import { FollowupChat } from "@/components/shared/FollowupChat";
+import { GuidePanel, reviewGuide } from "@/components/shared/GuidePanel";
 import { useJobStore } from "@/lib/store";
 import { useJobRunner } from "@/lib/useJobRunner";
 import { summarizeReport } from "@/lib/reviewParser";
@@ -126,6 +127,8 @@ export default function ReviewPage() {
               )}
             </Card>
           )}
+
+          <GuidePanel {...reviewGuide} />
         </div>
 
         {/* Right: Pipeline */}

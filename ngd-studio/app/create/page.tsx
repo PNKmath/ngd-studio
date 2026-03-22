@@ -10,6 +10,7 @@ import { LogStream } from "@/components/log/LogStream";
 import { ResultTabs } from "@/components/results/ResultTabs";
 import { DownloadButton } from "@/components/shared/DownloadButton";
 import { FollowupChat } from "@/components/shared/FollowupChat";
+import { GuidePanel, createGuide } from "@/components/shared/GuidePanel";
 import { useJobStore } from "@/lib/store";
 import { useJobRunner } from "@/lib/useJobRunner";
 
@@ -92,6 +93,8 @@ export default function CreatePage() {
               )}
             </Card>
           )}
+
+          <GuidePanel {...createGuide} />
         </div>
 
         {/* Right: Pipeline */}
