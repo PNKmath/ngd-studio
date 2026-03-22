@@ -194,7 +194,6 @@ export default function HistoryPage() {
               {selectedJob.status === "done" && (
                 <DownloadButton
                   jobId={selectedJob.id}
-                  fileName="result.hwpx"
                 />
               )}
             </>

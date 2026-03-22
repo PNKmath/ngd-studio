@@ -14,7 +14,11 @@ skills:
 - **HWPX를 직접 읽어서** XML 레벨로 검증한다
 - AI가 자주 하는 **10가지 실수 패턴**을 체크한다
 - 발견된 문제를 **카테고리별로 분류**하여 수정 지시를 생성한다
-- **작업 전 `.claude/data/unit_classification.json`을 읽어서** 중단원명 검증 기준으로 사용한다
+- **작업 전 다음 파일들을 읽어라:**
+  - `.claude/data/unit_classification.json` — 중단원명 검증 기준
+  - `docs/guidelines-layout.md` — 레이아웃/서식 규칙 검증 기준
+  - `docs/guidelines-answer.md` — 해설/정답 규칙 검증 기준
+  - `docs/guidelines-clause.md` — 단서 조항 처리 규칙 검증 기준
 
 ## 검수 체크리스트 (10항목)
 

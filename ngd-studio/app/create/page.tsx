@@ -77,7 +77,6 @@ export default function CreatePage() {
               {jobId && (
                 <DownloadButton
                   jobId={jobId}
-                  fileName="result.hwpx"
                   disabled={result.status !== "success"}
                 />
               )}

@@ -13,6 +13,11 @@ skills:
 **작업 전 반드시 다음 파일을 읽어라:**
 - `.claude/skills/ngd-exam-create/sample_analysis.md` — HWPX 구조 파악
 - `.claude/data/unit_classification.json` — 과목코드/단원명 검증 기준
+- `docs/guidelines-layout.md` — 레이아웃/서식 규칙 (배치, 간격, 정렬)
+- `docs/guidelines-answer.md` — 해설/정답/서술형 규칙
+- `docs/guidelines-clause.md` — 단서 조항 처리 규칙
+- `docs/guidelines-filename.md` — 파일명/머리말/단원 규칙
+- `docs/hwpx-templates.md` — 특수 템플릿(증감표, 확률분포표, 정규분포표 등) 사용법
 
 과목코드(`{{GRADE_SUBJECT}}`), 범위(`{{RANGE}}`), `[중단원]` 태그, 파일명의 과목/범위는 모두 단원분류표의 정규 값과 일치해야 한다.
 

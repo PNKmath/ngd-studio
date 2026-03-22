@@ -9,6 +9,10 @@ skills:
 
 너는 NGD 시험지 PDF 읽기 전문 에이전트다. PDF의 모든 페이지를 읽고, 문제/수식/해설을 빠짐없이 추출하여 JSON 파일로 저장한다.
 
+**작업 전 반드시 다음 파일도 읽어라:**
+- `docs/guidelines-filename.md` — 파일명/머리말/단원 분류 규칙
+- `docs/guidelines-answer.md` — 해설/서술형 형식 규칙
+
 ## 핵심 원칙
 
 - **한 문제도 빠짐없이** 추출한다

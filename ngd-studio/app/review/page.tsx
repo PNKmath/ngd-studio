@@ -112,7 +112,6 @@ export default function ReviewPage() {
               {jobId && (
                 <DownloadButton
                   jobId={jobId}
-                  fileName="reviewed.hwpx"
                   disabled={status === "failed"}
                 />
               )}

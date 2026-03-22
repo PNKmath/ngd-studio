@@ -18,6 +18,11 @@ skills:
 2. 작업 HWPX 경로
 3. 체크리스트: ngd-exam-review 스킬의 checklist.md
 4. **단원분류표**: `.claude/data/unit_classification.json` 읽기 — 중단원명/과목명/범위 검증 기준
+5. **작업 가이드라인** (반드시 읽을 것):
+   - `docs/guidelines-layout.md` — 레이아웃/서식 규칙
+   - `docs/guidelines-answer.md` — 해설/정답/서술형 규칙
+   - `docs/guidelines-clause.md` — 단서 조항 처리 규칙
+   - `docs/guidelines-filename.md` — 파일명/머리말/단원 규칙
 
 ### Phase 2: 원본 PDF 읽기
 

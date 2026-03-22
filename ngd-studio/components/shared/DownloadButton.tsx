@@ -13,11 +13,21 @@ export function DownloadButton({ jobId, fileName, disabled }: DownloadButtonProp
     const res = await fetch(`/api/download/${jobId}`);
     if (!res.ok) return;
 
+    // Content-Disposition 헤더에서 서버가 보내준 실제 파일명 추출
+    let downloadName = fileName ?? "result.hwpx";
+    const disposition = res.headers.get("Content-Disposition");
+    if (disposition) {
+      const match = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)"?/i);
+      if (match?.[1]) {
+        downloadName = decodeURIComponent(match[1]);
+      }
+    }
+
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = fileName ?? "result.hwpx";
+    a.download = downloadName;
     a.click();
     URL.revokeObjectURL(url);
   };
