@@ -75,6 +75,7 @@ export interface SSEEvent {
 const stagePatterns: { name: string; patterns: RegExp[] }[] = [
   // 에이전트 이름 매칭 (가장 정확)
   { name: "reader",    patterns: [/ngd-exam-reader/i, /reader\s*(에이전트|agent)/i] },
+  { name: "cropper",   patterns: [/ngd-exam-cropper/i, /cropper\s*(에이전트|agent)/i] },
   { name: "extractor", patterns: [/ngd-exam-extractor/i, /extractor\s*(에이전트|agent)/i] },
   { name: "solver",    patterns: [/ngd-exam-solver/i, /solver\s*(에이전트|agent)/i] },
   { name: "verifier",  patterns: [/ngd-exam-verifier/i, /verifier\s*(에이전트|agent)/i] },
@@ -87,6 +88,7 @@ const stagePatterns: { name: string; patterns: RegExp[] }[] = [
 // 일반 키워드 폴백 (에이전트 이름이 없을 때만)
 const stageFallbackPatterns: { name: string; patterns: RegExp[] }[] = [
   { name: "reader",    patterns: [/PDF.*읽/i, /exam_data.*추출/i] },
+  { name: "cropper",   patterns: [/크롭/i, /crop.*완료/i, /페이지.*변환/i] },
   { name: "extractor", patterns: [/문제.*추출/i, /이미지.*추출/i, /extracted\.json/i] },
   { name: "solver",    patterns: [/해설.*생성/i, /해설.*보완/i, /풀이.*생성/i] },
   { name: "verifier",  patterns: [/해설.*검증/i, /verif/i, /검증.*결과/i] },
@@ -110,6 +112,7 @@ export function detectStage(text: string): string | null {
 // Agent subagent_type → stage 매핑
 const agentTypeToStage: Record<string, string> = {
   "ngd-exam-reader":     "reader",
+  "ngd-exam-cropper":    "cropper",
   "ngd-exam-extractor":  "extractor",
   "ngd-exam-solver":     "solver",
   "ngd-exam-verifier":   "verifier",

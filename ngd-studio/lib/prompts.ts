@@ -101,6 +101,18 @@ export function buildCreateV3Prompt(
   return lines.join("\n");
 }
 
+export function buildCropPrompt(pdfPath: string, outputDir: string): string {
+  return [
+    `PDF 시험지의 각 문제를 개별 이미지로 크롭해줘.`,
+    ``,
+    `- PDF 경로: ${pdfPath}`,
+    `- 출력 디렉토리: ${outputDir}`,
+    ``,
+    `Agent 도구로 "ngd-exam-cropper" 에이전트를 호출해서 진행해.`,
+    `프롬프트에 PDF 경로와 출력 디렉토리를 전달해.`,
+  ].join("\n");
+}
+
 export function buildReviewPrompt(files: { pdf: string; hwpx: string }): string {
   return [
     `오검(오류검수)을 진행해줘.`,

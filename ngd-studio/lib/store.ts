@@ -5,7 +5,7 @@ import type { ReviewItem } from "@/lib/reviewParser";
 
 export interface JobState {
   jobId: string | null;
-  mode: "create" | "create-v3" | "review" | null;
+  mode: "create" | "create-v3" | "crop" | "review" | null;
   status: "idle" | "uploading" | "running" | "done" | "failed";
   stages: PipelineStage[];
   logs: LogEntry[];
@@ -17,7 +17,7 @@ export interface JobState {
   // Actions
   reset: () => void;
   setJobId: (id: string) => void;
-  setMode: (mode: "create" | "create-v3" | "review") => void;
+  setMode: (mode: "create" | "create-v3" | "crop" | "review") => void;
   setStatus: (status: JobState["status"]) => void;
   setFiles: (files: JobState["files"]) => void;
   setStages: (stages: PipelineStage[]) => void;
@@ -43,6 +43,10 @@ const createV3Stages: PipelineStage[] = [
   { name: "figure", label: "그림 처리", status: "pending" },
   { name: "builder", label: "HWPX 조립", status: "pending" },
   { name: "checker", label: "품질 검수", status: "pending" },
+];
+
+const cropStages: PipelineStage[] = [
+  { name: "cropper", label: "PDF 크롭", status: "pending" },
 ];
 
 const reviewStages: PipelineStage[] = [
@@ -81,6 +85,8 @@ export const useJobStore = create<JobState>((set) => ({
         ? createStages.map((s) => ({ ...s }))
         : mode === "create-v3"
         ? createV3Stages.map((s) => ({ ...s }))
+        : mode === "crop"
+        ? cropStages.map((s) => ({ ...s }))
         : reviewStages.map((s) => ({ ...s })),
     }),
   setStatus: (status) => set({ status }),

@@ -141,12 +141,15 @@
 
 ---
 
-## Phase 6: 자동 크롭 (마지막)
+## Phase 6: 자동 크롭 (V4 메뉴로 독립 구현)
 
-- [ ] PDF → 페이지별 이미지화 (PyMuPDF, 200dpi)
-- [ ] 문제 번호 패턴 감지 (①②③... 또는 1. 2. 3.)
-- [ ] 문제 영역 자동 분리
-- [ ] 분리된 이미지를 QuestionSlotGrid에 자동 채우기
+- [x] `ngd-exam-cropper` 에이전트 작성
+- [x] `/create-v4` 페이지 (PDF 업로드 → 자동 크롭 → 결과 그리드)
+- [x] SSE `mode="crop"` 지원
+- [x] `buildCropPrompt()` 프롬프트 빌더
+- [x] 사이드바 메뉴 추가
+- [ ] 실제 PDF로 크롭 테스트
+- [ ] 크롭 결과 → V3 QuestionSlotGrid 연동
 - [ ] 수동 보정 UI (크롭 영역 드래그 조절)
 
 ---

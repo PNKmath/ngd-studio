@@ -10,7 +10,7 @@ import path from "path";
 
 // Import from relative paths (tsx doesn't support @/ alias)
 import { runClaude, transformToSSE, toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
-import { buildCreatePrompt, buildCreateV3Prompt, buildReviewPrompt } from "../lib/prompts";
+import { buildCreatePrompt, buildCreateV3Prompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
 // Windows에서 import.meta.url → file:///C:/... → pathname이 /C:/... 가 되므로 fileURLToPath 사용
@@ -63,15 +63,17 @@ process.on("SIGTERM", shutdown);
 
 // --- Heartbeat: 브라우저 연결 감시 ---
 // 브라우저가 10초마다 heartbeat를 보냄.
-// 30초간 heartbeat 없고 + 실행 중인 작업 없으면 서버 자동 종료.
-const HEARTBEAT_TIMEOUT = 30_000;
+// 서버는 단순 대기 중에는 종료하지 않음 (start.bat의 "아무 키나 누르세요"로 수동 종료).
+// heartbeat는 브라우저 연결 상태 확인용으로만 사용.
 let lastHeartbeat = Date.now();
+let browserConnected = false;
 
 setInterval(() => {
   const elapsed = Date.now() - lastHeartbeat;
-  if (elapsed > HEARTBEAT_TIMEOUT && activeProcesses.size === 0) {
-    console.log(`No heartbeat for ${Math.round(elapsed / 1000)}s and no active jobs. Auto-shutdown.`);
-    shutdown();
+  const wasConnected = browserConnected;
+  browserConnected = elapsed < 60_000;
+  if (wasConnected && !browserConnected) {
+    console.log(`Browser disconnected (no heartbeat for ${Math.round(elapsed / 1000)}s). Server continues running.`);
   }
 }, 10_000);
 
@@ -132,7 +134,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  if (mode !== "create" && mode !== "create-v3" && !files?.pdf) {
+  if (mode !== "create" && mode !== "create-v3" && mode !== "crop" && !files?.pdf) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Missing required fields: pdf" }));
     return;
@@ -141,6 +143,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   if (mode === "create-v3" && (!files?.questionImages || files.questionImages.length === 0)) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "V3 모드에는 문제 이미지가 필요합니다." }));
+    return;
+  }
+
+  if (mode === "crop" && !files?.pdf) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "크롭 모드에는 PDF 파일이 필요합니다." }));
     return;
   }
 
@@ -178,8 +186,10 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   });
 
   let prompt: string;
-  if (mode === "create-v3") {
-    // V3: 문제 이미지 경로를 /tmp/v3/images/ 에서 참조
+  if (mode === "crop") {
+    const cropOutDir = toAbsWsl(path.join(BASE_DIR, "inputs", "시험지 제작", "question_images"));
+    prompt = buildCropPrompt(wslFiles.pdf, cropOutDir);
+  } else if (mode === "create-v3") {
     const v3ImagePaths = questionImages.map((num: number) => {
       const padded = String(num).padStart(2, "0");
       return {
