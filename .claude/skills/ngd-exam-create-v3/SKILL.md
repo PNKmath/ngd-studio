@@ -44,7 +44,35 @@ ls /tmp/v3/images/
 
 ### Step 1: 교과 컨텍스트 준비
 
-`unit_classification.json`을 읽어 solver에 전달할 교과 컨텍스트를 준비한다.
+`.claude/data/unit_classification.json`을 Read 도구로 읽는다. 이 JSON에는 과목별 단원 목록이 **교과 순서대로** 정렬되어 있다.
+
+**교과 컨텍스트 생성 방법** (extractor 완료 후, solver 호출 전에 수행):
+
+1. extractor 출력의 `subtopic` 값을 확인한다 (예: `"지수함수"`)
+2. `unit_classification.json`에서 해당 과목(`subject` 코드)을 찾는다
+3. 해당 과목의 모든 `units[].topics[]`를 **순서대로** 나열한다
+4. `subtopic`이 나타나는 지점까지의 토픽 목록 = **선수 학습 범위**
+5. 이 목록을 solver에게 전달한다
+
+**구체적 예시**: 과목 `수1`(수학 I), subtopic `"삼각함수의 그래프"` 인 경우
+
+```
+unit_classification.json에서 수1의 topics 순서:
+  지수 → 로그 → 상용로그 → 지수함수 → 로그함수 → 지수함수와 로그함수의 활용
+  → 삼각함수 → [삼각함수의 그래프] ← 여기까지
+
+선수 학습 범위:
+- 지수
+- 로그
+- 상용로그
+- 지수함수
+- 로그함수
+- 지수함수와 로그함수의 활용
+- 삼각함수
+- 삼각함수의 그래프 (현재 단원 포함)
+```
+
+**구현 코드** (Bash로 실행):
 
 ```python
 import json
@@ -52,9 +80,57 @@ import json
 with open('.claude/data/unit_classification.json') as f:
     curriculum = json.load(f)
 
-# 과목 코드로 단원 목록 추출 (solver 호출 시 사용)
-# extractor가 subtopic을 추출하면, 해당 단원의 선수 학습 범위를 계산
+def get_prerequisite_topics(subject_code, subtopic):
+    """주어진 과목/중단원에 대해 선수 학습 토픽 목록을 반환한다."""
+    for subject in curriculum['subjects']:
+        if subject['code'] == subject_code:
+            all_topics = []
+            for unit in subject['units']:
+                for topic in unit['topics']:
+                    all_topics.append(topic)
+                    if topic == subtopic:
+                        return {
+                            'subject_name': subject['name'],
+                            'unit_name': unit['name'],
+                            'subtopic': subtopic,
+                            'prerequisite_topics': all_topics,  # 현재 단원 포함
+                        }
+            # subtopic을 못 찾으면 전체 반환
+            return {
+                'subject_name': subject['name'],
+                'unit_name': '(매칭 실패)',
+                'subtopic': subtopic,
+                'prerequisite_topics': all_topics,
+            }
+    return None
+
+def format_curriculum_context(ctx):
+    """solver/verifier에게 전달할 텍스트 형식으로 변환한다."""
+    if not ctx:
+        return "(교과 컨텍스트 없음)"
+    lines = [
+        f"이 문제는 {ctx['subject_name']} 과목, '{ctx['subtopic']}' 단원({ctx['unit_name']})입니다.",
+        f"학생은 다음 단원까지 학습한 상태입니다:",
+    ]
+    for t in ctx['prerequisite_topics']:
+        lines.append(f"- {t}")
+    lines.append("")
+    lines.append("이 범위의 개념만 사용하여 풀이를 작성하세요.")
+    lines.append(f"{ctx['subject_name']} 이후 과목(미적분, 기하 등)의 개념은 사용하지 마세요.")
+    return '\n'.join(lines)
 ```
+
+**주의**: extractor가 subtopic을 `[UNCLEAR]`로 출력한 경우, 오케스트레이터가 문제 내용을 보고 수동으로 판단하거나, 교과 컨텍스트 없이 solver를 호출한다.
+
+**과목 코드와 과목명 매핑**:
+| 코드 | 과목명 |
+|------|--------|
+| `수상` | 고등수학 |
+| `수1` | 수학 I |
+| `수2` | 수학 II |
+| `확통` | 확률과 통계 |
+| `미적` | 미적분 |
+| `기하` | 기하 |
 
 ---
 
@@ -82,7 +158,11 @@ Agent(subagent_type="ngd-exam-extractor", prompt="""
 
 #### 2-2. Solver 배치 호출
 
-extractor 완료 후, 같은 배치의 solver를 **동시에** 호출:
+extractor 완료 후:
+1. 각 문제의 `q{N}_extracted.json`을 Read 도구로 읽어 `subtopic` 값을 확인한다
+2. Step 1의 `get_prerequisite_topics(subject_code, subtopic)`로 교과 컨텍스트를 생성한다
+3. `format_curriculum_context(ctx)`로 텍스트로 변환한다
+4. 같은 배치의 solver를 **동시에** 호출:
 
 ```
 Agent(subagent_type="ngd-exam-solver", prompt="""
@@ -91,12 +171,25 @@ V3 모드로 문제 {N}번 해설을 생성해줘.
 출력 경로: /tmp/v3/q{N}_solved.json
 
 교과 컨텍스트:
-이 문제는 {subject} 과목, '{subtopic}' 단원입니다.
+{format_curriculum_context(ctx) 결과 — 아래와 같은 형식}
+
+이 문제는 수학 I 과목, '삼각함수의 그래프' 단원(삼각함수)입니다.
 학생은 다음 단원까지 학습한 상태입니다:
-{prerequisite_list}
+- 지수
+- 로그
+- 상용로그
+- 지수함수
+- 로그함수
+- 지수함수와 로그함수의 활용
+- 삼각함수
+- 삼각함수의 그래프
+
 이 범위의 개념만 사용하여 풀이를 작성하세요.
+수학 I 이후 과목(미적분, 기하 등)의 개념은 사용하지 마세요.
 """)
 ```
+
+**핵심**: solver에게 **구체적인 토픽 목록**을 전달해야 한다. "수학 I 범위 내에서" 같은 모호한 지시 대신, 어떤 단원까지 배웠는지 **열거**한다.
 
 #### 2-3. Verifier 배치 호출 + 재시도 루프
 
