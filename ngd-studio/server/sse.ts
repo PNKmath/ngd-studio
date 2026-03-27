@@ -5,16 +5,34 @@
  * Usage: pnpm tsx server/sse.ts
  */
 import http from "http";
+import { readFileSync } from "fs";
 import { writeFile, mkdir, readdir, stat } from "fs/promises";
 import path from "path";
+import { fileURLToPath } from "url";
+
+// .env.local 로드 (dotenv 없이 간단 파싱)
+try {
+  const envPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.env.local");
+  const envContent = readFileSync(envPath, "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    let val = trimmed.slice(eqIdx + 1).trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    if (!process.env[key]) process.env[key] = val;
+  }
+} catch { /* .env.local 없으면 무시 */ }
 
 // Import from relative paths (tsx doesn't support @/ alias)
 import { runClaude, transformToSSE, toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
 import { buildCreatePrompt, buildCreateV3Prompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
-// Windows에서 import.meta.url → file:///C:/... → pathname이 /C:/... 가 되므로 fileURLToPath 사용
-import { fileURLToPath } from "url";
 const __server_file = fileURLToPath(import.meta.url);
 const __server_dir = path.dirname(__server_file);
 const BASE_DIR = path.resolve(__server_dir, "../..");
@@ -248,14 +266,17 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       : path.join(BASE_DIR, resolvedFiles.pdf);
 
     // WSL에서 python3 실행 (Windows) 또는 직접 실행 (Linux)
+    // GEMINI_API_KEY를 환경변수로 전달 (WSL은 Windows 환경변수를 상속하지 않음)
     const IS_WIN = os.platform() === "win32";
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
     const cropProc = IS_WIN
       ? spawn("wsl.exe", [
           "--", "bash", "-lc",
-          `python3 '${toWslPath(cropScript)}' '${toWslPath(pdfPath)}' '${toWslPath(cropOutDir)}'`,
+          `export GEMINI_API_KEY='${geminiKey}'; python3 '${toWslPath(cropScript)}' '${toWslPath(pdfPath)}' '${toWslPath(cropOutDir)}'`,
         ], { stdio: ["ignore", "pipe", "pipe"] })
       : spawn("python3", [cropScript, pdfPath, cropOutDir], {
           stdio: ["ignore", "pipe", "pipe"],
+          env: { ...process.env, GEMINI_API_KEY: geminiKey },
         });
 
     activeProcesses.add(cropProc);
