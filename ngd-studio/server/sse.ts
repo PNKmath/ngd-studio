@@ -36,7 +36,7 @@ const server = http.createServer((req, res) => {
 });
 
 // 서버 종료 시 모든 Claude CLI 프로세스 + Next.js 서버도 kill
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import os from "os";
 
 function shutdown() {
@@ -236,14 +236,94 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     }
   };
 
+  // --- Crop 모드: Gemini Python 스크립트 직접 실행 (Claude 불필요) ---
+  if (mode === "crop") {
+    send({ event: "log", data: { stage: "system", message: "Gemini 크롭 스크립트를 시작합니다...", timestamp: new Date().toISOString(), level: "info" } });
+    send({ event: "stage", data: { name: "cropper", status: "running" } });
+
+    const cropScript = path.join(BASE_DIR, "workspaces", "crop", "gemini_crop.py");
+    const cropOutDir = path.join(BASE_DIR, "inputs", "시험지 제작", "question_images");
+    const pdfPath = path.isAbsolute(resolvedFiles.pdf)
+      ? resolvedFiles.pdf
+      : path.join(BASE_DIR, resolvedFiles.pdf);
+
+    // WSL에서 python3 실행 (Windows) 또는 직접 실행 (Linux)
+    const IS_WIN = os.platform() === "win32";
+    const cropProc = IS_WIN
+      ? spawn("wsl.exe", [
+          "--", "bash", "-lc",
+          `python3 '${toWslPath(cropScript)}' '${toWslPath(pdfPath)}' '${toWslPath(cropOutDir)}'`,
+        ], { stdio: ["ignore", "pipe", "pipe"] })
+      : spawn("python3", [cropScript, pdfPath, cropOutDir], {
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+
+    activeProcesses.add(cropProc);
+    cropProc.on("close", () => activeProcesses.delete(cropProc));
+
+    let clientDisconnected = false;
+    req.on("close", () => {
+      clientDisconnected = true;
+      try { cropProc.kill("SIGTERM"); } catch { /* */ }
+    });
+
+    // stdout → SSE log
+    cropProc.stdout?.on("data", (chunk: Buffer) => {
+      const lines = chunk.toString().split("\n").filter(Boolean);
+      for (const line of lines) {
+        send({ event: "log", data: { stage: "cropper", message: line, timestamp: new Date().toISOString(), level: "info" } });
+      }
+    });
+
+    // stderr → SSE warn
+    cropProc.stderr?.on("data", (chunk: Buffer) => {
+      const msg = chunk.toString().trim();
+      if (msg && !msg.includes("FutureWarning")) {
+        send({ event: "log", data: { stage: "cropper", message: `[stderr] ${msg.slice(0, 300)}`, timestamp: new Date().toISOString(), level: "warn" } });
+      }
+    });
+
+    const cropExit = await new Promise<number>((resolve) => {
+      cropProc.on("close", (code) => resolve(code ?? 1));
+    });
+
+    const cropStatus = cropExit === 0 ? "done" : "failed";
+    send({ event: "stage", data: { name: "cropper", status: cropStatus } });
+
+    if (cropExit === 0) {
+      // 크롭 결과 파일 경로 전달
+      const resultFile = path.join(cropOutDir, "crop_results.json");
+      const relPath = path.relative(BASE_DIR, resultFile);
+      send({ event: "file", data: { type: "json", name: "crop_results.json", path: relPath } });
+      send({ event: "result", data: { status: "success", result: "크롭 완료" } });
+    } else {
+      send({ event: "error", data: { message: `크롭 스크립트 종료 코드: ${cropExit}` } });
+    }
+
+    // Job 데이터 업데이트
+    try {
+      await writeFile(
+        path.join(DATA_DIR, `${jobId}.json`),
+        JSON.stringify({
+          ...jobData,
+          status: cropStatus,
+          finishedAt: new Date().toISOString(),
+        }, null, 2)
+      );
+    } catch { /* ignore */ }
+
+    res.end();
+    return;
+  }
+
+  // --- 일반 모드: Claude CLI 실행 ---
+
   send({ event: "log", data: { stage: "system", message: "CLI 프로세스를 시작합니다...", timestamp: new Date().toISOString(), level: "info" } });
 
   // Spawn Claude CLI
-  // crop 모드는 전용 워크스페이스에서 실행 (메인 CLAUDE.md 영향 방지)
-  const cliCwd = mode === "crop" ? path.join(BASE_DIR, "workspaces", "crop") : BASE_DIR;
   const { process: proc, events, exitCode } = runClaude(prompt, {
-    cwd: cliCwd,
-    maxTurns: mode === "crop" ? 30 : mode === "create-v3" ? 200 : mode === "create" ? 100 : 50,
+    cwd: BASE_DIR,
+    maxTurns: mode === "create-v3" ? 200 : mode === "create" ? 100 : 50,
   });
   activeProcesses.add(proc);
   proc.on("close", () => activeProcesses.delete(proc));
