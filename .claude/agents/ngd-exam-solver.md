@@ -225,6 +225,46 @@ JSON 저장: /tmp/v3/q{N}_solved.json
 
 ---
 
+## 특수 풀이 도구 (양식지 템플릿 연동)
+
+해설에서 다음 도구가 필요한 경우, 출력 JSON에 `explanation_table` 필드를 추가한다. builder가 양식지에서 해당 XML 템플릿을 추출하여 HWPX에 삽입한다.
+
+### 함수 증감표
+
+극값/최대최소 문제에서 f'(x) 부호 변화를 표로 보여줘야 할 때:
+
+```json
+{
+  "explanation_table": {
+    "type": "increase_decrease",
+    "x_values": ["-1", "1"],
+    "rows": [
+      {"label": "f'(x)", "values": ["+", "0", "-", "0", "+"]},
+      {"label": "f(x)", "values": ["NEARROW", "극대", "SEARROW", "극소", "NEARROW"]}
+    ]
+  }
+}
+```
+
+### 조립제법
+
+고차방정식 풀이에서 조립제법을 사용할 때:
+
+```json
+{
+  "explanation_table": {
+    "type": "synthetic_division",
+    "divisor": "2",
+    "coefficients": ["1", "-3", "0", "4"],
+    "result": ["1", "-1", "-2", "0"]
+  }
+}
+```
+
+**주의**: solver는 테이블 **데이터만** 제공한다. XML 생성은 builder가 양식지 템플릿으로 처리하므로, solver는 XML을 만들지 않는다.
+
+---
+
 ## 검증 (양 모드 공통)
 
 - 생성된 해설이 정답과 일치하는지 확인

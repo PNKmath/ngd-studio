@@ -306,6 +306,11 @@ Agent(subagent_type="ngd-exam-builder", prompt="""
 /tmp/exam_data.json과 outputs/images/의 이미지로 HWPX를 생성해줘
 - 양식지: inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx
 - 모든 문제, 해설, 이미지 빠짐없이 포함
+- 특수 테이블(표준정규분포표, 확률분포표, 증감표 등)은 양식지에서 XML 템플릿을 추출하여 사용 (docs/hwpx-templates.md 참조)
+  - data_table.type == "normal_dist" → 양식지의 "표준 정규분포표" 템플릿
+  - data_table.type == "probability" → 양식지의 "확률분포표 양식" 템플릿
+  - data_table.type == "increase_decrease" → 양식지의 "함수 증감표양식" 템플릿
+  - explanation_table.type == "synthetic_division" → 양식지의 "조립제법 틀" 템플릿
 - fix_namespaces.py 후처리 필수
 - validate.py --fix 검증 필수
 - outputs/에 파일명 규칙대로 저장
