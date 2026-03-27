@@ -11,6 +11,16 @@ export interface QuestionResult {
   updatedAt: string;
 }
 
+export interface V3Meta {
+  school?: string;
+  grade?: number;
+  subject?: string;
+  semester?: string;
+  examType?: string;
+  range?: string;
+  questionCount?: number;
+}
+
 export interface JobState {
   jobId: string | null;
   mode: "create" | "create-v3" | "crop" | "review" | null;
@@ -22,6 +32,7 @@ export interface JobState {
   result: { status: string; outputPath?: string; summary?: string } | null;
   reviewItems: ReviewItem[];
   questionResults: Record<number, QuestionResult>;
+  v3Meta: V3Meta | null;
 
   // Actions
   reset: () => void;
@@ -36,6 +47,7 @@ export interface JobState {
   setResult: (result: JobState["result"]) => void;
   setReviewItems: (items: ReviewItem[]) => void;
   updateQuestionResult: (number: number, phase: string, content: Record<string, unknown>) => void;
+  setV3Meta: (meta: V3Meta) => void;
 }
 
 const createStages: PipelineStage[] = [
@@ -74,6 +86,7 @@ export const useJobStore = create<JobState>((set) => ({
   result: null,
   reviewItems: [],
   questionResults: {},
+  v3Meta: null,
 
   reset: () =>
     set({
@@ -87,6 +100,7 @@ export const useJobStore = create<JobState>((set) => ({
       result: null,
       reviewItems: [],
       questionResults: {},
+      v3Meta: null,
     }),
 
   setJobId: (id) => set({ jobId: id }),
@@ -121,6 +135,8 @@ export const useJobStore = create<JobState>((set) => ({
 
   setResult: (result) => set({ result }),
   setReviewItems: (items) => set({ reviewItems: items }),
+
+  setV3Meta: (meta) => set({ v3Meta: meta }),
 
   updateQuestionResult: (number, phase, content) =>
     set((state) => {
