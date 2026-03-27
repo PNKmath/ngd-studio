@@ -195,6 +195,21 @@ function handleSSEEvent(event: SSEEvent, store: JobState) {
       store.setStatus(status === "success" ? "done" : "failed");
       break;
     }
+    case "question": {
+      const num = data.number as number;
+      const phase = data.phase as string;
+      const raw = data.content as string;
+      if (num && phase && raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          store.updateQuestionResult(num, phase, parsed);
+        } catch {
+          // malformed JSON — store raw string
+          store.updateQuestionResult(num, phase, { _raw: raw });
+        }
+      }
+      break;
+    }
     case "error": {
       store.addLog({
         timestamp: new Date().toISOString(),

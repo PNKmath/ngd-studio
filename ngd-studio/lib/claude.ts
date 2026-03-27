@@ -65,7 +65,7 @@ export interface ContentBlock {
 }
 
 export interface SSEEvent {
-  event: "stage" | "log" | "progress" | "file" | "result" | "error";
+  event: "stage" | "log" | "progress" | "file" | "question" | "result" | "error";
   data: Record<string, unknown>;
 }
 
@@ -295,6 +295,18 @@ export function transformToSSE(event: ClaudeEvent, currentStage: { name: string 
             results.push({ event: "file", data: { type: "image", name: fp.split("/").pop(), path: fp } });
           } else if (/\.json$/i.test(fp)) {
             results.push({ event: "file", data: { type: "json", name: fp.split("/").pop(), path: fp } });
+            // V3 문제별 JSON 감지 → question 이벤트 발행
+            const qMatch = fp.match(/q(\d+)_(extracted|solved|verified)\.json$/);
+            if (qMatch && block.input.content) {
+              results.push({
+                event: "question",
+                data: {
+                  number: parseInt(qMatch[1]),
+                  phase: qMatch[2], // "extracted" | "solved" | "verified"
+                  content: String(block.input.content).slice(0, 5000),
+                },
+              });
+            }
           } else if (/\.hwpx$/i.test(fp)) {
             results.push({ event: "file", data: { type: "hwpx", name: fp.split("/").pop(), path: fp } });
           }

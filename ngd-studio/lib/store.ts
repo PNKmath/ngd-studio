@@ -3,6 +3,14 @@ import type { PipelineStage } from "@/components/pipeline/PipelineView";
 import type { LogEntry } from "@/components/log/LogStream";
 import type { ReviewItem } from "@/lib/reviewParser";
 
+export interface QuestionResult {
+  number: number;
+  extracted?: Record<string, unknown>;
+  solved?: Record<string, unknown>;
+  verified?: Record<string, unknown>;
+  updatedAt: string;
+}
+
 export interface JobState {
   jobId: string | null;
   mode: "create" | "create-v3" | "crop" | "review" | null;
@@ -13,6 +21,7 @@ export interface JobState {
   intermediateFiles: { type: string; name: string; path: string }[];
   result: { status: string; outputPath?: string; summary?: string } | null;
   reviewItems: ReviewItem[];
+  questionResults: Record<number, QuestionResult>;
 
   // Actions
   reset: () => void;
@@ -26,6 +35,7 @@ export interface JobState {
   addIntermediateFile: (file: { type: string; name: string; path: string }) => void;
   setResult: (result: JobState["result"]) => void;
   setReviewItems: (items: ReviewItem[]) => void;
+  updateQuestionResult: (number: number, phase: string, content: Record<string, unknown>) => void;
 }
 
 const createStages: PipelineStage[] = [
@@ -63,6 +73,7 @@ export const useJobStore = create<JobState>((set) => ({
   intermediateFiles: [],
   result: null,
   reviewItems: [],
+  questionResults: {},
 
   reset: () =>
     set({
@@ -75,6 +86,7 @@ export const useJobStore = create<JobState>((set) => ({
       intermediateFiles: [],
       result: null,
       reviewItems: [],
+      questionResults: {},
     }),
 
   setJobId: (id) => set({ jobId: id }),
@@ -109,4 +121,19 @@ export const useJobStore = create<JobState>((set) => ({
 
   setResult: (result) => set({ result }),
   setReviewItems: (items) => set({ reviewItems: items }),
+
+  updateQuestionResult: (number, phase, content) =>
+    set((state) => {
+      const prev = state.questionResults[number] ?? { number, updatedAt: "" };
+      return {
+        questionResults: {
+          ...state.questionResults,
+          [number]: {
+            ...prev,
+            [phase]: content,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      };
+    }),
 }));

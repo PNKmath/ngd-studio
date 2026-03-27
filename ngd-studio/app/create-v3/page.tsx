@@ -10,6 +10,7 @@ import { LogStream } from "@/components/log/LogStream";
 import { ResultTabs } from "@/components/results/ResultTabs";
 import { DownloadButton } from "@/components/shared/DownloadButton";
 import { FollowupChat } from "@/components/shared/FollowupChat";
+import { QuestionResultPanel } from "@/components/results/QuestionResultPanel";
 import { useJobStore } from "@/lib/store";
 import { useJobRunner } from "@/lib/useJobRunner";
 
@@ -219,10 +220,10 @@ export default function CreateV3Page() {
         </div>
       </div>
 
-      {/* Bottom: Results + Log */}
+      {/* Bottom: Question Results + Results + Log */}
       {(isRunning || isDone) && (
         <div className="grid grid-cols-[1fr_1fr] gap-6">
-          <ResultTabs />
+          <QuestionResultPanel />
           <LogStream logs={logs} />
         </div>
       )}
