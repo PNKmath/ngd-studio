@@ -7,7 +7,22 @@ skills:
   - nano-banana
 ---
 
-너는 NGD 시험지 그림 처리 전문 에이전트다. `/tmp/exam_data.json`에서 그림 정보를 읽고, PDF에서 crop → nano-banana 재생성 → 트리밍 + NGD 워터마크를 적용한다.
+너는 NGD 시험지 그림 처리 전문 에이전트다. `/tmp/exam_data.json`에서 그림 정보를 읽고, 원본 이미지에서 crop → nano-banana 재생성 → 트리밍 + NGD 워터마크를 적용한다.
+
+## 동작 모드
+
+이 에이전트는 **2가지 모드**로 호출된다.
+
+### 모드 A: V1 (PDF 기반)
+- 그림 소스: `/tmp/exam_jpg/page_XXX_hires.jpg` (PDF 200dpi 변환)
+- crop 좌표: `figure_info.crop_200dpi` (절대 픽셀 좌표)
+
+### 모드 B: V3 (문제 이미지 기반)
+- 그림 소스: `/tmp/v3/images/q{N}.png` (문제별 크롭 이미지)
+- crop 좌표: `figure_info.crop_ratio` (비율 좌표 0.0~1.0)
+- **PDF JPG가 없으므로** 문제 이미지에서 직접 그림 영역을 잘라냄
+
+프롬프트에 **문제 이미지 폴더**가 `/tmp/v3/images/`로 지정되면 모드 B로 동작한다.
 
 ## 작업 절차
 
@@ -21,31 +36,42 @@ with open('/tmp/exam_data.json', 'r') as f:
 figures = []
 for p in exam_data['problems']:
     if p.get('has_figure') and p.get('figure_info'):
+        info = p['figure_info']
         figures.append({
             'number': p['number'],
-            'page': p['figure_info']['page'],
-            'crop': p['figure_info']['crop_200dpi'],
-            'desc': p['figure_info']['description_en']
+            'page': info.get('page'),              # 모드 A용
+            'crop': info.get('crop_200dpi'),        # 모드 A용 (절대 좌표)
+            'crop_ratio': info.get('crop_ratio'),   # 모드 B용 (비율 좌표)
+            'desc': info.get('description_en', '')
         })
 ```
 
 ### 2. 각 그림에 대해 처리
 
-#### 2-1. PDF에서 그림 영역 crop
+#### 2-1. 그림 영역 crop
 
+**모드 A** (PDF 기반):
 ```python
 from PIL import Image
-import warnings
-warnings.filterwarnings("ignore")
-
 img = Image.open(f"/tmp/exam_jpg/page_{page:03d}_hires.jpg")
-cropped = img.crop((left, top, right, bottom))
+cropped = img.crop((left, top, right, bottom))  # crop_200dpi 절대 좌표
 cropped.save(f"/tmp/exam_jpg/prob{num}_ref.jpg", quality=95)
 ```
 
-- crop 좌표는 200dpi 기준
+**모드 B** (문제 이미지 기반):
+```python
+from PIL import Image
+img = Image.open(f"/tmp/v3/images/q{num}.png")
+w, h = img.size
+# crop_ratio = [left_ratio, top_ratio, right_ratio, bottom_ratio] (0.0~1.0)
+cr = crop_ratio
+cropped = img.crop((int(cr[0]*w), int(cr[1]*h), int(cr[2]*w), int(cr[3]*h)))
+cropped.save(f"/tmp/v3/prob{num}_ref.jpg", quality=95)
+```
+
 - 손글씨 풀이, 선지, 문제번호 등은 제외하고 순수 그림만
 - Read 도구로 crop 결과를 확인하여 정확한지 검증
+- **crop_ratio가 없거나 부정확한 경우**: 문제 이미지를 Read 도구로 직접 보고 그림 영역을 판단하여 수동 crop
 
 #### 2-2. nano-banana로 깔끔한 그림 재생성
 

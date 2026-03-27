@@ -123,7 +123,10 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 5. **선지**: 선택형이면 5개 선지 (각각 parts 배열), 서답형이면 `null`
 6. **정답**: 선택형은 원숫자 (`"②"`), 서답형은 수식 값
 7. **그림 유무**: `has_figure` (boolean)
-8. **그림 정보**: 그림이 있으면 설명과 위치
+8. **그림 정보**: 그림이 있으면 아래 3가지를 포함
+   - `description_en`: 영어로 그림 내용 기술 (nano-banana 프롬프트에 사용)
+   - `position`: 그림 위치 (`"right"`, `"center"`, `"below"`)
+   - `crop_ratio`: 문제 이미지 내 그림 영역의 **비율 좌표** `[left, top, right, bottom]` (0.0~1.0). figure 에이전트가 이 좌표로 문제 이미지에서 그림만 잘라냄
 9. **단원 분류**: `subtopic` (unit_classification.json 정규 값)
 10. **난이도**: 하/중/상/킬
 11. **단서 조항**: `condition_box` (보기, 빈박스, 증명틀 등)
@@ -145,7 +148,8 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
   "has_figure": true,
   "figure_info": {
     "description_en": "A graph of y=2^x with points marked",
-    "position": "right"
+    "position": "right",
+    "crop_ratio": [0.55, 0.1, 0.95, 0.7]
   },
   "parts": [
     {"t": "함수 "},

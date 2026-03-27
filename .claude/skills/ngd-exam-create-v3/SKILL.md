@@ -288,8 +288,12 @@ with open('/tmp/exam_data.json', 'w') as f:
 ```
 Agent(subagent_type="ngd-exam-figure", prompt="""
 /tmp/exam_data.json에서 그림 정보를 읽고 처리해줘
-- 문제 이미지 폴더: /tmp/v3/images/
-- 각 그림을 crop → nano-banana로 재생성 → 트리밍+워터마크
+
+V3 모드 (문제 이미지 기반):
+- 문제 이미지 폴더: /tmp/v3/images/ (PDF JPG가 아님!)
+- 각 문제의 figure_info.crop_ratio (비율 좌표)로 문제 이미지에서 그림 영역 crop
+- crop한 그림을 nano-banana로 깔끔하게 재생성
+- 트리밍 + NGD 워터마크 적용
 - 최종 이미지를 outputs/images/에 저장
 - JSON에 final_image 경로 업데이트
 """)
