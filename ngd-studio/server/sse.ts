@@ -241,7 +241,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   // Spawn Claude CLI
   const { process: proc, events, exitCode } = runClaude(prompt, {
     cwd: BASE_DIR,
-    maxTurns: mode === "create-v3" ? 200 : mode === "create" ? 100 : 50,
+    maxTurns: mode === "crop" ? 30 : mode === "create-v3" ? 200 : mode === "create" ? 100 : 50,
   });
   activeProcesses.add(proc);
   proc.on("close", () => activeProcesses.delete(proc));
