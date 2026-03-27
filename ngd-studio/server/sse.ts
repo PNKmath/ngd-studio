@@ -10,7 +10,7 @@ import path from "path";
 
 // Import from relative paths (tsx doesn't support @/ alias)
 import { runClaude, transformToSSE, toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
-import { buildCreatePrompt, buildReviewPrompt } from "../lib/prompts";
+import { buildCreatePrompt, buildCreateV3Prompt, buildReviewPrompt } from "../lib/prompts";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
 // Windows에서 import.meta.url → file:///C:/... → pathname이 /C:/... 가 되므로 fileURLToPath 사용
@@ -110,7 +110,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     req.on("end", () => resolve(data));
   });
 
-  let body: { mode: string; files: { pdf: string; hwpx?: string; questionImages?: number[] }; jobId: string };
+  let body: {
+    mode: string;
+    files: { pdf: string; hwpx?: string; questionImages?: number[] };
+    meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string };
+    jobId: string;
+  };
   try {
     body = JSON.parse(rawBody);
   } catch {
@@ -119,7 +124,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  const { mode, files, jobId } = body;
+  const { mode, files, meta, jobId } = body;
 
   if (!mode || !jobId) {
     res.writeHead(400, { "Content-Type": "application/json" });
@@ -127,9 +132,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  if (mode !== "create" && !files?.pdf) {
+  if (mode !== "create" && mode !== "create-v3" && !files?.pdf) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Missing required fields: pdf" }));
+    return;
+  }
+
+  if (mode === "create-v3" && (!files?.questionImages || files.questionImages.length === 0)) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "V3 모드에는 문제 이미지가 필요합니다." }));
     return;
   }
 
@@ -166,10 +177,22 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     };
   });
 
-  const prompt =
-    mode === "create"
-      ? buildCreatePrompt(wslFiles, questionImagePaths)
-      : buildReviewPrompt(wslFiles);
+  let prompt: string;
+  if (mode === "create-v3") {
+    // V3: 문제 이미지 경로를 /tmp/v3/images/ 에서 참조
+    const v3ImagePaths = questionImages.map((num: number) => {
+      const padded = String(num).padStart(2, "0");
+      return {
+        number: num,
+        path: toAbsWsl(path.join("inputs", "시험지 제작", "question_images", `q${padded}.png`)),
+      };
+    });
+    prompt = buildCreateV3Prompt({ hwpx: wslFiles.hwpx }, v3ImagePaths, meta ?? {});
+  } else if (mode === "create") {
+    prompt = buildCreatePrompt(wslFiles, questionImagePaths);
+  } else {
+    prompt = buildReviewPrompt(wslFiles);
+  }
 
   // Save initial job data
   await mkdir(DATA_DIR, { recursive: true });
@@ -208,7 +231,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   // Spawn Claude CLI
   const { process: proc, events, exitCode } = runClaude(prompt, {
     cwd: BASE_DIR,
-    maxTurns: mode === "create" ? 100 : 50,
+    maxTurns: mode === "create-v3" ? 200 : mode === "create" ? 100 : 50,
   });
   activeProcesses.add(proc);
   proc.on("close", () => activeProcesses.delete(proc));
@@ -282,7 +305,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     // outputFile이 없으면 폴백: 모드별로 결과 파일 탐색
     if (!outputFile) {
       try {
-        if (mode === "create") {
+        if (mode === "create" || mode === "create-v3") {
           // 제작 모드: outputs/ 폴더에서 최신 .hwpx 스캔
           const outputsDir = path.join(BASE_DIR, "outputs");
           const dirFiles = await readdir(outputsDir);

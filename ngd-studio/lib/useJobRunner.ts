@@ -27,7 +27,11 @@ export function useJobRunner() {
   }, [store]);
 
   const startJob = useCallback(
-    async (mode: "create" | "review", files: { pdf: string; hwpx?: string; questionImages?: number[] }) => {
+    async (
+      mode: "create" | "create-v3" | "review",
+      files: { pdf: string; hwpx?: string; questionImages?: number[] },
+      meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string }
+    ) => {
       const jobId = crypto.randomUUID();
       const abortController = new AbortController();
       abortRef.current = abortController;
@@ -38,7 +42,7 @@ export function useJobRunner() {
       store.setStatus("running");
 
       // Mark first stage as running
-      const firstStage = mode === "create" ? "reader" : "reviewer";
+      const firstStage = mode === "create-v3" ? "extractor" : mode === "create" ? "reader" : "reviewer";
       store.updateStage(firstStage, {
         status: "running",
         startedAt: new Date().toISOString(),
@@ -55,7 +59,7 @@ export function useJobRunner() {
         const res = await fetch(`${SSE_BASE}/api/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode, files, jobId }),
+          body: JSON.stringify({ mode, files, meta, jobId }),
           signal: abortController.signal,
         });
 

@@ -1,0 +1,313 @@
+---
+name: ngd-exam-create-v3
+description: "NGD V3 시험지 제작 오케스트레이터. 문제별 이미지 기반으로 extractor→solver→verifier 병렬 처리 후 figure→builder→checker 순차 처리. '시험지 제작 v3', 'V3 작업' 키워드에 사용."
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
+argument-hint: "[이미지 폴더 경로 또는 메타 정보]"
+---
+
+# NGD V3 시험지 제작 오케스트레이터
+
+이 스킬은 직접 시험지를 만들지 않고, **에이전트들을 병렬/순차 조합**하여 완성된 시험지를 생성한다.
+
+## 서브 에이전트 구조
+
+```
+ngd-exam-create-v3 (이 스킬 = 오케스트레이터)
+│
+├─ Phase 1: 문제별 병렬 처리 (4개씩 배치)
+│   ├─ [1] ngd-exam-extractor : 이미지 → 문제 JSON
+│   ├─ [2] ngd-exam-solver    : 문제 JSON → 해설 생성
+│   └─ [3] ngd-exam-verifier  : 해설 검증 (↔ solver 최대 3회)
+│
+└─ Phase 2: 순차 처리
+    ├─ [4] ngd-exam-figure    : 그림 처리 (nano-banana)
+    ├─ [5] ngd-exam-builder   : JSON + 이미지 → HWPX
+    └─ [6] ngd-exam-checker   : HWPX 품질 검수
+```
+
+## 작업 절차
+
+### Step 0: 입력 확인 및 작업 디렉토리 준비
+
+1. 문제 이미지 확인
+   - 프론트엔드에서 업로드된 이미지: `/tmp/v3/images/q{N}.png`
+   - 또는 프롬프트에서 지정한 경로
+2. 이미지 개수 = 문제 수 확인
+3. 메타 정보 확인 (학교, 학년, 과목, 범위 — 프롬프트에서 제공)
+4. 양식지 존재 확인: `inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx`
+5. GEMINI_API_KEY 환경변수 확인
+
+```bash
+mkdir -p /tmp/v3/images
+ls /tmp/v3/images/
+```
+
+### Step 1: 교과 컨텍스트 준비
+
+`unit_classification.json`을 읽어 solver에 전달할 교과 컨텍스트를 준비한다.
+
+```python
+import json
+
+with open('.claude/data/unit_classification.json') as f:
+    curriculum = json.load(f)
+
+# 과목 코드로 단원 목록 추출 (solver 호출 시 사용)
+# extractor가 subtopic을 추출하면, 해당 단원의 선수 학습 범위를 계산
+```
+
+---
+
+### Step 2: Phase 1 — 문제별 병렬 처리
+
+문제를 **4개씩 배치**로 묶어 처리한다. 각 배치 내에서는 **동시에** Agent를 호출한다.
+
+#### 2-1. Extractor 배치 호출
+
+한 배치(4문제)의 extractor를 **동시에** Agent 도구로 호출:
+
+```
+Agent(subagent_type="ngd-exam-extractor", prompt="""
+문제 {N}번 이미지에서 문제를 추출해줘.
+이미지 경로: /tmp/v3/images/q{N}.png
+문제 번호: {N}
+과목: {subject}
+출력 경로: /tmp/v3/q{N}_extracted.json
+""")
+```
+
+4개를 **한 메시지에서** 동시 호출한다.
+
+**확인**: 모든 extractor JSON이 생성되었는지, 필수 필드가 있는지 검증.
+
+#### 2-2. Solver 배치 호출
+
+extractor 완료 후, 같은 배치의 solver를 **동시에** 호출:
+
+```
+Agent(subagent_type="ngd-exam-solver", prompt="""
+V3 모드로 문제 {N}번 해설을 생성해줘.
+문제 JSON: /tmp/v3/q{N}_extracted.json
+출력 경로: /tmp/v3/q{N}_solved.json
+
+교과 컨텍스트:
+이 문제는 {subject} 과목, '{subtopic}' 단원입니다.
+학생은 다음 단원까지 학습한 상태입니다:
+{prerequisite_list}
+이 범위의 개념만 사용하여 풀이를 작성하세요.
+""")
+```
+
+#### 2-3. Verifier 배치 호출 + 재시도 루프
+
+solver 완료 후, 같은 배치의 verifier를 **동시에** 호출:
+
+```
+Agent(subagent_type="ngd-exam-verifier", prompt="""
+문제 {N}번 해설을 검증해줘.
+문제 이미지: /tmp/v3/images/q{N}.png
+extractor JSON: /tmp/v3/q{N}_extracted.json
+solver JSON: /tmp/v3/q{N}_solved.json
+출력 경로: /tmp/v3/q{N}_verified.json
+
+교과 컨텍스트:
+{curriculum_context}
+""")
+```
+
+**재시도 루프** (문제별, 최대 3회):
+
+```
+attempt = 1
+while attempt <= 3:
+    verifier 호출
+    결과 확인 (/tmp/v3/q{N}_verified.json)
+    if status == "pass":
+        break
+    if attempt < 3:
+        feedback 추출
+        solver 재호출 (feedback 포함)
+        attempt += 1
+    else:
+        # 3회 실패 → manual_review 표시
+        mark_manual_review(N)
+```
+
+fail된 문제만 개별로 solver→verifier 재시도. pass된 문제는 대기.
+
+#### 2-4. 배치 반복
+
+배치 1(Q1~Q4) → 배치 2(Q5~Q8) → ... → 마지막 배치
+
+**배치 내 모든 문제 실패 시**: 전체 작업 중단, 에러 리포트 출력.
+
+---
+
+### Step 3: Phase 1 완료 — JSON 취합
+
+모든 문제의 verified JSON을 하나의 `exam_data.json`으로 합친다:
+
+```python
+import json, glob
+
+problems = []
+failed = []
+manual_review = []
+
+for n in range(1, total_questions + 1):
+    verified_path = f'/tmp/v3/q{n}_verified.json'
+    try:
+        with open(verified_path) as f:
+            prob = json.load(f)
+            problems.append(prob)
+            if prob.get('manual_review'):
+                manual_review.append(n)
+    except FileNotFoundError:
+        failed.append(n)
+
+exam_data = {
+    "info": {
+        "school": "...",
+        "year": 2025,
+        "semester": "1학기",
+        "exam_type": "중간",
+        "grade": 2,
+        "subject": "수학 I",
+        "textbook": "",
+        "range": "...",
+        "total_pages": 5
+    },
+    "problems": problems
+}
+
+with open('/tmp/exam_data.json', 'w') as f:
+    json.dump(exam_data, f, ensure_ascii=False, indent=2)
+```
+
+메타 정보(`info`)는 프롬프트에서 제공된 값으로 채운다.
+
+---
+
+### Step 4: Phase 2 — Figure 처리
+
+`exam_data.json`에서 `has_figure: true`인 문제가 있으면, Agent 도구로 `ngd-exam-figure` 에이전트를 호출:
+
+```
+Agent(subagent_type="ngd-exam-figure", prompt="""
+/tmp/exam_data.json에서 그림 정보를 읽고 처리해줘
+- 문제 이미지 폴더: /tmp/v3/images/
+- 각 그림을 crop → nano-banana로 재생성 → 트리밍+워터마크
+- 최종 이미지를 outputs/images/에 저장
+- JSON에 final_image 경로 업데이트
+""")
+```
+
+**확인**: 이미지 파일 생성 및 JSON 업데이트 검증.
+
+### Step 5: Phase 2 — Builder 호출
+
+Agent 도구로 `ngd-exam-builder` 에이전트를 호출:
+
+```
+Agent(subagent_type="ngd-exam-builder", prompt="""
+/tmp/exam_data.json과 outputs/images/의 이미지로 HWPX를 생성해줘
+- 양식지: inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx
+- 모든 문제, 해설, 이미지 빠짐없이 포함
+- fix_namespaces.py 후처리 필수
+- validate.py --fix 검증 필수
+- outputs/에 파일명 규칙대로 저장
+""")
+```
+
+**확인**: HWPX 파일 생성, 문제 누락 없는지 검증.
+
+### Step 6: Phase 2 — Checker 호출
+
+Agent 도구로 `ngd-exam-checker` 에이전트를 호출:
+
+```
+Agent(subagent_type="ngd-exam-checker", prompt="""
+[HWPX 파일 경로]를 검수해줘
+- 10가지 체크리스트로 AI 실수 검증
+- 수정 지시 JSON 생성
+""")
+```
+
+### Step 7: Checker 피드백 반영 (최대 2회)
+
+checker FAIL 시 해당 에이전트 재호출:
+- XML 구조 오류 → builder 재호출
+- 수식 오류 → builder 재호출 (V3에서는 해설 오류는 verifier가 이미 잡았으므로 거의 없음)
+- 수정 후 checker 재호출 (최대 2회)
+
+---
+
+### Step 8: 최종 결과 리포트
+
+```
+=== V3 시험지 제작 결과 ===
+파일: [출력 파일명]
+학교: [학교명]
+시험: [학년/학기/차수]
+과목: [과목] (범위: [범위])
+
+[문제] 총 N문제
+  성공: N개 (문제 1,2,3,4,5,6,7,8,9,10,11,12,14,15,16,17)
+  주의: N개 (문제 13 — verifier 3회 실패, 수동 검토 필요)
+  실패: N개 (문제 18 — extractor 추출 실패)
+
+[Phase 1] extractor→solver→verifier
+  배치: N개 (4문제×M + 나머지)
+  verifier 재시도: N건
+
+[Phase 2] figure→builder→checker
+  그림: N개 생성 (NGD 워터마크 포함)
+  HWPX: 생성 완료
+  검수: checker PASS (N/10)
+
+[후처리] fix_namespaces.py 완료, validate.py 통과
+```
+
+---
+
+## 에러 처리
+
+### 문제 레벨 실패
+- extractor 실패 → 해당 문제 skip, 로그에 경고
+- solver 실패 → 해당 문제 skip
+- verifier 3회 실패 → `"manual_review": true` 표시, solver 마지막 출력 사용
+
+### 배치 레벨 실패
+- 배치 내 **모든 문제**가 실패하면 전체 작업 중단
+
+### 전체 레벨 실패
+- builder/checker 실패 → 기존과 동일하게 처리
+
+## 파일명 규칙
+
+```
+[코드][고][년도][학기-차수][지역][학교][과목][범위][코드][작업자][검수자][그림코드]
+```
+
+## 서식 규칙
+
+- 서체: 나눔고딕 10, 수식크기 11, 수식서체 HYhwpEQ
+- 스타일: F6 → 바탕글 1개만
+- 미주-문제: 붙여쓰기
+- 문제-선지: Enter 한 줄
+- shift+enter: 정답 라인 2줄 때만
+- 서술형: `[서술형 N]`
+- 그림: 모든 생성 그림에 NGD 워터마크 필수
+
+## 작업 디렉토리
+
+```
+/tmp/v3/
+├── images/                  # 문제 이미지 (프론트엔드 업로드)
+│   ├── q1.png
+│   └── ...
+├── q1_extracted.json        # extractor 출력
+├── q1_solved.json           # solver 출력
+├── q1_verified.json         # verifier 출력 (최종)
+└── exam_data.json           # 취합 JSON (builder 입력)
+```

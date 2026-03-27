@@ -5,7 +5,7 @@ import type { ReviewItem } from "@/lib/reviewParser";
 
 export interface JobState {
   jobId: string | null;
-  mode: "create" | "review" | null;
+  mode: "create" | "create-v3" | "review" | null;
   status: "idle" | "uploading" | "running" | "done" | "failed";
   stages: PipelineStage[];
   logs: LogEntry[];
@@ -17,7 +17,7 @@ export interface JobState {
   // Actions
   reset: () => void;
   setJobId: (id: string) => void;
-  setMode: (mode: "create" | "review") => void;
+  setMode: (mode: "create" | "create-v3" | "review") => void;
   setStatus: (status: JobState["status"]) => void;
   setFiles: (files: JobState["files"]) => void;
   setStages: (stages: PipelineStage[]) => void;
@@ -31,6 +31,15 @@ export interface JobState {
 const createStages: PipelineStage[] = [
   { name: "reader", label: "PDF 읽기", status: "pending" },
   { name: "solver", label: "해설 생성", status: "pending" },
+  { name: "figure", label: "그림 처리", status: "pending" },
+  { name: "builder", label: "HWPX 조립", status: "pending" },
+  { name: "checker", label: "품질 검수", status: "pending" },
+];
+
+const createV3Stages: PipelineStage[] = [
+  { name: "extractor", label: "문제 추출", status: "pending" },
+  { name: "solver", label: "해설 생성", status: "pending" },
+  { name: "verifier", label: "해설 검증", status: "pending" },
   { name: "figure", label: "그림 처리", status: "pending" },
   { name: "builder", label: "HWPX 조립", status: "pending" },
   { name: "checker", label: "품질 검수", status: "pending" },
@@ -70,6 +79,8 @@ export const useJobStore = create<JobState>((set) => ({
       mode,
       stages: mode === "create"
         ? createStages.map((s) => ({ ...s }))
+        : mode === "create-v3"
+        ? createV3Stages.map((s) => ({ ...s }))
         : reviewStages.map((s) => ({ ...s })),
     }),
   setStatus: (status) => set({ status }),
