@@ -108,9 +108,7 @@ export function buildCropPrompt(pdfPath: string, outputDir: string): string {
     `- PDF 경로: ${pdfPath}`,
     `- 출력 디렉토리: ${outputDir}`,
     ``,
-    `Agent 도구로 subagent_type="ngd-exam-cropper" 에이전트를 호출해서 진행해.`,
-    `프롬프트에 PDF 경로와 출력 디렉토리를 전달해.`,
-    `크롭 완료 후 결과 JSON을 ${outputDir}/crop_results.json 에 저장해.`,
+    `Skill 도구로 "ngd-exam-crop" 스킬을 호출해서 진행해.`,
   ].join("\n");
 }
 

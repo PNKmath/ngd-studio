@@ -149,6 +149,7 @@ export function detectStageFromTool(toolName: string, input?: Record<string, unk
     const skillName = (input?.skill ?? "") as string;
     if (skillName === "ngd-exam-create") return "reader"; // V1 오케스트레이터 시작 = reader 시작
     if (skillName === "ngd-exam-create-v3") return "extractor"; // V3 오케스트레이터 시작 = extractor 시작
+    if (skillName === "ngd-exam-crop") return "cropper"; // 크롭 스킬 시작
     if (skillName === "nano-banana") return "figure";
   }
   if (toolName === "Write" && /\.hwpx|section0|content\.hpf/i.test(filePath)) return "builder";
