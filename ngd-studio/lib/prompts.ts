@@ -103,23 +103,14 @@ export function buildCreateV3Prompt(
 
 export function buildCropPrompt(pdfPath: string, outputDir: string): string {
   return [
-    `# PDF 자동 크롭 작업`,
+    `PDF 시험지의 각 문제를 개별 이미지로 크롭해줘.`,
     ``,
-    `이 작업은 **PDF 자동 크롭만** 수행한다. 시험지 제작, 오검, HWPX 조립 등 다른 작업은 하지 않는다.`,
-    ``,
-    `## 입력`,
     `- PDF 경로: ${pdfPath}`,
     `- 출력 디렉토리: ${outputDir}`,
     ``,
-    `## 지시`,
-    `Agent 도구로 subagent_type="ngd-exam-cropper" 에이전트를 호출하라.`,
-    `에이전트 프롬프트에 다음을 전달하라:`,
-    `- PDF 경로: ${pdfPath}`,
-    `- 출력 디렉토리: ${outputDir}`,
-    ``,
-    `크롭 완료 후 결과 JSON을 ${outputDir}/crop_results.json 에 저장하라.`,
-    ``,
-    `**주의: ngd-exam-create, ngd-exam-review 등 다른 스킬/에이전트를 호출하지 마라. 크롭만 수행.**`,
+    `Agent 도구로 subagent_type="ngd-exam-cropper" 에이전트를 호출해서 진행해.`,
+    `프롬프트에 PDF 경로와 출력 디렉토리를 전달해.`,
+    `크롭 완료 후 결과 JSON을 ${outputDir}/crop_results.json 에 저장해.`,
   ].join("\n");
 }
 

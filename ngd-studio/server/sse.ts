@@ -239,8 +239,10 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   send({ event: "log", data: { stage: "system", message: "CLI 프로세스를 시작합니다...", timestamp: new Date().toISOString(), level: "info" } });
 
   // Spawn Claude CLI
+  // crop 모드는 전용 워크스페이스에서 실행 (메인 CLAUDE.md 영향 방지)
+  const cliCwd = mode === "crop" ? path.join(BASE_DIR, "workspaces", "crop") : BASE_DIR;
   const { process: proc, events, exitCode } = runClaude(prompt, {
-    cwd: BASE_DIR,
+    cwd: cliCwd,
     maxTurns: mode === "crop" ? 30 : mode === "create-v3" ? 200 : mode === "create" ? 100 : 50,
   });
   activeProcesses.add(proc);
