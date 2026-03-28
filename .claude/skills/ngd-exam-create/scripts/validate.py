@@ -115,19 +115,49 @@ def fix_hwpx(hwpx_path):
 
                 def fix_tbl(m):
                     tbl = m.group(0)
+                    # Parse colCnt from table tag
+                    col_cnt_m = re.search(r'colCnt="(\d+)"', tbl)
+                    col_cnt = int(col_cnt_m.group(1)) if col_cnt_m else 0
                     res, ri, i, changed = [], 0, 0, False
+                    # Track remaining rowSpan per column
+                    span_remaining = [0] * max(col_cnt, 20)
                     while i < len(tbl):
                         if tbl[i:i+6] == '<hp:tr':
                             te = tbl.index('</hp:tr>', i) + 8
                             tc = tbl[i:te]
+                            # Determine actual colAddr for each cell in this row
+                            # by skipping columns still occupied by rowSpan from prior rows
                             ci = 0
                             def fa(m2):
                                 nonlocal ci, changed
-                                if int(m2.group(1))!=ci or int(m2.group(2))!=ri: changed=True
-                                r = f'<hp:cellAddr colAddr="{ci}" rowAddr="{ri}"'
+                                # Skip columns occupied by rowSpan from previous rows
+                                while ci < len(span_remaining) and span_remaining[ci] > 0:
+                                    ci += 1
+                                actual_col = ci
+                                if int(m2.group(1)) != actual_col or int(m2.group(2)) != ri:
+                                    changed = True
+                                r = f'<hp:cellAddr colAddr="{actual_col}" rowAddr="{ri}"'
                                 ci += 1
                                 return r
-                            res.append(re.sub(r'<hp:cellAddr colAddr="(\d+)" rowAddr="(\d+)"', fa, tc))
+                            # First pass: fix cellAddr, then extract spans
+                            fixed_tc = re.sub(r'<hp:cellAddr colAddr="(\d+)" rowAddr="(\d+)"', fa, tc)
+                            # Now extract colSpan/rowSpan from each cell to update span_remaining
+                            cells = list(re.finditer(r'<hp:cellAddr colAddr="(\d+)" rowAddr="(\d+)"', fixed_tc))
+                            spans = list(re.finditer(r'<hp:cellSpan colSpan="(\d+)" rowSpan="(\d+)"', fixed_tc))
+                            # Decrement span_remaining for this row
+                            for c in range(len(span_remaining)):
+                                if span_remaining[c] > 0:
+                                    span_remaining[c] -= 1
+                            # Set span_remaining for cells in this row
+                            for cell_m, span_m in zip(cells, spans):
+                                col = int(cell_m.group(1))
+                                col_span = int(span_m.group(1))
+                                row_span = int(span_m.group(2))
+                                if row_span > 1:
+                                    for c in range(col, col + col_span):
+                                        if c < len(span_remaining):
+                                            span_remaining[c] = row_span - 1
+                            res.append(fixed_tc)
                             ri += 1; i = te
                         else:
                             res.append(tbl[i]); i += 1
