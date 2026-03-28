@@ -99,68 +99,86 @@ with zipfile.ZipFile(양식지_경로, 'r') as z:
 - ...
 - n행: ₙC₀ ~ ₙCₙ
 
-## 추출 및 사용 방법
+## 사전 추출된 템플릿 (base_hwpx/)
 
-### builder에서의 사용 흐름
+양식지에서 추출하여 플레이스홀더가 적용된 XML 템플릿 파일들이 `base_hwpx/`에 준비되어 있다.
+**양식지에서 실시간 추출하지 말고, 반드시 아래 템플릿 파일을 사용하라.**
 
-1. `exam_data.json`에서 해당 유형의 문제 감지:
-   - 함수 증감표: `data_table.type == "increase_decrease"` 또는 해설에 증감 분석 포함
-   - 확률분포표: `data_table.type == "probability"`
-   - 표준정규분포표: 문제에 표준정규분포 조건이 있을 때
-   - 조립제법: 해설에 조립제법 사용
-   - 파스칼삼각형: 이항정리 관련 문제
+### 표준정규분포표
 
-2. 양식지 HWPX에서 해당 `<hp:tbl>` XML 추출
+| 템플릿 파일 | 데이터 행 수 | 플레이스홀더 |
+|------------|-----------|-------------|
+| `normal_dist_3rows.xml` | 3행 (title+header+3data = 5행) | `{{Z_1}}~{{Z_3}}`, `{{P_1}}~{{P_3}}` |
+| `normal_dist_4rows.xml` | 4행 (title+header+4data = 6행) | `{{Z_1}}~{{Z_4}}`, `{{P_1}}~{{P_4}}` |
+| `normal_dist_5rows.xml` | 5행 (title+header+5data = 7행) | `{{Z_1}}~{{Z_5}}`, `{{P_1}}~{{P_5}}` |
 
-3. 플레이스홀더 값 치환 (셀 내 수식/텍스트)
+**사용법**: `data_table.type == "normal_dist"`일 때, `row_parts` 개수에 맞는 템플릿 선택.
+- `{{TABLE_ID}}`, `{{ZORDER}}` → next_eq_id(), next_zorder()
+- `{{EQ_ID_N}}`, `{{EQ_ZO_N}}` → 수식별 고유 ID
+- `{{Z_N}}` → z값 수식 (예: `1.0`)
+- `{{P_N}}` → 확률값 수식 (예: `0.3413`)
 
-4. section0.xml의 적절한 위치에 삽입
+### 확률분포표
 
-### XML 추출 코드 예시
+| 템플릿 파일 | 열 수 | 구조 |
+|------------|------|------|
+| `prob_dist_5cols.xml` | 5열 | X값 4개 + 계 |
+| `prob_dist_6cols.xml` | 6열 | X값 5개 + 계 |
+| `prob_dist_7cols.xml` | 7열 | X값 6개 + 계 |
+
+**사용법**: `data_table.type == "probability"`일 때, 열 수에 맞는 템플릿 선택.
+셀 내용은 수식(`<hp:equation>`) 또는 텍스트(`<hp:t>`)로 직접 삽입.
+
+### 선지 테이블 (①②③④⑤)
+
+| 템플릿 파일 | 구조 | 용도 |
+|------------|------|------|
+| `choice_table_5x5.xml` | 5행x5열 | 기본 5선지 |
+| `choice_table_6x3.xml` | 6행x3열 | (가)(나) 빈칸 선지 |
+| `choice_table_6x4.xml` | 6행x4열 | (가)(나) 값 선지 |
+| `choice_table_9x4.xml` | 9행x4열 | (가)(나)(다) 값 선지 |
+
+**사용법**: 선지 유형에 따라 적절한 템플릿 선택. 각 선지 내용 셀에 수식/텍스트 삽입.
+
+### 보기 테이블 (ㄱ,ㄴ,ㄷ)
+
+| 템플릿 파일 | 항목 수 |
+|------------|--------|
+| `bogi_table_3items.xml` | 3항 (ㄱ,ㄴ,ㄷ) |
+| `bogi_table_6items.xml` | 6항 (ㄱ~ㅂ) |
+
+### 증명 테이블
+
+| 템플릿 파일 | 용도 |
+|------------|------|
+| `proof_table_template.xml` | [증명] 영역 |
+
+### 공통 플레이스홀더
+
+모든 템플릿에 공통:
+- `{{TABLE_ID}}` → 테이블 고유 ID
+- `{{ZORDER}}` → z-order 값
+- `{{EQ_ID_N}}` → N번째 수식의 ID
+- `{{EQ_ZO_N}}` → N번째 수식의 z-order
+
+### 사용 코드 패턴
 
 ```python
-import zipfile, re
+BASE = ".claude/skills/ngd-exam-create/base_hwpx"
 
-TEMPLATE_PATH = "inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx"
+# 1. 템플릿 읽기
+with open(f"{BASE}/normal_dist_4rows.xml", "r") as f:
+    tbl_xml = f.read()
 
-def extract_template_tables(template_type):
-    """양식지에서 특정 유형의 테이블 XML을 추출"""
-    with zipfile.ZipFile(TEMPLATE_PATH, 'r') as z:
-        xml = z.read('Contents/section0.xml').decode('utf-8')
+# 2. 플레이스홀더 치환
+tbl_xml = tbl_xml.replace("{{TABLE_ID}}", str(next_eq_id()))
+tbl_xml = tbl_xml.replace("{{ZORDER}}", str(next_zorder()))
+for i in range(1, 5):
+    tbl_xml = tbl_xml.replace(f"{{{{EQ_ID_{i}}}}}", str(next_eq_id()))
+    tbl_xml = tbl_xml.replace(f"{{{{EQ_ZO_{i}}}}}", str(next_zorder()))
+tbl_xml = tbl_xml.replace("{{Z_1}}", "1.0")
+tbl_xml = tbl_xml.replace("{{P_1}}", "0.3413")
+# ...
 
-    # 마커 텍스트로 위치 찾기
-    markers = {
-        "increase_decrease": "함수 증감표양식",
-        "probability": "확률분포표 양식",
-        "normal_dist": "표준 정규분포표",
-        "synthetic_div": "조립제법 틀",
-        "pascal": "파스칼삼각형그리기",
-    }
-
-    marker = markers[template_type]
-    pos = xml.find(marker)
-    if pos == -1:
-        return []
-
-    # 마커 이후의 <hp:tbl> ~ </hp:tbl> 추출
-    tables = []
-    search_start = pos
-    while True:
-        tbl_start = xml.find('<hp:tbl', search_start)
-        if tbl_start == -1:
-            break
-        tbl_end = xml.find('</hp:tbl>', tbl_start)
-        if tbl_end == -1:
-            break
-        tables.append(xml[tbl_start:tbl_end + len('</hp:tbl>')])
-        search_start = tbl_end + len('</hp:tbl>')
-        # 다음 섹션 마커를 만나면 중단
-        next_marker_pos = min(
-            (xml.find(m, search_start) for m in markers.values() if xml.find(m, search_start) != -1),
-            default=len(xml)
-        )
-        if search_start >= next_marker_pos:
-            break
-
-    return tables
+# 3. section0.xml에 삽입
 ```

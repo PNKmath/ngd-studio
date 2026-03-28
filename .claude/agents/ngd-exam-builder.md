@@ -31,6 +31,9 @@ skills:
 - 조건/보기 사각형 템플릿: `base_hwpx/condition_rect_template.xml` (hp:rect)
 - 빈박스 템플릿: `base_hwpx/empty_box_template.xml` (hp:rect)
 - 증명틀 템플릿: `base_hwpx/proof_table_template.xml` (hp:tbl)
+- **표준정규분포표 템플릿**: `base_hwpx/normal_dist_{3,4,5}rows.xml` (데이터 행 수별)
+- **확률분포표 템플릿**: `base_hwpx/prob_dist_{5,6,7}cols.xml` (열 수별)
+- **선지 테이블 템플릿**: `base_hwpx/choice_table_{5x5,6x3,6x4,9x4}.xml` (유형별)
 - Sample 분석: `.claude/skills/ngd-exam-create/sample_analysis.md`
 
 ## ZIP 구조 규칙 (파일이 열리지 않으면 여기가 원인!)
