@@ -7,7 +7,8 @@ const INTERVAL = 10_000; // 10초
 
 /**
  * SSE 서버에 주기적으로 heartbeat를 전송.
- * 브라우저가 닫히면 heartbeat가 중단되고, SSE 서버가 자동 종료됨.
+ * 탭이 백그라운드로 가면 setInterval이 throttle되므로
+ * visibilitychange 이벤트로 보완하여 복귀 시 즉시 ping.
  */
 export function Heartbeat() {
   useEffect(() => {
@@ -18,7 +19,19 @@ export function Heartbeat() {
     // 즉시 1회 + 이후 주기적
     ping();
     const id = setInterval(ping, INTERVAL);
-    return () => clearInterval(id);
+
+    // 탭이 다시 활성화되면 즉시 heartbeat (백그라운드 throttle 보완)
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        ping();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   return null;
