@@ -59,9 +59,11 @@ const createStages: PipelineStage[] = [
 ];
 
 const createV3Stages: PipelineStage[] = [
+  { name: "cleaned", label: "이미지 정리", status: "pending" },
   { name: "extractor", label: "문제 추출", status: "pending" },
   { name: "solver", label: "해설 생성", status: "pending" },
   { name: "verifier", label: "해설 검증", status: "pending" },
+  { name: "review", label: "사용자 검증", status: "pending" },
   { name: "figure", label: "그림 처리", status: "pending" },
   { name: "builder", label: "HWPX 조립", status: "pending" },
   { name: "checker", label: "품질 검수", status: "pending" },
