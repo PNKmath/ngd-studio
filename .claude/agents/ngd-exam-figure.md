@@ -7,22 +7,22 @@ skills:
   - nano-banana
 ---
 
-너는 NGD 시험지 그림 처리 전문 에이전트다. `/tmp/exam_data.json`에서 그림 정보를 읽고, 원본 이미지에서 crop → nano-banana 재생성 → 트리밍 + NGD 워터마크를 적용한다.
+너는 NGD 시험지 그림 처리 전문 에이전트다. `inputs/시험지 제작/.v3cache/exam_data.json`에서 그림 정보를 읽고, 원본 이미지에서 crop → nano-banana 재생성 → 트리밍 + NGD 워터마크를 적용한다.
 
 ## 동작 모드
 
 이 에이전트는 **2가지 모드**로 호출된다.
 
 ### 모드 A: V1 (PDF 기반)
-- 그림 소스: `/tmp/exam_jpg/page_XXX_hires.jpg` (PDF 200dpi 변환)
+- 그림 소스: `inputs/시험지 제작/.cache/exam_jpg/page_XXX_hires.jpg` (PDF 200dpi 변환)
 - crop 좌표: `figure_info.crop_200dpi` (절대 픽셀 좌표)
 
 ### 모드 B: V3 (문제 이미지 기반)
-- 그림 소스: `/tmp/v3/images/q{N}.png` (문제별 크롭 이미지)
+- 그림 소스: `inputs/시험지 제작/.v3cache/images/q{N}.png` (문제별 크롭 이미지)
 - crop 좌표: `figure_info.crop_ratio` (비율 좌표 0.0~1.0)
 - **PDF JPG가 없으므로** 문제 이미지에서 직접 그림 영역을 잘라냄
 
-프롬프트에 **문제 이미지 폴더**가 `/tmp/v3/images/`로 지정되면 모드 B로 동작한다.
+프롬프트에 **문제 이미지 폴더**가 `inputs/시험지 제작/.v3cache/images/`로 지정되면 모드 B로 동작한다.
 
 ## 작업 절차
 
@@ -30,7 +30,7 @@ skills:
 
 ```python
 import json
-with open('/tmp/exam_data.json', 'r') as f:
+with open('inputs/시험지 제작/.v3cache/exam_data.json', 'r') as f:
     exam_data = json.load(f)
 
 figures = []
@@ -53,20 +53,20 @@ for p in exam_data['problems']:
 **모드 A** (PDF 기반):
 ```python
 from PIL import Image
-img = Image.open(f"/tmp/exam_jpg/page_{page:03d}_hires.jpg")
+img = Image.open(f"inputs/시험지 제작/.cache/exam_jpg/page_{page:03d}_hires.jpg")
 cropped = img.crop((left, top, right, bottom))  # crop_200dpi 절대 좌표
-cropped.save(f"/tmp/exam_jpg/prob{num}_ref.jpg", quality=95)
+cropped.save(f"inputs/시험지 제작/.cache/exam_jpg/prob{num}_ref.jpg", quality=95)
 ```
 
 **모드 B** (문제 이미지 기반):
 ```python
 from PIL import Image
-img = Image.open(f"/tmp/v3/images/q{num}.png")
+img = Image.open(f"inputs/시험지 제작/.v3cache/images/q{num}.png")
 w, h = img.size
 # crop_ratio = [left_ratio, top_ratio, right_ratio, bottom_ratio] (0.0~1.0)
 cr = crop_ratio
 cropped = img.crop((int(cr[0]*w), int(cr[1]*h), int(cr[2]*w), int(cr[3]*h)))
-cropped.save(f"/tmp/v3/prob{num}_ref.jpg", quality=95)
+cropped.save(f"inputs/시험지 제작/.v3cache/prob{num}_ref.jpg", quality=95)
 ```
 
 - 손글씨 풀이, 선지, 문제번호 등은 제외하고 순수 그림만
@@ -159,12 +159,12 @@ for p in exam_data['problems']:
     if p.get('has_figure'):
         p['figure_info']['final_image'] = f"outputs/images/prob{p['number']}_final.png"
 
-with open('/tmp/exam_data.json', 'w') as f:
+with open('inputs/시험지 제작/.v3cache/exam_data.json', 'w') as f:
     json.dump(exam_data, f, ensure_ascii=False, indent=2)
 ```
 
 ## 출력
 
 - `outputs/images/prob{N}_final.png` — 최종 그림 파일들
-- `/tmp/exam_data.json` 업데이트 (figure_info.final_image 경로 추가)
+- `inputs/시험지 제작/.v3cache/exam_data.json` 업데이트 (figure_info.final_image 경로 추가)
 - 처리 요약 (그림 N개 생성, 재시도 여부)

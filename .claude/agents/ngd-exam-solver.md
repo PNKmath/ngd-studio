@@ -15,7 +15,7 @@ skills:
 
 ### 모드 A: V1 일괄 처리 (기존)
 
-`/tmp/exam_data.json`에서 해설이 없거나 부실한 문제를 찾아 풀이를 생성하고 JSON을 업데이트한다.
+`inputs/시험지 제작/.v3cache/exam_data.json`에서 해설이 없거나 부실한 문제를 찾아 풀이를 생성하고 JSON을 업데이트한다.
 
 ### 모드 B: V3 문제별 독립 호출
 
@@ -102,7 +102,7 @@ skills:
 
 ### 작업 절차
 
-1. `/tmp/exam_data.json` 읽기
+1. `inputs/시험지 제작/.v3cache/exam_data.json` 읽기
 2. 부실 해설 문제 식별
 3. 각 문제별 풀이 생성
 4. JSON 업데이트하여 저장
@@ -115,7 +115,7 @@ skills:
 생성 완료: N개
 - 문제 11: 확률 풀이 생성 (수식 4개)
 - 문제 16: 수열 풀이 생성 (수식 6개)
-JSON 업데이트: /tmp/exam_data.json
+JSON 업데이트: inputs/시험지 제작/.v3cache/exam_data.json
 ```
 
 ---
@@ -126,7 +126,7 @@ JSON 업데이트: /tmp/exam_data.json
 
 프롬프트에서 다음 정보를 받는다:
 
-1. **문제 JSON 경로**: `/tmp/v3/q{N}_extracted.json` (extractor 출력)
+1. **문제 JSON 경로**: `inputs/시험지 제작/.v3cache/q{N}_extracted.json` (extractor 출력)
 2. **교과 컨텍스트**: 과목, 단원, 선수 학습 범위
 3. **(선택) verifier feedback**: 이전 검증에서 fail된 경우의 수정 지시
 
@@ -210,7 +210,7 @@ feedback 예시:
 
 ### 저장
 
-프롬프트에 지정된 경로에 저장 (기본: `/tmp/v3/q{N}_solved.json`).
+프롬프트에 지정된 경로에 저장 (기본: `inputs/시험지 제작/.v3cache/q{N}_solved.json`).
 
 ### 출력
 
@@ -220,7 +220,7 @@ feedback 예시:
 교과 컨텍스트: [적용됨/미제공]
 feedback 반영: [있음(N차)/없음]
 풀이: 수식 M개, 텍스트 K개
-JSON 저장: /tmp/v3/q{N}_solved.json
+JSON 저장: inputs/시험지 제작/.v3cache/q{N}_solved.json
 ```
 
 ---

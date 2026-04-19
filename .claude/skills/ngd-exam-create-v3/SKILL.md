@@ -78,7 +78,7 @@ def cleanup_from_stage(question_nums, from_stage):
     suffixes = stage_files.get(from_stage, [])
     for n in question_nums:
         for suffix in suffixes:
-            path = f'/tmp/v3/q{n}{suffix}'
+            path = f'inputs/시험지 제작/.v3cache/q{n}{suffix}'
             if os.path.exists(path):
                 os.remove(path)
                 print(f"  삭제: {path}")
@@ -87,11 +87,11 @@ def detect_resume_state(total_questions):
     """기존 파일을 스캔하여 각 문제의 완료 상태를 반환한다."""
     states = {}
     for n in range(1, total_questions + 1):
-        if os.path.exists(f'/tmp/v3/q{n}_verified.json'):
+        if os.path.exists(f'inputs/시험지 제작/.v3cache/q{n}_verified.json'):
             states[n] = 'verified'
-        elif os.path.exists(f'/tmp/v3/q{n}_solved.json'):
+        elif os.path.exists(f'inputs/시험지 제작/.v3cache/q{n}_solved.json'):
             states[n] = 'solved'
-        elif os.path.exists(f'/tmp/v3/q{n}_extracted.json'):
+        elif os.path.exists(f'inputs/시험지 제작/.v3cache/q{n}_extracted.json'):
             states[n] = 'extracted'
         else:
             states[n] = 'none'
@@ -109,7 +109,25 @@ def detect_resume_state(total_questions):
 2. 해당 문제만 solver부터 재실행
 3. 완료 후 기존 verified와 합쳐서 exam_data.json 재취합
 
-#### 0-3. 기본 확인 (신규/resume 공통)
+#### 0-3. 캐시 초기화 (신규 실행 시만)
+
+신규 실행(`V3 작업해줘`)이면 이전 캐시를 `_prev`로 백업 후 새로 시작한다.
+
+```bash
+# 신규 실행 시: 직전 캐시 1개 보존 후 초기화
+rm -rf "inputs/시험지 제작/.v3cache_prev"
+mv "inputs/시험지 제작/.v3cache" "inputs/시험지 제작/.v3cache_prev" 2>/dev/null || true
+mkdir -p "inputs/시험지 제작/.v3cache"
+# question_images/cleaned도 삭제 (이전 작업 정리본 제거)
+rm -rf "inputs/시험지 제작/question_images/cleaned"
+rm -f "inputs/시험지 제작/question_images/q"*.png
+```
+
+**resume 모드에서는 삭제하지 않는다** — 기존 파일을 활용하는 것이 목적이므로.
+
+> 실수로 신규 작업을 눌렀을 때 `.v3cache_prev/`에서 이전 작업 JSON을 복구할 수 있다.
+
+#### 0-4. 기본 확인 (신규/resume 공통)
 
 1. 문제 이미지 확인
    - 프론트엔드에서 업로드된 이미지: `inputs/시험지 제작/question_images/q{N}.png`
@@ -120,10 +138,10 @@ def detect_resume_state(total_questions):
 5. GEMINI_API_KEY 환경변수 확인
 
 ```bash
-mkdir -p /tmp/v3/images
-ls inputs/시험지 제작/question_images/
+mkdir -p "inputs/시험지 제작/.v3cache"
+ls "inputs/시험지 제작/question_images/"
 # resume 모드: 기존 중간 파일 상태 확인
-ls /tmp/v3/q*_*.json 2>/dev/null
+ls "inputs/시험지 제작/.v3cache/q"*_*.json 2>/dev/null
 ```
 
 ### Step 1: 교과 컨텍스트 준비
@@ -274,7 +292,7 @@ Agent(subagent_type="ngd-exam-extractor", prompt="""
 이미지 경로: inputs/시험지 제작/question_images/cleaned/q{N:02d}.png
 문제 번호: {N}
 과목: {subject}
-출력 경로: /tmp/v3/q{N}_extracted.json
+출력 경로: inputs/시험지 제작/.v3cache/q{N}_extracted.json
 """)
 ```
 
@@ -293,8 +311,8 @@ extractor 완료 후:
 ```
 Agent(subagent_type="ngd-exam-solver", prompt="""
 V3 모드로 문제 {N}번 해설을 생성해줘.
-문제 JSON: /tmp/v3/q{N}_extracted.json
-출력 경로: /tmp/v3/q{N}_solved.json
+문제 JSON: inputs/시험지 제작/.v3cache/q{N}_extracted.json
+출력 경로: inputs/시험지 제작/.v3cache/q{N}_solved.json
 
 교과 컨텍스트:
 {format_curriculum_context(ctx) 결과 — 아래와 같은 형식}
@@ -325,9 +343,9 @@ solver 완료 후, 같은 배치의 verifier를 **동시에** 호출:
 Agent(subagent_type="ngd-exam-verifier", prompt="""
 문제 {N}번 해설을 검증해줘.
 문제 이미지: inputs/시험지 제작/question_images/q{N}.png
-extractor JSON: /tmp/v3/q{N}_extracted.json
-solver JSON: /tmp/v3/q{N}_solved.json
-출력 경로: /tmp/v3/q{N}_verified.json
+extractor JSON: inputs/시험지 제작/.v3cache/q{N}_extracted.json
+solver JSON: inputs/시험지 제작/.v3cache/q{N}_solved.json
+출력 경로: inputs/시험지 제작/.v3cache/q{N}_verified.json
 
 교과 컨텍스트:
 {curriculum_context}
@@ -340,7 +358,7 @@ solver JSON: /tmp/v3/q{N}_solved.json
 attempt = 1
 while attempt <= 3:
     verifier 호출
-    결과 확인 (/tmp/v3/q{N}_verified.json)
+    결과 확인 (inputs/시험지 제작/.v3cache/q{N}_verified.json)
     if status == "pass":
         break
     if attempt < 3:
@@ -376,7 +394,7 @@ failed = []
 manual_review = []
 
 for n in range(1, total_questions + 1):
-    verified_path = f'/tmp/v3/q{n}_verified.json'
+    verified_path = f'inputs/시험지 제작/.v3cache/q{n}_verified.json'
     try:
         with open(verified_path) as f:
             prob = json.load(f)
@@ -401,7 +419,7 @@ exam_data = {
     "problems": problems
 }
 
-with open('/tmp/exam_data.json', 'w') as f:
+with open('inputs/시험지 제작/.v3cache/exam_data.json', 'w') as f:
     json.dump(exam_data, f, ensure_ascii=False, indent=2)
 ```
 
@@ -459,7 +477,7 @@ verifier: PASS (1회차)
 
 ```
 Agent(subagent_type="ngd-exam-figure", run_in_background=true, prompt="""
-/tmp/exam_data.json에서 그림 정보를 읽고 처리해줘
+inputs/시험지 제작/.v3cache/exam_data.json에서 그림 정보를 읽고 처리해줘
 
 V3 모드 (문제 이미지 기반):
 - 문제 이미지 폴더: inputs/시험지 제작/question_images/ (PDF JPG가 아님!)
@@ -490,7 +508,7 @@ Agent 도구로 `ngd-exam-builder` 에이전트를 호출:
 
 ```
 Agent(subagent_type="ngd-exam-builder", prompt="""
-/tmp/exam_data.json과 outputs/images/의 이미지로 HWPX를 생성해줘
+inputs/시험지 제작/.v3cache/exam_data.json과 outputs/images/의 이미지로 HWPX를 생성해줘
 - 양식지: inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx
 - 모든 문제, 해설, 이미지 빠짐없이 포함
 - 특수 테이블(표준정규분포표, 확률분포표, 증감표 등)은 양식지에서 XML 템플릿을 추출하여 사용 (docs/hwpx-templates.md 참조)
@@ -595,7 +613,7 @@ inputs/시험지 제작/question_images/
     ├── q01.png
     └── ...
 
-/tmp/v3/
+inputs/시험지 제작/.v3cache/
 ├── q1_extracted.json        # extractor 출력
 ├── q1_solved.json           # solver 출력
 ├── q1_verified.json         # verifier 출력 (최종)

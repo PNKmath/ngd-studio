@@ -134,7 +134,7 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 
 ### 3. 출력 JSON 저장
 
-프롬프트에 지정된 경로에 JSON을 저장한다 (기본: `/tmp/v3/q{N}_extracted.json`).
+프롬프트에 지정된 경로에 JSON을 저장한다 (기본: `inputs/시험지 제작/.v3cache/q{N}_extracted.json`).
 
 ## 출력 JSON 형식
 
@@ -269,5 +269,5 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 문제 N번: [유형] / 배점 X.X / 단원: [subtopic] / 난이도: [난이도]
 그림: 있음/없음
 선지: N개 / 정답: [정답]
-JSON 저장: /tmp/v3/q{N}_extracted.json
+JSON 저장: inputs/시험지 제작/.v3cache/q{N}_extracted.json
 ```

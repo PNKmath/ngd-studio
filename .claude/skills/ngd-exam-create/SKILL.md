@@ -13,7 +13,7 @@ argument-hint: "[PDF파일경로]"
 
 ```
 ngd-exam-create (이 스킬 = 오케스트레이터)
-  ├─ [1] ngd-exam-reader   : PDF → /tmp/exam_data.json
+  ├─ [1] ngd-exam-reader   : PDF → inputs/시험지 제작/.v3cache/exam_data.json
   ├─ [2] ngd-exam-solver   : 부실 해설 보완 → JSON 업데이트
   ├─ [3] ngd-exam-figure   : JSON의 그림 정보 → outputs/images/*.png
   ├─ [4] ngd-exam-builder  : JSON + 이미지 → outputs/*.hwpx
@@ -40,7 +40,7 @@ PDF 경로: [경로]
 - 난이도는 하/중/상/킬 4단계 (시험 준비 학생 기준)
 - 수식 연산자 앞뒤 공백 필수
 - 해설 절대 생략하지 말 것
-- /tmp/exam_data.json에 저장
+- inputs/시험지 제작/.v3cache/exam_data.json에 저장
 ```
 
 **확인**: JSON 파일이 생성되었는지, 문제 수가 맞는지 검증한다.
@@ -50,7 +50,7 @@ PDF 경로: [경로]
 JSON을 읽어 해설이 부실한 문제가 있으면, Agent 도구로 `ngd-exam-solver` 에이전트를 호출한다:
 
 ```
-/tmp/exam_data.json에서 해설이 없거나 부실한 문제를 찾아 풀이를 생성해줘
+inputs/시험지 제작/.v3cache/exam_data.json에서 해설이 없거나 부실한 문제를 찾아 풀이를 생성해줘
 - explanation_parts가 빈 배열이거나 수식 1개 이하인 문제
 - HWP 수식 문법으로 풀이 작성
 - JSON 업데이트
@@ -63,8 +63,8 @@ JSON을 읽어 해설이 부실한 문제가 있으면, Agent 도구로 `ngd-exa
 JSON을 읽어 `has_figure: true`인 문제가 있으면, Agent 도구로 `ngd-exam-figure` 에이전트를 호출한다:
 
 ```
-/tmp/exam_data.json에서 그림 정보를 읽고 처리해줘
-- PDF JPG 경로: /tmp/exam_jpg/
+inputs/시험지 제작/.v3cache/exam_data.json에서 그림 정보를 읽고 처리해줘
+- PDF JPG 경로: inputs/시험지 제작/.cache/exam_jpg/
 - 각 그림을 crop → nano-banana로 재생성 → 트리밍+워터마크
 - 최종 이미지를 outputs/images/에 저장
 - JSON에 final_image 경로 업데이트
@@ -77,7 +77,7 @@ JSON을 읽어 `has_figure: true`인 문제가 있으면, Agent 도구로 `ngd-e
 Agent 도구로 `ngd-exam-builder` 에이전트를 호출한다:
 
 ```
-/tmp/exam_data.json과 outputs/images/의 이미지로 HWPX를 생성해줘
+inputs/시험지 제작/.v3cache/exam_data.json과 outputs/images/의 이미지로 HWPX를 생성해줘
 - 양식지: inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx
 - 참조용: inputs/오검/ 폴더의 HWPX
 - 모든 문제, 해설, 이미지 빠짐없이 포함

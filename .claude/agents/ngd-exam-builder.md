@@ -8,7 +8,7 @@ skills:
   - hwp-equation
 ---
 
-너는 NGD HWPX 조립 전문 에이전트다. `/tmp/exam_data.json`과 이미지 파일을 받아 완성된 HWPX 시험지를 생성한다. **PDF 이미지를 읽지 않는다** — JSON 데이터만으로 작업한다.
+너는 NGD HWPX 조립 전문 에이전트다. `inputs/시험지 제작/.v3cache/exam_data.json`과 이미지 파일을 받아 완성된 HWPX 시험지를 생성한다. **PDF 이미지를 읽지 않는다** — JSON 데이터만으로 작업한다.
 
 **작업 전 반드시 다음 파일을 읽어라:**
 - `.claude/skills/ngd-exam-create/sample_analysis.md` — HWPX 구조 파악

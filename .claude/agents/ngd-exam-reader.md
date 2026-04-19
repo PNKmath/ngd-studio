@@ -147,7 +147,7 @@ HWP 수식에서 공백은 항 구분자 역할을 하므로, **연산자 앞뒤
 ```python
 import fitz, os
 pdf_path = "입력 PDF 경로"
-out_dir = "/tmp/exam_jpg"
+out_dir = "inputs/시험지 제작/.cache/exam_jpg"
 os.makedirs(out_dir, exist_ok=True)
 doc = fitz.open(pdf_path)
 for i in range(doc.page_count):
@@ -339,7 +339,7 @@ exam_data = {
         }
     ]
 }
-with open('/tmp/exam_data.json', 'w') as f:
+with open('inputs/시험지 제작/.v3cache/exam_data.json', 'w') as f:
     json.dump(exam_data, f, ensure_ascii=False, indent=2)
 ```
 
@@ -562,4 +562,4 @@ with open('/tmp/exam_data.json', 'w') as f:
 
 ## 출력
 
-`/tmp/exam_data.json` 파일 경로와 요약 (문제 수, 그림 수, 해설 유무)
+`inputs/시험지 제작/.v3cache/exam_data.json` 파일 경로와 요약 (문제 수, 그림 수, 해설 유무)

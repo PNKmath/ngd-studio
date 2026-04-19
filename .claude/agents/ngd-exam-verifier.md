@@ -25,8 +25,8 @@ skills:
 프롬프트에서 다음 정보를 받는다:
 
 1. **문제 이미지 경로** — 원본 이미지 (solver가 보지 못한 정보 확인)
-2. **extractor 출력 JSON 경로** — `/tmp/v3/q{N}_extracted.json`
-3. **solver 출력 JSON 경로** — `/tmp/v3/q{N}_solved.json`
+2. **extractor 출력 JSON 경로** — `inputs/시험지 제작/.v3cache/q{N}_extracted.json`
+3. **solver 출력 JSON 경로** — `inputs/시험지 제작/.v3cache/q{N}_solved.json`
 4. **교과 컨텍스트** — 과목, 단원, 선수 학습 범위
 5. **(선택) 이전 실패 feedback** — 재검증 시
 
@@ -74,10 +74,10 @@ skills:
 ```python
 import json
 # extractor 출력
-with open('/tmp/v3/q{N}_extracted.json') as f:
+with open('inputs/시험지 제작/.v3cache/q{N}_extracted.json') as f:
     problem = json.load(f)
 # solver 출력
-with open('/tmp/v3/q{N}_solved.json') as f:
+with open('inputs/시험지 제작/.v3cache/q{N}_solved.json') as f:
     solution = json.load(f)
 ```
 
@@ -166,21 +166,21 @@ solver의 `explanation_parts`를 처음부터 끝까지 따라가며:
 
 ## 출력 파일 저장
 
-검증 결과를 프롬프트에 지정된 경로에 저장한다 (기본: `/tmp/v3/q{N}_verified.json`).
+검증 결과를 프롬프트에 지정된 경로에 저장한다 (기본: `inputs/시험지 제작/.v3cache/q{N}_verified.json`).
 
 pass인 경우, solver 출력에 검증 결과를 병합하여 저장:
 ```python
 import json
-with open('/tmp/v3/q{N}_solved.json') as f:
+with open('inputs/시험지 제작/.v3cache/q{N}_solved.json') as f:
     solution = json.load(f)
-with open('/tmp/v3/q{N}_extracted.json') as f:
+with open('inputs/시험지 제작/.v3cache/q{N}_extracted.json') as f:
     problem = json.load(f)
 
 # 병합: extractor 데이터 + solver 해설
 verified = {**problem, **solution}
 verified['verified'] = True
 
-with open('/tmp/v3/q{N}_verified.json', 'w') as f:
+with open('inputs/시험지 제작/.v3cache/q{N}_verified.json', 'w') as f:
     json.dump(verified, f, ensure_ascii=False, indent=2)
 ```
 
@@ -196,5 +196,5 @@ with open('/tmp/v3/q{N}_verified.json', 'w') as f:
   D. 원본 대조: ✓/✗
 [이슈 목록 (fail 시)]
 [feedback (fail 시)]
-JSON 저장: /tmp/v3/q{N}_verified.json
+JSON 저장: inputs/시험지 제작/.v3cache/q{N}_verified.json
 ```
