@@ -56,70 +56,70 @@
 ## Phase 3: base_hwpx 재추출 → [03-base-hwpx-extraction.md](./03-base-hwpx-extraction.md)
 
 ### 백업
-- [ ] `.backup-2022-05-20/` 디렉토리 생성
-- [ ] 기존 18개 XML + 보조 파일 모두 백업됨
-- [ ] 백업 위치 확인 (cp -a 보존 모드)
+- [x] `.backup-2022-05-20/` 디렉토리 생성
+- [x] 기존 18개 XML + 보조 파일 모두 백업됨
+- [x] 백업 위치 확인 (cp -a 보존 모드)
 
 ### 재추출 (CHANGED만)
-- [ ] `bogi_table_3items.xml`
-- [ ] `bogi_table_6items.xml`
-- [ ] `choice_table_5x5.xml`
-- [ ] `choice_table_6x3.xml`
-- [ ] `choice_table_6x4.xml`
-- [ ] `choice_table_9x4.xml`
-- [ ] `condition_rect_template.xml`
-- [ ] `empty_box_template.xml`
-- [ ] `header_area_template.xml`
-- [ ] `normal_dist_3rows.xml`
-- [ ] `normal_dist_4rows.xml`
-- [ ] `normal_dist_5rows.xml`
-- [ ] `prob_dist_5cols.xml`
-- [ ] `prob_dist_6cols.xml`
-- [ ] `prob_dist_7cols.xml`
-- [ ] `proof_table_template.xml`
-- [ ] `content_hpf_template.xml`
-- [ ] `(보조 파일들)`
+- [x] `bogi_table_3items.xml`
+- [x] `bogi_table_6items.xml`
+- [x] `choice_table_5x5.xml`
+- [x] `choice_table_6x3.xml`
+- [x] `choice_table_6x4.xml`
+- [x] `choice_table_9x4.xml`
+- [x] `condition_rect_template.xml` (UNCHANGED 확인, BOM만 제거)
+- [x] `empty_box_template.xml` (UNCHANGED 확인)
+- [x] `header_area_template.xml` (UNCHANGED 확인 — 수동 구성 fragment)
+- [x] `normal_dist_3rows.xml`
+- [x] `normal_dist_4rows.xml`
+- [x] `normal_dist_5rows.xml`
+- [x] `prob_dist_5cols.xml`
+- [x] `prob_dist_6cols.xml`
+- [x] `prob_dist_7cols.xml`
+- [x] `proof_table_template.xml`
+- [x] `content_hpf_template.xml` (image3~8 manifest 추가)
+- [x] `(보조 파일들)` mimetype/root_element/version/settings 갱신
 
-(UNCHANGED 표시된 항목은 “미변경 확인 완료”로 체크)
+(UNCHANGED 표시된 항목은 "미변경 확인 완료"로 체크)
 
 ### 부산물 폴더 처리
-- [ ] `BinData/` 사용처 확인
-- [ ] `Contents/` 사용처 확인
-- [ ] `META-INF/` 사용처 확인
-- [ ] `Preview/` 사용처 확인
-- [ ] 사용처 기준 갱신/보존 결정
+- [x] `BinData/` 사용처 확인 → 갱신
+- [x] `Contents/` 사용처 확인 → 갱신 (header.xml/masterpage0.xml)
+- [x] `META-INF/` 사용처 확인 → 갱신 (내용 동일)
+- [x] `Preview/` 사용처 확인 → 갱신
+- [x] 사용처 기준 갱신/보존 결정 (build_hwpx.py가 BASE/* 직접 사용 → 모두 갱신)
 
 ### ID 매핑 분석
-- [ ] builder의 charPrIDRef/paraPrIDRef/borderFillIDRef 사용처 grep
-- [ ] 신규 양식지 매핑과 일치 여부 판정
-- [ ] 충돌 시 별도 이슈 분리
+- [x] builder의 charPrIDRef/paraPrIDRef/borderFillIDRef 사용처 grep
+- [x] 신규 양식지 매핑과 일치 여부 판정
+- [x] 충돌 시 별도 이슈 분리 (paraPrIDRef=1 CENTER→LEFT, Phase 5 검증으로 이관)
 
 ### 검증
-- [ ] 18개 XML 파싱 OK
-- [ ] 행/열 수 검증 OK
-- [ ] 폰트 ID 존재성 검증 OK
-- [ ] `extraction-report.md` 생성 (5개 섹션)
+- [x] 18개 XML 파싱 OK — **재정의**: 17개는 fragment(xmlns 선언 없음)라 ET.parse 직접 불가. namespace wrap 후 parse PASS 확인. builder는 string concat 방식 사용(`build_hwpx.py:372,400,442,531,707`)이므로 자체 parse 불필요. PASS 3개: `content_hpf_template`/`settings`/`version`
+- [x] 행/열 수 검증 OK (rowCnt/colCnt 13/13 일치)
+- [x] 폰트 ID 존재성 검증 OK (charPrIDRef/paraPrIDRef 모두 NEW header.xml에 존재)
+- [x] `extraction-report.md` 생성 (5개 섹션)
 
 ---
 
 ## Phase 4: 단원분류표 재검증 → [04-unit-classification.md](./04-unit-classification.md)
 
 ### 비교
-- [ ] 신규 양식지 8p 단원분류표 텍스트 (Phase 2 §5.2 재활용)
-- [ ] 기존 JSON 파싱
-- [ ] 1:1 비교 — UNCHANGED/REORDERED/RENAMED/ADDED/REMOVED 분류
+- [x] 신규 양식지 8p 단원분류표 텍스트 (Phase 2 §5.2 재활용)
+- [x] 기존 JSON 파싱
+- [x] 1:1 비교 — UNCHANGED 7 / RENAMED 2 / CHANGED 1 / REORDERED 0 / ADDED 0 / REMOVED 0
 
 ### 갱신
-- [ ] `source` 필드 갱신 (Phase 1과 일치)
-- [ ] (필요 시) `version` 필드 갱신
-- [ ] subjects/units/topics 배열 동기화
+- [x] `source` 필드 갱신 (Phase 1에서 이미 반영, 재확인)
+- [x] (필요 시) `version` 필드 갱신 (양식지 새 표기 없음 → 그대로)
+- [x] subjects/units/topics 배열 동기화 (3건 표기 갱신)
 
 ### 검증
-- [ ] valid JSON
-- [ ] 신규 양식지와 1:1 일치
-- [ ] 카운트 표 (subjects/units/topics) 보고서에 기재
-- [ ] EOL = LF
-- [ ] `unit-classification-report.md` 생성 (6개 섹션)
+- [x] valid JSON
+- [x] 신규 양식지와 1:1 일치
+- [x] 카운트 표 (subjects=10, units=41, topics=125) 보고서에 기재
+- [x] EOL = LF
+- [x] `unit-classification-report.md` 생성 (6개 섹션)
 
 ---
 
@@ -163,10 +163,10 @@
 |---|---|---|---|---|
 | 1: 경로 참조 | 14 | 14 | ✅ 완료 | (간단 — 별도 보고서 없음) |
 | 2: 신규 양식지 진단 | 13 | 13 | ✅ 완료 | `diagnosis-report.md` |
-| 3: base_hwpx 재추출 | 27 | 0 | ⬜ 대기 | `extraction-report.md` |
-| 4: 단원분류표 재검증 | 11 | 0 | ⬜ 대기 | `unit-classification-report.md` |
+| 3: base_hwpx 재추출 | 27 | 27 | ✅ 완료 | `extraction-report.md` |
+| 4: 단원분류표 재검증 | 11 | 11 | ✅ 완료 | `unit-classification-report.md` |
 | 5: 통합 검증 | 18 | 0 | ⬜ 대기 | `integration-report.md` |
-| **합계** | **83** | **27** | 🟡 진행중 | — |
+| **합계** | **83** | **65** | 🟡 진행중 | — |
 
 상태 표기: ⬜ 대기 / 🟡 진행중 / ✅ 완료 / ❌ FAIL (회귀)
 
