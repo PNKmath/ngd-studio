@@ -11,7 +11,7 @@ import { fileURLToPath } from "url";
 
 // Import from relative paths (tsx doesn't support @/ alias)
 import { runClaude, transformToSSE, toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
-import { buildCreatePrompt, buildCreateV3Prompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
+import { buildCreatePrompt, buildCreateV3Prompt, buildResumeV3Prompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
 const __server_file = fileURLToPath(import.meta.url);
@@ -114,7 +114,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   let body: {
     mode: string;
     files: { pdf: string; hwpx?: string; questionImages?: number[] };
-    meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string };
+    meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number };
     jobId: string;
   };
   try {
@@ -133,7 +133,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  if (mode !== "create" && mode !== "create-v3" && mode !== "crop" && !files?.pdf) {
+  if (mode !== "create" && mode !== "create-v3" && mode !== "resume-v3" && mode !== "crop" && !files?.pdf) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Missing required fields: pdf" }));
     return;
@@ -142,6 +142,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   if (mode === "create-v3" && (!files?.questionImages || files.questionImages.length === 0)) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "V3 모드에는 문제 이미지가 필요합니다." }));
+    return;
+  }
+
+  if (mode === "resume-v3" && !meta?.resumeFrom) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "resume-v3 모드에는 resumeFrom이 필요합니다." }));
     return;
   }
 
@@ -197,6 +203,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       };
     });
     prompt = buildCreateV3Prompt({ hwpx: wslFiles.hwpx }, v3ImagePaths, meta ?? {});
+  } else if (mode === "resume-v3") {
+    prompt = buildResumeV3Prompt(
+      { hwpx: wslFiles.hwpx },
+      meta?.resumeFrom ?? "extractor",
+      meta?.questionCount ?? 0,
+      meta ?? {}
+    );
   } else if (mode === "create") {
     prompt = buildCreatePrompt(wslFiles, questionImagePaths);
   } else {
@@ -240,7 +253,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   // Spawn Claude CLI
   const { process: proc, events, exitCode } = runClaude(prompt, {
     cwd: BASE_DIR,
-    maxTurns: mode === "crop" ? 30 : mode === "create-v3" ? 200 : mode === "create" ? 100 : 50,
+    maxTurns: mode === "crop" ? 30 : (mode === "create-v3" || mode === "resume-v3") ? 200 : mode === "create" ? 100 : 50,
   });
   activeProcesses.add(proc);
   proc.on("close", () => activeProcesses.delete(proc));
@@ -333,8 +346,27 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             }
           }
         } else if (mode === "review") {
-          // 오검 모드: 입력 HWPX를 직접 수정하므로 입력 파일이 곧 결과물
-          outputFile = resolvedFiles.hwpx;
+          // 오검 모드: outputs/ 폴더에서 최신 .hwpx 스캔 (에이전트가 outputs/에 저장)
+          const outputsDir = path.join(BASE_DIR, "outputs");
+          try {
+            const dirFiles = await readdir(outputsDir);
+            const hwpxFiles = dirFiles.filter((f) => f.endsWith(".hwpx"));
+            if (hwpxFiles.length > 0) {
+              let latest = { name: "", mtime: 0 };
+              for (const f of hwpxFiles) {
+                const s = await stat(path.join(outputsDir, f));
+                if (s.mtimeMs > latest.mtime) {
+                  latest = { name: f, mtime: s.mtimeMs };
+                }
+              }
+              const jobStart = new Date(jobData.startedAt).getTime();
+              if (latest.mtime > jobStart) {
+                outputFile = `outputs/${latest.name}`;
+              }
+            }
+          } catch { /* outputs 폴더 없을 수 있음 */ }
+          // outputs/에서 못 찾으면 입력 파일 폴백
+          if (!outputFile) outputFile = resolvedFiles.hwpx;
         }
       } catch { /* 폴더가 없을 수 있음 */ }
     }

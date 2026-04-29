@@ -19,11 +19,12 @@ export interface V3Meta {
   examType?: string;
   range?: string;
   questionCount?: number;
+  resumeFrom?: string;
 }
 
 export interface JobState {
   jobId: string | null;
-  mode: "create" | "create-v3" | "crop" | "review" | null;
+  mode: "create" | "create-v3" | "resume-v3" | "crop" | "review" | null;
   status: "idle" | "uploading" | "running" | "done" | "failed";
   stages: PipelineStage[];
   logs: LogEntry[];
@@ -37,7 +38,7 @@ export interface JobState {
   // Actions
   reset: () => void;
   setJobId: (id: string) => void;
-  setMode: (mode: "create" | "create-v3" | "crop" | "review") => void;
+  setMode: (mode: "create" | "create-v3" | "resume-v3" | "crop" | "review") => void;
   setStatus: (status: JobState["status"]) => void;
   setFiles: (files: JobState["files"]) => void;
   setStages: (stages: PipelineStage[]) => void;
@@ -60,6 +61,18 @@ const createStages: PipelineStage[] = [
 
 const createV3Stages: PipelineStage[] = [
   { name: "cleaned", label: "이미지 정리", status: "pending" },
+  { name: "extractor", label: "문제 추출", status: "pending" },
+  { name: "solver", label: "해설 생성", status: "pending" },
+  { name: "verifier", label: "해설 검증", status: "pending" },
+  { name: "review", label: "사용자 검증", status: "pending" },
+  { name: "figure", label: "그림 처리", status: "pending" },
+  { name: "builder", label: "HWPX 조립", status: "pending" },
+  { name: "checker", label: "품질 검수", status: "pending" },
+];
+
+// resume-v3: cleaned 이미지 이미 완료된 상태로 시작
+const resumeV3Stages: PipelineStage[] = [
+  { name: "cleaned", label: "이미지 정리", status: "done" },
   { name: "extractor", label: "문제 추출", status: "pending" },
   { name: "solver", label: "해설 생성", status: "pending" },
   { name: "verifier", label: "해설 검증", status: "pending" },
@@ -113,6 +126,8 @@ export const useJobStore = create<JobState>((set) => ({
         ? createStages.map((s) => ({ ...s }))
         : mode === "create-v3"
         ? createV3Stages.map((s) => ({ ...s }))
+        : mode === "resume-v3"
+        ? resumeV3Stages.map((s) => ({ ...s }))
         : mode === "crop"
         ? cropStages.map((s) => ({ ...s }))
         : reviewStages.map((s) => ({ ...s })),

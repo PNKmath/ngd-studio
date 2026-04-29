@@ -28,9 +28,9 @@ export function useJobRunner() {
 
   const startJob = useCallback(
     async (
-      mode: "create" | "create-v3" | "crop" | "review",
+      mode: "create" | "create-v3" | "resume-v3" | "crop" | "review",
       files: { pdf: string; hwpx?: string; questionImages?: number[] },
-      meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string }
+      meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number }
     ) => {
       const jobId = crypto.randomUUID();
       const abortController = new AbortController();
@@ -42,7 +42,11 @@ export function useJobRunner() {
       store.setStatus("running");
 
       // Mark first stage as running
-      const firstStage = mode === "crop" ? "cropper" : mode === "create-v3" ? "extractor" : mode === "create" ? "reader" : "reviewer";
+      const firstStage = mode === "crop" ? "cropper"
+        : mode === "create-v3" ? "cleaned"
+        : mode === "resume-v3" ? (meta?.resumeFrom ?? "extractor")
+        : mode === "create" ? "reader"
+        : "reviewer";
       store.updateStage(firstStage, {
         status: "running",
         startedAt: new Date().toISOString(),

@@ -1,9 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir, rm } from "fs/promises";
+import { writeFile, mkdir, rm, readdir } from "fs/promises";
 import path from "path";
 
 const BASE_DIR = path.resolve(process.cwd(), "..");
 const IMAGES_DIR = path.join(BASE_DIR, "inputs", "시험지 제작", "question_images");
+
+export async function GET() {
+  try {
+    let files: string[] = [];
+    try {
+      files = await readdir(IMAGES_DIR);
+    } catch { /* folder doesn't exist */ }
+
+    const qRegex = /^q(\d+)\.(png|jpg|jpeg)$/i;
+    const numbers = files
+      .map((f) => qRegex.exec(f))
+      .filter(Boolean)
+      .map((m) => parseInt(m![1], 10))
+      .sort((a, b) => a - b);
+
+    let cleanedFiles: string[] = [];
+    try {
+      cleanedFiles = await readdir(path.join(IMAGES_DIR, "cleaned"));
+    } catch { /* no cleaned folder */ }
+    const hasClean = cleanedFiles.some((f) => qRegex.test(f));
+
+    return NextResponse.json({ count: numbers.length, numbers, hasClean });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Read failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {

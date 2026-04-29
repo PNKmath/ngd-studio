@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { QuestionSlotGrid } from "@/components/upload/QuestionSlotGrid";
@@ -34,7 +34,22 @@ export default function CreateV3Page() {
   const [examType, setExamType] = useState("중간");
   const [range, setRange] = useState("");
 
+  // Resume state
+  const [existingImages, setExistingImages] = useState<{ count: number; hasClean: boolean } | null>(null);
+  const [resumeFrom, setResumeFrom] = useState("extractor");
+  const [showResumeForm, setShowResumeForm] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/question-images")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.count > 0) setExistingImages({ count: data.count, hasClean: data.hasClean });
+      })
+      .catch(() => {});
+  }, []);
+
   const canStart = filledSlotCount > 0 && status === "idle";
+  const canResume = status === "idle" && !!existingImages;
 
   const handleSlotsChange = useCallback((slots: QuestionSlot[]) => {
     setQuestionSlots(slots);
@@ -70,12 +85,21 @@ export default function CreateV3Page() {
     const meta = { school, grade, subject, semester, examType, range, questionCount: filledSlotCount };
     setV3Meta(meta);
 
-    await startJob(
-      "create-v3",
-      { pdf: "", questionImages: questionImageNums },
-      meta
-    );
+    await startJob("create-v3", { pdf: "", questionImages: questionImageNums }, meta);
   }, [filledSlotCount, questionSlots, startJob, school, grade, subject, semester, examType, range, setV3Meta]);
+
+  const handleResume = useCallback(async () => {
+    if (!existingImages) return;
+
+    const meta = {
+      school, grade, subject, semester, examType, range,
+      questionCount: existingImages.count,
+      resumeFrom,
+    };
+    setV3Meta({ ...meta });
+
+    await startJob("resume-v3", { pdf: "" }, meta);
+  }, [existingImages, school, grade, subject, semester, examType, range, resumeFrom, startJob, setV3Meta]);
 
   const isRunning = status === "running";
   const isDone = status === "done" || status === "failed";
@@ -149,6 +173,50 @@ export default function CreateV3Page() {
                 V3 제작 시작
               </Button>
             </Card>
+
+            {existingImages && (
+              <Card className="p-4 space-y-3 border-amber-500/40 bg-amber-500/5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-amber-600 dark:text-amber-400">이전 작업 재개</h3>
+                  <button
+                    onClick={() => setShowResumeForm((v) => !v)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {showResumeForm ? "접기" : "펼치기"}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  저장된 이미지 {existingImages.count}개{existingImages.hasClean ? " (정리본 있음)" : ""}
+                </p>
+                {showResumeForm && (
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground">재개 시작 단계</label>
+                      <select
+                        value={resumeFrom}
+                        onChange={(e) => setResumeFrom(e.target.value)}
+                        className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm"
+                      >
+                        {existingImages.hasClean && <option value="extractor">문제 추출 (extractor)</option>}
+                        <option value="solver">해설 생성 (solver)</option>
+                        <option value="verifier">해설 검증 (verifier)</option>
+                        <option value="figure">그림 처리 (figure)</option>
+                        <option value="builder">HWPX 조립 (builder)</option>
+                      </select>
+                    </div>
+                    <p className="text-xs text-muted-foreground">아래 시험 정보를 채운 후 재개하세요.</p>
+                  </div>
+                )}
+                <Button
+                  onClick={handleResume}
+                  disabled={!canResume}
+                  variant="outline"
+                  className="w-full border-amber-500/60 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                >
+                  재개 ({resumeFrom}부터)
+                </Button>
+              </Card>
+            )}
 
             <Card className="p-3 space-y-2">
               <h4 className="text-xs font-medium text-muted-foreground">V3 파이프라인</h4>

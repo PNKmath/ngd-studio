@@ -101,6 +101,43 @@ export function buildCreateV3Prompt(
   return lines.join("\n");
 }
 
+export function buildResumeV3Prompt(
+  files: { hwpx: string },
+  startFrom: string,
+  questionCount: number,
+  meta: {
+    school?: string;
+    grade?: number;
+    subject?: string;
+    semester?: string;
+    examType?: string;
+    range?: string;
+  }
+): string {
+  const lines = [
+    `V3 resume --from=${startFrom}`,
+  ];
+
+  if (files.hwpx) {
+    lines.push(`- 양식 HWPX: ${files.hwpx}`);
+  }
+  lines.push(`- 총 문제 수: ${questionCount}`);
+
+  lines.push(``);
+  lines.push(`## 시험 정보`);
+  if (meta.school) lines.push(`- 학교: ${meta.school}`);
+  if (meta.grade) lines.push(`- 학년: ${meta.grade}`);
+  if (meta.subject) lines.push(`- 과목: ${meta.subject}`);
+  if (meta.semester) lines.push(`- 학기: ${meta.semester}`);
+  if (meta.examType) lines.push(`- 시험: ${meta.examType}`);
+  if (meta.range) lines.push(`- 범위: ${meta.range}`);
+
+  lines.push(``);
+  lines.push(`Skill 도구로 "ngd-exam-create-v3" 스킬을 호출해서 진행해.`);
+
+  return lines.join("\n");
+}
+
 export function buildCropPrompt(pdfPath: string, outputDir: string): string {
   return [
     `PDF 시험지의 각 문제를 개별 이미지로 크롭해줘.`,
