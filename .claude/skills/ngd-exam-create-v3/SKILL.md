@@ -365,6 +365,17 @@ condition_box: null
 | [진행] 클릭 | `V3 resume --from=solver` → Step 4 시작 |
 | [문제N 재추출] 클릭 | `V3 resume --q=N --from=extractor` → 해당 문제만 재추출 후 Step 3.5로 복귀 |
 
+**재추출 후 복귀**: extractor 완료 후 Claude는 해당 문제의 `[EXTRACTION_REVIEW]` 블록을 **단독으로 다시 출력**한다. 프론트엔드가 이를 파싱하여 해당 문제의 편집 UI만 업데이트한다.
+
+```
+[EXTRACTION_REVIEW]
+total: 1
+---
+[QN]
+...업데이트된 내용...
+[/EXTRACTION_REVIEW]
+```
+
 ---
 
 ### Step 4: Phase 1-B — Solver + Verifier 전체 완료
