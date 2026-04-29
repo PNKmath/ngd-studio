@@ -2,7 +2,7 @@
 name: ngd-exam-solver
 description: "NGD 시험지 해설 생성 에이전트. 문제 JSON을 받아 풀이를 생성한다. V3에서는 문제별 독립 호출 + 교과 컨텍스트 + verifier feedback 반영을 지원한다."
 tools: Read, Write, Bash, Glob, Grep
-model: inherit
+model: sonnet
 skills:
   - hwp-equation
 ---

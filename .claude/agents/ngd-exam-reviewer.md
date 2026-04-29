@@ -2,7 +2,7 @@
 name: ngd-exam-reviewer
 description: "NGD 오검(오류검수) 에이전트. 원본 PDF와 작업된 HWPX를 비교하여 오타/누락/체크리스트 위반을 찾아 HWPX를 직접 수정하고, 편집오검 내역표를 작성한다. 오검, 검수, 시험지 검수 요청 시 사용."
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: inherit
+model: sonnet
 skills:
   - ngd-exam-review
   - hwp-equation

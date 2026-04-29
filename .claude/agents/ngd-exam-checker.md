@@ -2,7 +2,7 @@
 name: ngd-exam-checker
 description: "NGD HWPX 품질 검수 에이전트. AI 생성 HWPX의 품질을 검수하고, 문제 발견 시 수정 지시를 생성한다."
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: inherit
+model: sonnet
 skills:
   - hwp-equation
 ---

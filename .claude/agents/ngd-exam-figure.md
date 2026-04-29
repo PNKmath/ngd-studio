@@ -2,7 +2,7 @@
 name: ngd-exam-figure
 description: "NGD 시험지 그림 처리 에이전트. PDF에서 그림을 crop하고 nano-banana(Gemini)로 깔끔하게 재생성한 뒤 트리밍+워터마크를 적용한다."
 tools: Read, Write, Bash, Glob, Grep
-model: inherit
+model: sonnet
 skills:
   - nano-banana
 ---

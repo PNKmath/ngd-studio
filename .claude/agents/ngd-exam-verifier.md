@@ -2,7 +2,7 @@
 name: ngd-exam-verifier
 description: "NGD V3 해설 검증 에이전트. solver가 생성한 해설을 독립적으로 검증하고 pass/fail + feedback을 출력한다."
 tools: Read, Write, Bash, Glob, Grep
-model: inherit
+model: sonnet
 skills:
   - hwp-equation
 ---

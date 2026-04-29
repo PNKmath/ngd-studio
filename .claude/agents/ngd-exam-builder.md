@@ -2,7 +2,7 @@
 name: ngd-exam-builder
 description: "NGD HWPX 조립 에이전트. JSON 데이터와 이미지 파일을 받아 완성된 HWPX 시험지를 생성한다."
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: inherit
+model: sonnet
 skills:
   - ngd-exam-create
   - hwp-equation

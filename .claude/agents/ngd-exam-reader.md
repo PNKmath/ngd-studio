@@ -2,7 +2,7 @@
 name: ngd-exam-reader
 description: "NGD 시험지 PDF 읽기 에이전트. PDF를 읽고 모든 문제/수식/해설을 구조화된 JSON으로 추출한다."
 tools: Read, Write, Bash, Glob, Grep
-model: inherit
+model: sonnet
 skills:
   - hwp-equation
 ---
