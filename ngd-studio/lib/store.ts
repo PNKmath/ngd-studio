@@ -39,7 +39,7 @@ export interface JobState {
   // Actions
   reset: () => void;
   setJobId: (id: string) => void;
-  setMode: (mode: "create" | "create-v3" | "resume-v3" | "crop" | "review") => void;
+  setMode: (mode: "create" | "create-v3" | "resume-v3" | "crop" | "review", resumeFrom?: string) => void;
   setStatus: (status: JobState["status"]) => void;
   setFiles: (files: JobState["files"]) => void;
   setStages: (stages: PipelineStage[]) => void;
@@ -72,17 +72,17 @@ const createV3Stages: PipelineStage[] = [
   { name: "checker", label: "품질 검수", status: "pending" },
 ];
 
-// resume-v3: cleaned 이미지 이미 완료된 상태로 시작
-const resumeV3Stages: PipelineStage[] = [
-  { name: "cleaned", label: "이미지 정리", status: "done" },
-  { name: "extractor", label: "문제 추출", status: "pending" },
-  { name: "review_extract", label: "추출 편집", status: "pending" },
-  { name: "solver", label: "해설 생성", status: "pending" },
-  { name: "verifier", label: "해설 검증", status: "pending" },
-  { name: "figure", label: "그림 처리", status: "pending" },
-  { name: "builder", label: "HWPX 조립", status: "pending" },
-  { name: "checker", label: "품질 검수", status: "pending" },
-];
+const V3_STAGE_ORDER = ["cleaned", "extractor", "review_extract", "solver", "verifier", "figure", "builder", "checker"];
+
+function buildResumeV3Stages(resumeFrom?: string): PipelineStage[] {
+  // "confirm" means figure is done, proceed to builder
+  const effectiveFrom = resumeFrom === "confirm" ? "builder" : resumeFrom;
+  const resumeIdx = effectiveFrom ? V3_STAGE_ORDER.indexOf(effectiveFrom) : 1;
+  return createV3Stages.map((s) => ({
+    ...s,
+    status: (resumeIdx > 0 && V3_STAGE_ORDER.indexOf(s.name) < resumeIdx) ? "done" as const : "pending" as const,
+  }));
+}
 
 const cropStages: PipelineStage[] = [
   { name: "cropper", label: "PDF 크롭", status: "pending" },
@@ -123,7 +123,7 @@ export const useJobStore = create<JobState>((set) => ({
     }),
 
   setJobId: (id) => set({ jobId: id }),
-  setMode: (mode) =>
+  setMode: (mode, resumeFrom) =>
     set({
       mode,
       stages: mode === "create"
@@ -131,7 +131,7 @@ export const useJobStore = create<JobState>((set) => ({
         : mode === "create-v3"
         ? createV3Stages.map((s) => ({ ...s }))
         : mode === "resume-v3"
-        ? resumeV3Stages.map((s) => ({ ...s }))
+        ? buildResumeV3Stages(resumeFrom)
         : mode === "crop"
         ? cropStages.map((s) => ({ ...s }))
         : reviewStages.map((s) => ({ ...s })),

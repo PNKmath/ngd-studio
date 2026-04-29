@@ -152,7 +152,7 @@ const stageFallbackPatterns: { name: string; patterns: RegExp[] }[] = [
   { name: "cropper",   patterns: [/크롭/i, /crop.*완료/i, /페이지.*변환/i] },
   { name: "extractor", patterns: [/문제.*추출/i, /이미지.*추출/i, /extracted\.json/i] },
   { name: "solver",    patterns: [/해설.*생성/i, /해설.*보완/i, /풀이.*생성/i] },
-  { name: "verifier",  patterns: [/해설.*검증/i, /verif/i, /검증.*결과/i] },
+  { name: "verifier",  patterns: [/해설.*검증/i, /검증.*결과/i, /ngd-exam-verifier/i] },
   { name: "figure",    patterns: [/그림.*처리/i, /crop/i, /nano-banana/i, /워터마크/i] },
   { name: "builder",   patterns: [/HWPX.*조립/i, /section0.*xml/i] },
   { name: "checker",   patterns: [/품질.*검수/i, /체크리스트.*검증/i] },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { QuestionSlotGrid } from "@/components/upload/QuestionSlotGrid";
@@ -16,6 +16,7 @@ import { useJobRunner } from "@/lib/useJobRunner";
 export default function CreateV3Page() {
   const { startJob, stopJob } = useJobRunner();
   const status = useJobStore((s) => s.status);
+  const mode = useJobStore((s) => s.mode);
   const stages = useJobStore((s) => s.stages);
   const logs = useJobStore((s) => s.logs);
   const jobId = useJobStore((s) => s.jobId);
@@ -38,6 +39,23 @@ export default function CreateV3Page() {
   const [existingImages, setExistingImages] = useState<{ count: number; hasClean: boolean } | null>(null);
   const [resumeFrom, setResumeFrom] = useState("extractor");
   const [showResumeForm, setShowResumeForm] = useState(false);
+
+  // Figure confirm state (after figure background processing)
+  type FigureStatus = { pending: boolean; done: boolean; success: number[]; failed: number[]; images: string[] };
+  const [figureStatus, setFigureStatus] = useState<FigureStatus | null>(null);
+  const figureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Build status polling
+  type BuildStatus = {
+    pending: boolean;
+    status?: "running" | "retrying" | "fallback" | "success" | "failed";
+    hwpx_path?: string;
+    error?: string;
+    retried?: { problem: number; agent: string }[];
+    fallback?: boolean;
+  };
+  const [buildStatus, setBuildStatus] = useState<BuildStatus | null>(null);
+  const buildIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetch("/api/question-images")
@@ -81,9 +99,15 @@ export default function CreateV3Page() {
       }
     }
 
-    // Save meta to store for persistence across navigation
     const meta = { school, grade, subject, semester, examType, range, questionCount: filledSlotCount };
     setV3Meta(meta);
+
+    // 캐시에 메타 저장 — extractor 단계 이전 resume 시 자동 로드용
+    await fetch("/api/v3cache-meta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ school, grade, subject, semester, examType, range }),
+    }).catch(() => {});
 
     await startJob("create-v3", { pdf: "", questionImages: questionImageNums }, meta);
   }, [filledSlotCount, questionSlots, startJob, school, grade, subject, semester, examType, range, setV3Meta]);
@@ -91,8 +115,21 @@ export default function CreateV3Page() {
   const handleResume = useCallback(async () => {
     if (!existingImages) return;
 
+    // 캐시에서 시험 정보 로드, 없으면 폼 값 사용
+    let cachedMeta: Record<string, unknown> = {};
+    try {
+      const r = await fetch("/api/v3cache-meta");
+      const data = await r.json();
+      if (data.found) cachedMeta = data;
+    } catch { /* ignore */ }
+
     const meta = {
-      school, grade, subject, semester, examType, range,
+      school: (cachedMeta.school as string) || school,
+      grade: (cachedMeta.grade as number) || grade,
+      subject: (cachedMeta.subject as string) || subject,
+      semester: (cachedMeta.semester as string) || semester,
+      examType: (cachedMeta.examType as string) || examType,
+      range: (cachedMeta.range as string) || range,
       questionCount: existingImages.count,
       resumeFrom,
     };
@@ -104,6 +141,89 @@ export default function CreateV3Page() {
   const isRunning = status === "running";
   const isDone = status === "done" || status === "failed";
   const hasJob = isRunning || isDone;
+
+  // figure 백그라운드 처리 완료 대기 상태 — resumeFrom=figure job이 끝난 후
+  const showFigureConfirm = isDone
+    && (mode === "resume-v3" || mode === "create-v3")
+    && v3Meta?.resumeFrom === "figure";
+
+  // figure_status.json 폴링
+  useEffect(() => {
+    if (!showFigureConfirm) {
+      if (figureIntervalRef.current) {
+        clearInterval(figureIntervalRef.current);
+        figureIntervalRef.current = null;
+      }
+      setFigureStatus(null);
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/figure-status");
+        const data: FigureStatus = await r.json();
+        setFigureStatus(data);
+        if (data.done && figureIntervalRef.current) {
+          clearInterval(figureIntervalRef.current);
+          figureIntervalRef.current = null;
+        }
+      } catch { /* ignore */ }
+    };
+
+    poll();
+    figureIntervalRef.current = setInterval(poll, 2000);
+    return () => {
+      if (figureIntervalRef.current) {
+        clearInterval(figureIntervalRef.current);
+        figureIntervalRef.current = null;
+      }
+    };
+  }, [showFigureConfirm]);
+
+  // build_status.json 폴링 — 빌더가 실행 중이거나 완료된 경우
+  const showBuildStatus = (isRunning || isDone) &&
+    (mode === "create-v3" || mode === "resume-v3") &&
+    v3Meta?.resumeFrom !== "figure";
+
+  useEffect(() => {
+    if (!showBuildStatus) {
+      if (buildIntervalRef.current) {
+        clearInterval(buildIntervalRef.current);
+        buildIntervalRef.current = null;
+      }
+      setBuildStatus(null);
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/build-status");
+        const data: BuildStatus = await r.json();
+        setBuildStatus(data);
+        if (!data.pending && (data.status === "success" || data.status === "failed")) {
+          if (buildIntervalRef.current) {
+            clearInterval(buildIntervalRef.current);
+            buildIntervalRef.current = null;
+          }
+        }
+      } catch { /* ignore */ }
+    };
+
+    poll();
+    buildIntervalRef.current = setInterval(poll, 2000);
+    return () => {
+      if (buildIntervalRef.current) {
+        clearInterval(buildIntervalRef.current);
+        buildIntervalRef.current = null;
+      }
+    };
+  }, [showBuildStatus]);
+
+  const handleConfirmFigure = useCallback(async () => {
+    if (!v3Meta) return;
+    const meta = { ...v3Meta, resumeFrom: "confirm" };
+    await startJob("resume-v3", { pdf: "" }, meta);
+  }, [v3Meta, startJob]);
 
   // --- Idle: 입력 폼 ---
   if (!hasJob) {
@@ -204,7 +324,6 @@ export default function CreateV3Page() {
                         <option value="builder">HWPX 조립 (builder)</option>
                       </select>
                     </div>
-                    <p className="text-xs text-muted-foreground">아래 시험 정보를 채운 후 재개하세요.</p>
                   </div>
                 )}
                 <Button
@@ -298,8 +417,95 @@ export default function CreateV3Page() {
         </div>
       </div>
 
+      {/* Figure confirm panel — figure_processor.py 백그라운드 완료 대기 */}
+      {showFigureConfirm && (
+        <Card className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">그림 처리 결과 확인</h3>
+            {figureStatus?.done && (
+              <span className="text-xs text-[var(--color-status-success)]">
+                완료 {figureStatus.success.length}개
+                {figureStatus.failed.length > 0 && ` / 실패 ${figureStatus.failed.length}개`}
+              </span>
+            )}
+          </div>
+
+          {!figureStatus || figureStatus.pending ? (
+            <p className="text-xs text-muted-foreground animate-pulse">그림 처리 중... (백그라운드)</p>
+          ) : figureStatus.done ? (
+            <>
+              {figureStatus.failed.length > 0 && (
+                <p className="text-xs text-[var(--color-status-error)]">
+                  실패한 문제: {figureStatus.failed.join(", ")} — 수동 확인 필요
+                </p>
+              )}
+              {figureStatus.images.length > 0 ? (
+                <div className="grid grid-cols-4 gap-2">
+                  {figureStatus.images.map((imgPath) => (
+                    <img
+                      key={imgPath}
+                      src={`/api/file?path=${imgPath}`}
+                      className="w-full rounded border object-contain bg-white"
+                      alt={imgPath.split("/").pop()}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">그림 없음 (바로 조립 가능)</p>
+              )}
+              <Button onClick={handleConfirmFigure} className="w-full">
+                확인 — HWPX 조립 시작
+              </Button>
+            </>
+          ) : (
+            <p className="text-xs text-[var(--color-status-error)]">그림 처리 실패 — 로그 확인 필요</p>
+          )}
+        </Card>
+      )}
+
+      {/* Build status panel */}
+      {showBuildStatus && buildStatus && !buildStatus.pending && (
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">HWPX 조립</h3>
+            <span className={`text-xs font-medium ${
+              buildStatus.status === "success" ? "text-[var(--color-status-success)]" :
+              buildStatus.status === "failed" ? "text-[var(--color-status-error)]" :
+              "text-yellow-500"
+            }`}>
+              {buildStatus.status === "success" ? "완료" :
+               buildStatus.status === "failed" ? "실패" :
+               buildStatus.status === "retrying" ? "재처리 중..." :
+               buildStatus.status === "fallback" ? "폴백 실행 중..." :
+               buildStatus.status === "running" ? "조립 중..." : ""}
+            </span>
+          </div>
+
+          {buildStatus.hwpx_path && (
+            <p className="text-xs text-muted-foreground font-mono">{buildStatus.hwpx_path.split("/").pop()}</p>
+          )}
+
+          {buildStatus.retried && buildStatus.retried.length > 0 && (
+            <div className="text-xs text-yellow-600 dark:text-yellow-400 space-y-0.5">
+              <p className="font-medium">재처리:</p>
+              {buildStatus.retried.map((r, i) => (
+                <p key={i}>Q{r.problem} — {r.agent}</p>
+              ))}
+            </div>
+          )}
+
+          {buildStatus.fallback && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">원본 builder 에이전트로 폴백 실행</p>
+          )}
+
+          {buildStatus.error && (
+            <p className="text-xs text-[var(--color-status-error)] font-mono whitespace-pre-wrap">{buildStatus.error}</p>
+          )}
+        </Card>
+      )}
+
       {/* Followup chat */}
-      {isDone && <FollowupChat disabled={isRunning} />}
+      {isDone && !showFigureConfirm && <FollowupChat disabled={isRunning} />}
     </div>
   );
 }

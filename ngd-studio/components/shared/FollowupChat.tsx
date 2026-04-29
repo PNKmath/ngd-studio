@@ -28,6 +28,13 @@ export function FollowupChat({ disabled }: FollowupChatProps) {
       level: "info",
     });
 
+    // V3 resume --from=X 패턴 감지 → v3Meta.resumeFrom 업데이트
+    const resumeMatch = instruction.match(/V3\s+resume.*--from=(\w+)/i);
+    if (resumeMatch) {
+      const currentMeta = useJobStore.getState().v3Meta ?? {};
+      store.setV3Meta({ ...currentMeta, resumeFrom: resumeMatch[1] });
+    }
+
     try {
       const res = await fetch(`/api/run/${jobId}/followup`, {
         method: "POST",

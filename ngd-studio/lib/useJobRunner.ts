@@ -38,13 +38,20 @@ export function useJobRunner() {
 
       store.reset();
       store.setJobId(jobId);
-      store.setMode(mode);
+      store.setMode(mode, meta?.resumeFrom);
       store.setStatus("running");
+      // Re-set v3Meta after reset so it persists during job execution
+      if (meta && (mode === "create-v3" || mode === "resume-v3")) {
+        store.setV3Meta(meta);
+      }
 
       // Mark first stage as running
+      const rawResumeFrom = meta?.resumeFrom ?? "extractor";
+      // "confirm" triggers builder; use "builder" as the first visible stage
+      const effectiveResumeFrom = rawResumeFrom === "confirm" ? "builder" : rawResumeFrom;
       const firstStage = mode === "crop" ? "cropper"
         : mode === "create-v3" ? "cleaned"
-        : mode === "resume-v3" ? (meta?.resumeFrom ?? "extractor")
+        : mode === "resume-v3" ? effectiveResumeFrom
         : mode === "create" ? "reader"
         : "reviewer";
       store.updateStage(firstStage, {
@@ -212,6 +219,16 @@ function handleSSEEvent(event: SSEEvent, store: JobState) {
           store.updateQuestionResult(num, phase, { _raw: raw });
         }
       }
+      break;
+    }
+    case "extraction_review": {
+      const items = data.items as { number: number; data: Record<string, unknown> }[] | undefined;
+      if (items) {
+        for (const item of items) {
+          store.updateQuestionResult(item.number, "extracted", item.data);
+        }
+      }
+      store.setExtractionReviewActive(true);
       break;
     }
     case "error": {
