@@ -32,6 +32,41 @@ export async function GET() {
   }
 }
 
+export async function PATCH(req: NextRequest) {
+  try {
+    const formData = await req.formData();
+    const qNumStr = formData.get("qNum");
+    const file = formData.get("file");
+
+    if (!qNumStr || !(file instanceof File)) {
+      return NextResponse.json({ error: "qNum and file required" }, { status: 400 });
+    }
+
+    const num = parseInt(String(qNumStr), 10);
+    if (isNaN(num)) {
+      return NextResponse.json({ error: "Invalid qNum" }, { status: 400 });
+    }
+
+    await mkdir(IMAGES_DIR, { recursive: true });
+
+    const padded = String(num).padStart(2, "0");
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
+    const fileName = `q${padded}.${ext}`;
+    const filePath = path.join(IMAGES_DIR, fileName);
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    await writeFile(filePath, buffer);
+
+    return NextResponse.json({
+      number: num,
+      path: `inputs/시험지 제작/question_images/${fileName}`,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Replace failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();

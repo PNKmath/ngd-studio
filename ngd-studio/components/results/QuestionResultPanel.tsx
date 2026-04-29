@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useJobStore, type QuestionResult } from "@/lib/store";
@@ -14,6 +14,56 @@ function renderParts(parts: Part[]) {
     if (p.eq) return <code key={i} className="text-xs bg-muted px-1 rounded">{p.eq}</code>;
     return <span key={i}>{p.t}</span>;
   });
+}
+
+const CONDITION_BOX_LABEL: Record<string, string> = {
+  bogi: "보기", condition: "조건", empty_box: "빈 박스", proof: "증명틀", image_choice: "그림 보기",
+};
+
+function renderConditionBox(cb: Record<string, unknown>) {
+  const typeLabel = CONDITION_BOX_LABEL[String(cb.type ?? "")] ?? String(cb.type ?? "");
+  const items = Array.isArray(cb.items)
+    ? (cb.items as { label: string; parts: Part[] }[])
+    : [];
+  return (
+    <div className="space-y-0.5">
+      <span className="text-[10px] text-muted-foreground">[{typeLabel}]</span>
+      {items.map((item, i) => (
+        <div key={i} className="flex gap-1">
+          <span className="font-medium shrink-0">{item.label}.</span>
+          <span>{renderParts(item.parts ?? [])}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const DATA_TABLE_LABEL: Record<string, string> = {
+  normal_dist: "정규분포표", probability: "확률분포표",
+  increase_decrease: "증감표", log_table: "로그표", general: "표",
+};
+
+function renderDataTable(dt: Record<string, unknown>) {
+  const typeLabel = DATA_TABLE_LABEL[String(dt.type ?? "")] ?? String(dt.type ?? "");
+  const headers = Array.isArray(dt.headers) ? (dt.headers as string[]) : [];
+  const rows = Array.isArray(dt.rows) ? (dt.rows as string[][]) : [];
+  return (
+    <div className="space-y-0.5">
+      <span className="text-[10px] text-muted-foreground">[{typeLabel}]</span>
+      <table className="text-[10px] border-collapse">
+        <thead>
+          <tr>{headers.map((h, i) => <th key={i} className="border border-border px-1.5 py-0.5 bg-muted">{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {row.map((cell, j) => <td key={j} className="border border-border px-1.5 py-0.5">{cell}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 /** Send a resume/followup instruction via SSE */
@@ -142,6 +192,8 @@ function ExtractionEditor({
   const [data, setData] = useState<Record<string, unknown>>(initial);
   const [partsText, setPartsText] = useState(JSON.stringify(initial.parts ?? [], null, 0));
   const [choicesText, setChoicesText] = useState(JSON.stringify(initial.choices ?? null, null, 0));
+  const [conditionBoxText, setConditionBoxText] = useState(JSON.stringify(initial.condition_box ?? null, null, 0));
+  const [dataTableText, setDataTableText] = useState(JSON.stringify(initial.data_table ?? null, null, 0));
   const [cropText, setCropText] = useState(
     JSON.stringify(((initial.figure_info as Record<string, unknown>)?.crop_ratio ?? null), null, 0),
   );
@@ -155,10 +207,14 @@ function ExtractionEditor({
     // 텍스트 필드의 JSON 파싱 검증
     let parts: unknown;
     let choices: unknown;
+    let conditionBox: unknown;
+    let dataTable: unknown;
     let cropRatio: unknown;
     try {
       parts = JSON.parse(partsText);
       choices = choicesText.trim() ? JSON.parse(choicesText) : null;
+      conditionBox = conditionBoxText.trim() ? JSON.parse(conditionBoxText) : null;
+      dataTable = dataTableText.trim() ? JSON.parse(dataTableText) : null;
       cropRatio = cropText.trim() ? JSON.parse(cropText) : null;
     } catch (e) {
       setError(e instanceof Error ? e.message : "JSON 파싱 실패");
@@ -170,6 +226,8 @@ function ExtractionEditor({
       ...data,
       parts,
       choices,
+      condition_box: conditionBox,
+      data_table: dataTable,
     };
     if (data.has_figure && cropRatio) {
       next.figure_info = {
@@ -281,6 +339,30 @@ function ExtractionEditor({
         />
       </label>
 
+      <label className="block">
+        <span className="text-muted-foreground">보기/조건 condition_box (JSON 또는 null)</span>
+        <textarea
+          value={conditionBoxText}
+          onChange={(e) => setConditionBoxText(e.target.value)}
+          rows={3}
+          className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
+          spellCheck={false}
+          placeholder="null"
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-muted-foreground">표 data_table (JSON 또는 null)</span>
+        <textarea
+          value={dataTableText}
+          onChange={(e) => setDataTableText(e.target.value)}
+          rows={3}
+          className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
+          spellCheck={false}
+          placeholder="null"
+        />
+      </label>
+
       {Boolean(data.has_figure) && (
         <label className="block">
           <span className="text-muted-foreground">그림 crop_ratio [left, top, right, bottom]</span>
@@ -329,6 +411,7 @@ function QuestionImages({ qNum }: { qNum: number }) {
         <div className="mt-2 grid grid-cols-2 gap-2">
           <div>
             <span className="text-[10px] text-muted-foreground block mb-1">원본</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={originalSrc}
               alt={`문제 ${qNum} 원본`}
@@ -339,6 +422,7 @@ function QuestionImages({ qNum }: { qNum: number }) {
           <div>
             <span className="text-[10px] text-muted-foreground block mb-1">정리본</span>
             {!cleanedError ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={cleanedSrc}
                 alt={`문제 ${qNum} 정리본`}
@@ -357,6 +441,118 @@ function QuestionImages({ qNum }: { qNum: number }) {
   );
 }
 
+function FigureResultSection({
+  entries,
+  jobId,
+  globalLoading,
+  onConfirm,
+  onRetryFigure,
+  onRetryAll,
+}: {
+  entries: QuestionResult[];
+  jobId: string | null;
+  globalLoading: string | null;
+  onConfirm: () => void;
+  onRetryFigure: (qNum: number) => void;
+  onRetryAll: () => void;
+}) {
+  const figureProblems = entries.filter(
+    (q) => (q.extracted as Record<string, unknown> | undefined)?.has_figure
+  );
+
+  const [loadedSet, setLoadedSet] = useState<Set<number>>(new Set());
+  const [retryCount, setRetryCount] = useState<Record<number, number>>({});
+
+  // 미완료 이미지 3초마다 폴링
+  useEffect(() => {
+    if (figureProblems.length === 0) return;
+    const unloaded = figureProblems.filter((q) => !loadedSet.has(q.number));
+    if (unloaded.length === 0) return;
+    const timer = setInterval(() => {
+      setRetryCount((prev) => {
+        const next = { ...prev };
+        for (const q of unloaded) next[q.number] = (prev[q.number] ?? 0) + 1;
+        return next;
+      });
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [figureProblems.length, loadedSet]);
+
+  const handleRetry = (qNum: number) => {
+    setLoadedSet((prev) => { const s = new Set(prev); s.delete(qNum); return s; });
+    setRetryCount((prev) => ({ ...prev, [qNum]: (prev[qNum] ?? 0) + 1 }));
+    onRetryFigure(qNum);
+  };
+
+  const allLoaded = figureProblems.length === 0 || figureProblems.every((q) => loadedSet.has(q.number));
+
+  return (
+    <div className="space-y-3">
+      {figureProblems.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-medium text-muted-foreground">
+              그림 생성 결과 ({loadedSet.size}/{figureProblems.length})
+            </h4>
+            <button
+              onClick={onRetryAll}
+              disabled={!jobId || globalLoading !== null}
+              className="text-[10px] text-orange-500 hover:underline disabled:opacity-50"
+            >
+              전체 재생성
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {figureProblems.map((q) => {
+              const retry = retryCount[q.number] ?? 0;
+              const src = `/api/file?path=${encodeURIComponent(`outputs/images/prob${q.number}_final.png`)}&_r=${retry}`;
+              const loaded = loadedSet.has(q.number);
+              return (
+                <div key={q.number} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">
+                      {q.number}번 {loaded ? "✓" : "생성 중..."}
+                    </span>
+                    <button
+                      onClick={() => handleRetry(q.number)}
+                      disabled={!jobId || globalLoading !== null}
+                      className="text-[10px] text-orange-500 hover:underline disabled:opacity-50"
+                    >
+                      재생성
+                    </button>
+                  </div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={src}
+                    alt={`문제 ${q.number} 그림`}
+                    className={`w-full rounded border bg-white transition-opacity ${loaded ? "opacity-100" : "opacity-20"}`}
+                    onLoad={() => setLoadedSet((prev) => new Set([...prev, q.number]))}
+                    onError={() => {/* 폴링이 자동 재시도 */}}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <Button
+        size="sm"
+        disabled={!jobId || globalLoading !== null || !allLoaded}
+        onClick={onConfirm}
+        className="h-8 text-xs w-full"
+      >
+        {globalLoading === "confirm" ? (
+          <svg className="w-3 h-3 animate-spin mr-1" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        ) : !allLoaded ? `그림 생성 중... (${loadedSet.size}/${figureProblems.length})` : "확인 → HWPX 조립 시작"}
+      </Button>
+    </div>
+  );
+}
+
 const RESUME_ACTIONS = [
   { label: "이미지 재정리", from: "cleaned", color: "text-purple-600" },
   { label: "재추출", from: "extractor", color: "text-blue-600" },
@@ -366,13 +562,12 @@ const RESUME_ACTIONS = [
 
 function ActionButtons({ qNum }: { qNum: number }) {
   const jobId = useJobStore((s) => s.jobId);
-  const status = useJobStore((s) => s.status);
   const store = useJobStore();
   const [loading, setLoading] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAction = useCallback(async (from: string) => {
-    if (!jobId || status === "running") return;
+    if (!jobId || loading !== null) return;
     setLoading(from);
     const instruction = `V3 resume --q=${qNum} --from=${from}`;
     await sendResumeAction(jobId, instruction, store);
@@ -380,7 +575,7 @@ function ActionButtons({ qNum }: { qNum: number }) {
   }, [jobId, status, qNum, store]);
 
   const handleImageReplace = useCallback(async (file: File) => {
-    if (!jobId || status === "running") return;
+    if (!jobId || loading !== null) return;
     setLoading("image_replace");
 
     const formData = new FormData();
@@ -398,9 +593,9 @@ function ActionButtons({ qNum }: { qNum: number }) {
     const instruction = `V3 resume --q=${qNum} --from=image_replace`;
     await sendResumeAction(jobId, instruction, store);
     setLoading(null);
-  }, [jobId, status, qNum, store]);
+  }, [jobId, loading, qNum, store]);
 
-  const disabled = !jobId || status === "running";
+  const disabled = !jobId || loading !== null;
 
   return (
     <div className="flex flex-wrap gap-1 pt-2 border-t mt-2">
@@ -459,6 +654,7 @@ function QuestionCard({ qr }: { qr: QuestionResult }) {
   const updateQuestionResult = useJobStore((s) => s.updateQuestionResult);
   // 편집 모드는 카드 자체 상태로도 토글 가능 (검증 모드 자동 진입 + 사용자가 닫을 수 있음)
   const [editing, setEditing] = useState(false);
+  const [savedExt, setSavedExt] = useState<Record<string, unknown> | null>(null);
   const [expanded, setExpanded] = useState(reviewActive);
   const ext = qr.extracted as Record<string, unknown> | undefined;
   const sol = qr.solved as Record<string, unknown> | undefined;
@@ -502,17 +698,18 @@ function QuestionCard({ qr }: { qr: QuestionResult }) {
           <QuestionImages qNum={qr.number} />
 
           {/* Extracted — 편집 모드 또는 읽기 전용 */}
-          {ext && (reviewActive || editing) ? (
+          {ext && ((reviewActive && ext !== savedExt) || editing) ? (
             <ExtractionEditor
               qNum={qr.number}
               initial={ext}
               onSaved={(updated) => {
                 updateQuestionResult(qr.number, "extracted", updated);
+                setSavedExt(updated);
                 setEditing(false);
               }}
             />
           ) : null}
-          {ext && !(reviewActive || editing) && (
+          {ext && !((reviewActive && ext !== savedExt) || editing) && (
             <div className="pt-2">
               <div className="flex items-center justify-between mb-1">
                 <h5 className="text-xs font-medium text-blue-600">추출 결과</h5>
@@ -536,6 +733,18 @@ function QuestionCard({ qr }: { qr: QuestionResult }) {
                   <div className="flex gap-4">
                     <span className="text-muted-foreground w-12 shrink-0">본문</span>
                     <span className="leading-relaxed">{renderParts(ext.parts as Part[])}</span>
+                  </div>
+                )}
+                {ext.condition_box != null && (
+                  <div className="flex gap-4">
+                    <span className="text-muted-foreground w-12 shrink-0">보기/조건</span>
+                    <div>{renderConditionBox(ext.condition_box as Record<string, unknown>)}</div>
+                  </div>
+                )}
+                {ext.data_table != null && (
+                  <div className="flex gap-4">
+                    <span className="text-muted-foreground w-12 shrink-0">표</span>
+                    <div>{renderDataTable(ext.data_table as Record<string, unknown>)}</div>
                   </div>
                 )}
                 {Array.isArray(ext.choices) && (
@@ -681,44 +890,21 @@ export function QuestionResultPanel() {
         </div>
       )}
 
-      {/* Review confirmation + Global action buttons */}
+      {/* Figure 이미지 뷰어 + Confirm 버튼 */}
       {!reviewActive && isDone && (
         <div className="space-y-2 pb-2 border-b">
-          {/* Review confirmation: 사용자 검증 완료 → 다음 단계 진행 */}
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              disabled={globalLoading !== null}
-              onClick={() => handleGlobalAction("review")}
-              className="h-8 text-xs flex-1"
-            >
-              {globalLoading === "review" ? (
-                <svg className="w-3 h-3 animate-spin mr-1" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              ) : null}
-              검증 완료, 다음 단계 진행
-            </Button>
-          </div>
-
-          {/* Phase 2 individual re-run buttons */}
+          <FigureResultSection
+            entries={entries}
+            jobId={jobId}
+            globalLoading={globalLoading}
+            onConfirm={() => handleGlobalAction("confirm")}
+            onRetryFigure={(qNum) => {
+              if (!jobId) return;
+              sendResumeAction(jobId, `V3 resume --q=${qNum} --from=figure`, store);
+            }}
+            onRetryAll={() => handleGlobalAction("figure")}
+          />
           <div className="flex flex-wrap gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={globalLoading !== null}
-              onClick={() => handleGlobalAction("figure")}
-              className="h-7 text-xs"
-            >
-              {globalLoading === "figure" && (
-                <svg className="w-3 h-3 animate-spin mr-1" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              )}
-              그림 재처리
-            </Button>
             <Button
               variant="outline"
               size="sm"
