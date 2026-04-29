@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useJobStore, type QuestionResult } from "@/lib/store";
@@ -97,6 +97,14 @@ function handleSSEEvent(event: SSEEvent, store: ReturnType<typeof useJobStore.ge
         data.content as Record<string, unknown>,
       );
       break;
+    case "extraction_review": {
+      const items = (data.items as { number: number; data: Record<string, unknown> }[]) ?? [];
+      for (const it of items) {
+        store.updateQuestionResult(it.number, "extracted", it.data);
+      }
+      store.setExtractionReviewActive(true);
+      break;
+    }
     case "result":
       store.setResult({
         status: data.status as string,
@@ -115,6 +123,189 @@ function handleSSEEvent(event: SSEEvent, store: ReturnType<typeof useJobStore.ge
       store.setStatus("failed");
       break;
   }
+}
+
+/**
+ * 추출 결과 편집 폼.
+ * Step 3.5(추출 편집)에서 사용자가 parts/choices/answer 등을 직접 수정한다.
+ * 저장은 PUT /api/extracted-json?q=N — 백엔드의 q{N}_extracted.json을 덮어쓴다.
+ */
+function ExtractionEditor({
+  qNum,
+  initial,
+  onSaved,
+}: {
+  qNum: number;
+  initial: Record<string, unknown>;
+  onSaved: (updated: Record<string, unknown>) => void;
+}) {
+  const [data, setData] = useState<Record<string, unknown>>(initial);
+  const [partsText, setPartsText] = useState(JSON.stringify(initial.parts ?? [], null, 0));
+  const [choicesText, setChoicesText] = useState(JSON.stringify(initial.choices ?? null, null, 0));
+  const [cropText, setCropText] = useState(
+    JSON.stringify(((initial.figure_info as Record<string, unknown>)?.crop_ratio ?? null), null, 0),
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+
+    // 텍스트 필드의 JSON 파싱 검증
+    let parts: unknown;
+    let choices: unknown;
+    let cropRatio: unknown;
+    try {
+      parts = JSON.parse(partsText);
+      choices = choicesText.trim() ? JSON.parse(choicesText) : null;
+      cropRatio = cropText.trim() ? JSON.parse(cropText) : null;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "JSON 파싱 실패");
+      setSaving(false);
+      return;
+    }
+
+    const next: Record<string, unknown> = {
+      ...data,
+      parts,
+      choices,
+    };
+    if (data.has_figure && cropRatio) {
+      next.figure_info = {
+        ...((data.figure_info as Record<string, unknown>) ?? {}),
+        crop_ratio: cropRatio,
+      };
+    }
+
+    try {
+      const res = await fetch(`/api/extracted-json?q=${qNum}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "저장 실패");
+      }
+      onSaved(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "저장 실패");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="pt-2 space-y-2 text-xs">
+      <h5 className="font-medium text-blue-600">추출 결과 편집</h5>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="text-muted-foreground">유형</span>
+          <select
+            value={String(data.type ?? "")}
+            onChange={(e) => setData({ ...data, type: e.target.value })}
+            className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
+          >
+            <option value="choice">choice</option>
+            <option value="essay">essay</option>
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-muted-foreground">난이도</span>
+          <select
+            value={String(data.difficulty ?? "중")}
+            onChange={(e) => setData({ ...data, difficulty: e.target.value })}
+            className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
+          >
+            <option value="하">하</option>
+            <option value="중">중</option>
+            <option value="상">상</option>
+            <option value="킬">킬</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block">
+          <span className="text-muted-foreground">배점</span>
+          <input
+            type="text"
+            value={String(data.score ?? "")}
+            onChange={(e) => setData({ ...data, score: e.target.value })}
+            className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
+          />
+        </label>
+        <label className="block">
+          <span className="text-muted-foreground">단원</span>
+          <input
+            type="text"
+            value={String(data.subtopic ?? "")}
+            onChange={(e) => setData({ ...data, subtopic: e.target.value })}
+            className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
+          />
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="text-muted-foreground">정답</span>
+        <input
+          type="text"
+          value={String(data.answer ?? "")}
+          onChange={(e) => setData({ ...data, answer: e.target.value })}
+          className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
+          placeholder="예: ② 또는 -3"
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-muted-foreground">본문 parts (JSON 배열)</span>
+        <textarea
+          value={partsText}
+          onChange={(e) => setPartsText(e.target.value)}
+          rows={4}
+          className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
+          spellCheck={false}
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-muted-foreground">선지 choices (JSON 배열, 서답형은 null)</span>
+        <textarea
+          value={choicesText}
+          onChange={(e) => setChoicesText(e.target.value)}
+          rows={3}
+          className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
+          spellCheck={false}
+        />
+      </label>
+
+      {Boolean(data.has_figure) && (
+        <label className="block">
+          <span className="text-muted-foreground">그림 crop_ratio [left, top, right, bottom]</span>
+          <input
+            type="text"
+            value={cropText}
+            onChange={(e) => setCropText(e.target.value)}
+            className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
+            placeholder="[0.55, 0.1, 0.95, 0.7]"
+          />
+        </label>
+      )}
+
+      {error && <div className="text-red-600 text-[10px]">{error}</div>}
+
+      <Button
+        size="sm"
+        onClick={handleSave}
+        disabled={saving}
+        className="h-7 text-xs"
+      >
+        {saving ? "저장 중..." : "이 문제 저장"}
+      </Button>
+    </div>
+  );
 }
 
 function QuestionImages({ qNum }: { qNum: number }) {
@@ -178,6 +369,7 @@ function ActionButtons({ qNum }: { qNum: number }) {
   const status = useJobStore((s) => s.status);
   const store = useJobStore();
   const [loading, setLoading] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAction = useCallback(async (from: string) => {
     if (!jobId || status === "running") return;
@@ -187,10 +379,59 @@ function ActionButtons({ qNum }: { qNum: number }) {
     setLoading(null);
   }, [jobId, status, qNum, store]);
 
+  const handleImageReplace = useCallback(async (file: File) => {
+    if (!jobId || status === "running") return;
+    setLoading("image_replace");
+
+    const formData = new FormData();
+    formData.append("qNum", String(qNum));
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/question-images", { method: "PATCH", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+    } catch {
+      setLoading(null);
+      return;
+    }
+
+    const instruction = `V3 resume --q=${qNum} --from=image_replace`;
+    await sendResumeAction(jobId, instruction, store);
+    setLoading(null);
+  }, [jobId, status, qNum, store]);
+
   const disabled = !jobId || status === "running";
 
   return (
     <div className="flex flex-wrap gap-1 pt-2 border-t mt-2">
+      {/* 이미지 교체 — 파일 피커 트리거 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleImageReplace(file);
+          e.target.value = "";
+        }}
+      />
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={disabled || loading !== null}
+        onClick={() => fileInputRef.current?.click()}
+        className="h-6 px-2 text-[10px] text-red-600 hover:bg-muted"
+      >
+        {loading === "image_replace" ? (
+          <svg className="w-3 h-3 animate-spin mr-1" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        ) : null}
+        이미지 교체
+      </Button>
+
       {RESUME_ACTIONS.map((action) => (
         <Button
           key={action.from}
@@ -214,7 +455,11 @@ function ActionButtons({ qNum }: { qNum: number }) {
 }
 
 function QuestionCard({ qr }: { qr: QuestionResult }) {
-  const [expanded, setExpanded] = useState(false);
+  const reviewActive = useJobStore((s) => s.extractionReviewActive);
+  const updateQuestionResult = useJobStore((s) => s.updateQuestionResult);
+  // 편집 모드는 카드 자체 상태로도 토글 가능 (검증 모드 자동 진입 + 사용자가 닫을 수 있음)
+  const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState(reviewActive);
   const ext = qr.extracted as Record<string, unknown> | undefined;
   const sol = qr.solved as Record<string, unknown> | undefined;
   const ver = qr.verified as Record<string, unknown> | undefined;
@@ -256,10 +501,28 @@ function QuestionCard({ qr }: { qr: QuestionResult }) {
           {/* Images: original + cleaned */}
           <QuestionImages qNum={qr.number} />
 
-          {/* Extracted */}
-          {ext && (
+          {/* Extracted — 편집 모드 또는 읽기 전용 */}
+          {ext && (reviewActive || editing) ? (
+            <ExtractionEditor
+              qNum={qr.number}
+              initial={ext}
+              onSaved={(updated) => {
+                updateQuestionResult(qr.number, "extracted", updated);
+                setEditing(false);
+              }}
+            />
+          ) : null}
+          {ext && !(reviewActive || editing) && (
             <div className="pt-2">
-              <h5 className="text-xs font-medium text-blue-600 mb-1">추출 결과</h5>
+              <div className="flex items-center justify-between mb-1">
+                <h5 className="text-xs font-medium text-blue-600">추출 결과</h5>
+                <button
+                  onClick={() => setEditing(true)}
+                  className="text-[10px] text-blue-600 hover:underline"
+                >
+                  편집
+                </button>
+              </div>
               <div className="space-y-1 text-xs">
                 <div className="flex gap-4">
                   <span className="text-muted-foreground w-12 shrink-0">유형</span>
@@ -348,6 +611,8 @@ export function QuestionResultPanel() {
   const questionResults = useJobStore((s) => s.questionResults);
   const jobId = useJobStore((s) => s.jobId);
   const status = useJobStore((s) => s.status);
+  const reviewActive = useJobStore((s) => s.extractionReviewActive);
+  const setReviewActive = useJobStore((s) => s.setExtractionReviewActive);
   const store = useJobStore();
   const entries = Object.values(questionResults).sort((a, b) => a.number - b.number);
   const [globalLoading, setGlobalLoading] = useState<string | null>(null);
@@ -357,10 +622,12 @@ export function QuestionResultPanel() {
   const doneCount = entries.filter((q) => q.verified || q.solved).length;
   const isDone = status === "done" || status === "failed";
 
-  const handleGlobalAction = async (from: string, label: string) => {
+  const handleGlobalAction = async (from: string) => {
     if (!jobId || status === "running") return;
     setGlobalLoading(from);
     const instruction = `V3 resume --from=${from}`;
+    // 편집 모드 → solver 진행 시 모드 종료
+    if (from === "solver") setReviewActive(false);
     await sendResumeAction(jobId, instruction, store);
     setGlobalLoading(null);
   };
@@ -368,21 +635,61 @@ export function QuestionResultPanel() {
   return (
     <Card className="p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">문제별 결과</h3>
+        <h3 className="text-sm font-medium">
+          문제별 결과 {reviewActive && <span className="text-blue-600 ml-2">(추출 편집 모드)</span>}
+        </h3>
         <span className="text-xs text-muted-foreground">
           {doneCount}/{entries.length}문제 처리
         </span>
       </div>
 
+      {/* Step 3.5: 추출 편집 진행 버튼 — Claude가 [EXTRACTION_REVIEW]를 출력했고 사용자 편집 대기 중일 때 */}
+      {reviewActive && isDone && (
+        <div className="space-y-2 pb-2 border-b">
+          <div className="text-xs text-muted-foreground">
+            모든 문제의 추출 결과를 확인/편집한 후 [진행]을 누르면 해설 생성을 시작합니다.
+          </div>
+          <Button
+            size="sm"
+            disabled={globalLoading !== null}
+            onClick={() => handleGlobalAction("solver")}
+            className="h-8 text-xs w-full"
+          >
+            {globalLoading === "solver" ? (
+              <svg className="w-3 h-3 animate-spin mr-1" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : null}
+            진행 → 해설 생성 시작
+          </Button>
+        </div>
+      )}
+
+      {/* Resume용 버튼: 추출 결과 검증으로 돌아가기 (이미 완료된 작업) */}
+      {!reviewActive && isDone && entries.some((q) => q.extracted && !q.solved) && (
+        <div className="pb-2 border-b">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={globalLoading !== null}
+            onClick={() => handleGlobalAction("review_extract")}
+            className="h-7 text-xs w-full"
+          >
+            추출 결과 검증
+          </Button>
+        </div>
+      )}
+
       {/* Review confirmation + Global action buttons */}
-      {isDone && (
+      {!reviewActive && isDone && (
         <div className="space-y-2 pb-2 border-b">
           {/* Review confirmation: 사용자 검증 완료 → 다음 단계 진행 */}
           <div className="flex items-center gap-2">
             <Button
               size="sm"
               disabled={globalLoading !== null}
-              onClick={() => handleGlobalAction("review", "검증 확인 → 다음 단계 진행")}
+              onClick={() => handleGlobalAction("review")}
               className="h-8 text-xs flex-1"
             >
               {globalLoading === "review" ? (
@@ -401,7 +708,7 @@ export function QuestionResultPanel() {
               variant="outline"
               size="sm"
               disabled={globalLoading !== null}
-              onClick={() => handleGlobalAction("figure", "그림 재처리")}
+              onClick={() => handleGlobalAction("figure")}
               className="h-7 text-xs"
             >
               {globalLoading === "figure" && (
@@ -416,7 +723,7 @@ export function QuestionResultPanel() {
               variant="outline"
               size="sm"
               disabled={globalLoading !== null}
-              onClick={() => handleGlobalAction("builder", "HWPX 재조립")}
+              onClick={() => handleGlobalAction("builder")}
               className="h-7 text-xs"
             >
               {globalLoading === "builder" && (

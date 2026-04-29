@@ -65,8 +65,69 @@ export interface ContentBlock {
 }
 
 export interface SSEEvent {
-  event: "stage" | "log" | "progress" | "file" | "question" | "result" | "error";
+  event: "stage" | "log" | "progress" | "file" | "question" | "result" | "error" | "extraction_review";
   data: Record<string, unknown>;
+}
+
+// --- [EXTRACTION_REVIEW] block parser ---
+// Claude가 V3 Step 3.5에서 출력하는 블록 형식:
+//   [EXTRACTION_REVIEW]
+//   total: N
+//   ---
+//   [Q1]
+//   key: value
+//   parts: [{"t":"..."}, {"eq":"..."}]
+//   ...
+//   ---
+//   [Q2]
+//   ...
+//   [/EXTRACTION_REVIEW]
+
+const REVIEW_BLOCK_RE = /\[EXTRACTION_REVIEW\]([\s\S]*?)\[\/EXTRACTION_REVIEW\]/g;
+
+function parseReviewBlock(blockBody: string): { number: number; data: Record<string, unknown> }[] {
+  const out: { number: number; data: Record<string, unknown> }[] = [];
+  // 각 [QN] 섹션 분리
+  const sections = blockBody.split(/^---\s*$/m);
+  for (const sec of sections) {
+    const qMatch = sec.match(/^\s*\[Q(\d+)\]\s*\n([\s\S]*)/);
+    if (!qMatch) continue;
+    const qNum = parseInt(qMatch[1], 10);
+    const body = qMatch[2];
+    const data: Record<string, unknown> = {};
+    for (const line of body.split("\n")) {
+      const m = line.match(/^([a-z_][a-z0-9_]*)\s*:\s*(.*)$/i);
+      if (!m) continue;
+      const key = m[1];
+      const raw = m[2].trim();
+      // JSON 값 시도 (배열, 객체, true/false/null/숫자)
+      if (raw.startsWith("[") || raw.startsWith("{") || raw === "true" || raw === "false" || raw === "null" || /^-?\d/.test(raw)) {
+        try {
+          data[key] = JSON.parse(raw);
+          continue;
+        } catch { /* fall through to string */ }
+      }
+      data[key] = raw;
+    }
+    out.push({ number: qNum, data });
+  }
+  return out;
+}
+
+export function extractReviewEvents(text: string): SSEEvent[] {
+  const events: SSEEvent[] = [];
+  let m: RegExpExecArray | null;
+  REVIEW_BLOCK_RE.lastIndex = 0;
+  while ((m = REVIEW_BLOCK_RE.exec(text)) !== null) {
+    const items = parseReviewBlock(m[1]);
+    if (items.length > 0) {
+      events.push({
+        event: "extraction_review",
+        data: { items },
+      });
+    }
+  }
+  return events;
 }
 
 // --- Stage Detection ---
@@ -252,6 +313,17 @@ export function transformToSSE(event: ClaudeEvent, currentStage: { name: string 
   if (event.type === "assistant" && event.message?.content) {
     for (const block of event.message.content) {
       if (block.type === "text" && block.text) {
+        // V3 Step 3.5: [EXTRACTION_REVIEW] 블록 감지
+        const reviewEvents = extractReviewEvents(block.text);
+        if (reviewEvents.length > 0) {
+          if (currentStage.name && currentStage.name !== "review_extract") {
+            results.push({ event: "stage", data: { name: currentStage.name, status: "done" } });
+          }
+          currentStage.name = "review_extract";
+          results.push({ event: "stage", data: { name: "review_extract", status: "running" } });
+          results.push(...reviewEvents);
+        }
+
         const detected = detectStage(block.text);
         if (detected && detected !== currentStage.name) {
           if (currentStage.name) {
