@@ -167,8 +167,23 @@
 | 4: 단원분류표 재검증 | 11 | 11 | ✅ 완료 | `unit-classification-report.md` |
 | 5: 통합 검증 | 18 | 12 (+6 SKIP) | ✅ 완료 (PASS — 회귀 0) | `integration-report.md` |
 | **합계** | **83** | **77 (+6 SKIP)** | ✅ 완료 | — |
+| 후속: 잔여 이슈 | 2 | 0 | ⬜ 대기 | [`07-follow-up.md`](./07-follow-up.md) |
 
 상태 표기: ⬜ 대기 / 🟡 진행중 / ✅ 완료 / ❌ FAIL (회귀)
+
+## 후속 작업 (Phase 5 이후 잔여 이슈)
+
+상세: [07-follow-up.md](./07-follow-up.md)
+
+### Issue #1 — paraPrIDRef=1 시각 정렬 확인 [양식지 교체 직접 영향]
+- [ ] Windows 한컴오피스에서 `/tmp/phase5_new_base.hwpx` 열기
+- [ ] 문제 본문/정답/해설/조건 박스 정렬 시각 확인
+- [ ] 결과 기록: 케이스 A(정상) → CLOSED / 케이스 B(깨짐) → `build_hwpx.py` 8개 위치 수정 후 재빌드
+
+### Issue #2 — `build_hwpx.py` 메타데이터 하드코딩 [양식지 교체와 무관]
+- [ ] [LOW 우선순위] 별도 PR로 분리 처리
+- [ ] `build_hwpx.py:17, 29, 31, 733-735` info 객체로 일반화
+- [ ] `exam_data.json` 스키마 + reader 에이전트 동기화
 
 ## 의존관계
 
