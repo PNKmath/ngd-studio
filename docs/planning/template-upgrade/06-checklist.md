@@ -126,34 +126,34 @@
 ## Phase 5: 통합 검증 → [05-integration-test.md](./05-integration-test.md)
 
 ### 사전
-- [ ] Phase 1~4 완료 확인
-- [ ] `.backup-2022-05-20/` 보존 확인 (롤백 대비)
-- [ ] 옛 경로 잔여 grep 0건 (ngd-studio/data/jobs, .backup 제외)
+- [x] Phase 1~4 완료 확인
+- [x] `.backup-2022-05-20/` 보존 확인 (롤백 대비)
+- [x] 옛 경로 잔여 grep 0건 (ngd-studio/data/jobs, .backup 제외)
 
-### 1차 빌드 (간단 시험지)
-- [ ] 빌드 완주 (에러 없음)
-- [ ] ZIP 무결성 OK
-- [ ] 4개 핵심 XML 파싱 OK
-- [ ] 단원 태그 일치 OK
-- [ ] 한컴오피스 열기 OK (수동 / SKIP)
-- [ ] 머릿말 정상
-- [ ] 본문 글꼴 OK
-- [ ] 페이지 레이아웃 OK
+### 1차 빌드 (간단 시험지 — `.v3cache/exam_data.json` 기반, 20문제)
+- [x] 빌드 완주 (에러 없음, exit 0, WARN/ERROR 0건)
+- [x] ZIP 무결성 OK
+- [x] 4개 핵심 XML 파싱 OK (ET.fromstring 4/4)
+- [x] 단원 태그 일치 OK (20/20, mismatched 0)
+- [ ] 한컴오피스 열기 OK — **SKIP — WSL 환경**
+- [ ] 머릿말 정상 — **SKIP — WSL 환경**
+- [ ] 본문 글꼴 OK — **SKIP — WSL 환경**
+- [ ] 페이지 레이아웃 OK — **SKIP — WSL 환경**
 
 ### 2차 빌드 (특수 테이블 포함)
-- [ ] 빌드 완주
-- [ ] hp:tbl 카운트 예상치 일치
-- [ ] 셀 텍스트 reader 결과와 일치
-- [ ] borderFill 정상 (수동 / SKIP)
+- [ ] 빌드 완주 — **부분 SKIP**: 명세 §4.5는 별도 확통 시험지를 요구했으나 agent가 동일 JSON × 백업 base 회귀 비교로 대체. 양식지 교체 영향 분리 검증은 이뤄짐
+- [x] hp:tbl 카운트 예상치 일치 (신규 2 = 백업 2)
+- [x] 셀 텍스트 reader 결과와 일치 (회귀 비교 0 byte 차이)
+- [ ] borderFill 정상 — **SKIP — WSL 환경**
 
 ### 회귀 비교
-- [ ] 이력 (옛 양식지 빌드 결과)와 비교 (가능 시)
-- [ ] 회귀 후보 분류 (의도된 변경 / 회귀)
+- [x] 이력 (옛 양식지 빌드 결과)와 비교 — 백업 base로 직접 빌드해 비교
+- [x] 회귀 후보 분류: header.xml +108KB, masterpage0.xml -614B, content.hpf +421B 모두 Phase 2·3 진단의 의도된 변경. section0.xml 본문 6 byte 차이로 실질 동일. **회귀 0건**
 
 ### 산출물
-- [ ] `integration-report.md` 생성 (6개 섹션)
-- [ ] PASS/FAIL 결론
-- [ ] (FAIL인 경우) 회귀 이슈 분리 + 양식지 사용 일시 중지 결정
+- [x] `integration-report.md` 생성 (6개 섹션)
+- [x] PASS/FAIL 결론: **PASS — 회귀 0건**
+- [x] (FAIL 아님) 잔여 확인 1건: paraPrIDRef=1 시각 정렬은 Windows 한컴오피스에서 수동 확인 권장
 
 ---
 
@@ -165,8 +165,8 @@
 | 2: 신규 양식지 진단 | 13 | 13 | ✅ 완료 | `diagnosis-report.md` |
 | 3: base_hwpx 재추출 | 27 | 27 | ✅ 완료 | `extraction-report.md` |
 | 4: 단원분류표 재검증 | 11 | 11 | ✅ 완료 | `unit-classification-report.md` |
-| 5: 통합 검증 | 18 | 0 | ⬜ 대기 | `integration-report.md` |
-| **합계** | **83** | **65** | 🟡 진행중 | — |
+| 5: 통합 검증 | 18 | 12 (+6 SKIP) | ✅ 완료 (PASS — 회귀 0) | `integration-report.md` |
+| **합계** | **83** | **77 (+6 SKIP)** | ✅ 완료 | — |
 
 상태 표기: ⬜ 대기 / 🟡 진행중 / ✅ 완료 / ❌ FAIL (회귀)
 
