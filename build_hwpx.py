@@ -8,14 +8,15 @@ import zipfile
 import os
 import re
 import struct
+import sys
 from datetime import datetime
 from PIL import Image
 import io
 
 # === Paths ===
 BASE = "/mnt/c/NGD/.claude/skills/ngd-exam-create/base_hwpx"
-EXAM_JSON = "/tmp/exam_data.json"
-OUTPUT_DIR = "/mnt/c/NGD/outputs"
+EXAM_JSON = sys.argv[1] if len(sys.argv) > 1 else "/tmp/exam_data.json"
+OUTPUT_DIR = sys.argv[2] if len(sys.argv) > 2 else "/mnt/c/NGD/outputs"
 
 # === Load exam data ===
 with open(EXAM_JSON, "r", encoding="utf-8") as f:
@@ -26,9 +27,9 @@ problems = exam["problems"]
 
 # === Info substitutions ===
 YEAR_SEMESTER = f"{info['year']}년 {info['semester']} {info['exam_type']}"
-SCHOOL_NAME = "소명여 고등학교"
+SCHOOL_NAME = info["school"]
 GRADE_SUBJECT = f"{info['grade']}학년 {info['subject']}"
-RANGE_STR = "조건부확률 ~ 통계적추정"
+RANGE_STR = info.get("range", "")
 CREATED_DATE = datetime.now().strftime("%Y년 %m월 %d일")
 MODIFIED_DATE = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -137,6 +138,8 @@ def parts_to_run_content(parts):
 
     for part in parts:
         if "eq" in part:
+            if part.get("indent"):
+                content += '<hp:tab width="2000" leader="0" type="1"/>'
             eq_script = part["eq"]
             content += make_equation_xml(eq_script)
             params = lineseg_params_for_eq(eq_script)
@@ -176,12 +179,12 @@ def make_empty_para(para_id="0"):
                          vertsize=1000, textheight=1000, baseline=850, spacing=600)
 
 def make_colbreak():
-    return make_paragraph(content="", para_id="2147483648", columnBreak="1",
-                         vertsize=1000, textheight=1000, baseline=850, spacing=600)
+    return make_paragraph(content="", para_id="2147483648", paraPrIDRef="1", charPrIDRef="7",
+                         columnBreak="1", vertsize=1000, textheight=1000, baseline=850, spacing=600)
 
 def make_pagebreak():
-    return make_paragraph(content="", para_id="2147483648", pageBreak="1",
-                         vertsize=1000, textheight=1000, baseline=850, spacing=600)
+    return make_paragraph(content="", para_id="2147483648", paraPrIDRef="1", charPrIDRef="7",
+                         pageBreak="1", vertsize=1000, textheight=1000, baseline=850, spacing=600)
 
 # === Choice number symbols ===
 CHOICE_SYMBOLS = ["①", "②", "③", "④", "⑤"]
@@ -278,16 +281,11 @@ def make_choices_xml(choices):
 
     return "".join(paragraphs)
 
-def make_endnote(number, answer, explanation_parts, prob_type="choice"):
+def make_endnote(number, answer, explanation_parts, prob_type="choice", explanation_table=None):
     """Generate endNote XML"""
     inst_id = next_inst_id()
 
-    # Answer line
-    if prob_type == "choice":
-        answer_text = f' [정답] {answer}'
-    else:
-        answer_text = f' [정답] {answer}'
-
+    answer_text = f' [정답] {answer}'
     answer_run = (f'<hp:run charPrIDRef="11">'
                   f'<hp:ctrl><hp:autoNum num="{number}" numType="ENDNOTE">'
                   f'<hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar="." supscript="0"/>'
@@ -302,7 +300,6 @@ def make_endnote(number, answer, explanation_parts, prob_type="choice"):
     # Split explanation_parts by {"br": true}
     explanation_paragraphs = []
     current_parts = []
-
     for part in explanation_parts:
         if "br" in part and part.get("br") is True:
             if current_parts:
@@ -313,7 +310,6 @@ def make_endnote(number, answer, explanation_parts, prob_type="choice"):
     if current_parts:
         explanation_paragraphs.append(current_parts)
 
-    # Generate explanation <hp:p> elements
     expl_xml = ""
     for parts_group in explanation_paragraphs:
         content, max_eq = parts_to_run_content(parts_group)
@@ -321,6 +317,20 @@ def make_endnote(number, answer, explanation_parts, prob_type="choice"):
             expl_xml += (f'<hp:p id="0" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
                         f'<hp:run charPrIDRef="1">{content}</hp:run>'
                         f'{make_lineseg(0, max_eq[0], max_eq[1], max_eq[2], max_eq[3])}'
+                        f'</hp:p>')
+
+    # explanation_table (증감표, 조립제법 등) — explanation_parts 뒤에 삽입
+    if explanation_table:
+        et_type = explanation_table.get("type")
+        tbl_xml = ""
+        if et_type == "increase_decrease":
+            tbl_xml = make_increase_decrease_table(explanation_table)
+        elif et_type == "synthetic_division":
+            tbl_xml = make_synthetic_division_table(explanation_table)
+        if tbl_xml:
+            expl_xml += (f'<hp:p id="0" paraPrIDRef="3" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                        f'<hp:run charPrIDRef="1">{tbl_xml}<hp:t/></hp:run>'
+                        f'{make_lineseg(0, 1000, 1000, 850, 600)}'
                         f'</hp:p>')
 
     endnote = (f'<hp:ctrl><hp:endNote number="{number}" suffixChar="46" instId="{inst_id}">'
@@ -429,20 +439,25 @@ def make_data_table_xml(data_table):
         return tbl_xml
 
     elif dt_type == "probability":
-        # Select template by column count (5, 6, or 7)
+        # header_parts: x값 목록 [[{"eq":"0"}], [{"eq":"1"}], ...]
+        # row_parts: P값 목록 [[{"eq":"0.2"}], [{"eq":"0.5"}], ...]
         header_parts = data_table.get("header_parts", [])
-        n_cols = len(header_parts)
-        if n_cols <= 5:
+        prob_row = data_table.get("row_parts", [])
+        n_data = len(header_parts)  # 데이터 열 수 (X, 계 제외)
+
+        if n_data <= 3:
             tpl_name = "prob_dist_5cols.xml"
-        elif n_cols <= 6:
+            n_total = 5
+        elif n_data <= 4:
             tpl_name = "prob_dist_6cols.xml"
+            n_total = 6
         else:
             tpl_name = "prob_dist_7cols.xml"
+            n_total = 7
 
         with open(f"{BASE}/{tpl_name}", "r", encoding="utf-8") as f:
             tbl_xml = f.read()
 
-        # Replace IDs
         tbl_xml = tbl_xml.replace("{{TABLE_ID}}", str(next_eq_id()))
         tbl_xml = tbl_xml.replace("{{ZORDER}}", str(next_zorder()))
 
@@ -452,13 +467,359 @@ def make_data_table_xml(data_table):
             tbl_xml = tbl_xml.replace(f"{{{{EQ_ID_{i}}}}}", str(next_eq_id()))
             tbl_xml = tbl_xml.replace(f"{{{{EQ_ZO_{i}}}}}", str(next_zorder()))
 
-        # For probability tables, the cell contents need to be injected into
-        # the template's existing cells. Since the template has fixed structure,
-        # we inject header and data values into the equation scripts.
-        # The template has equations with placeholder scripts that need replacement.
-        return tbl_xml
+        # 셀 분리 후 데이터 주입
+        cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
+        # row 0: [0]=X헤더, [1..n_data]=x값, [n_data+1]=계
+        # row 1: [n_total]=P헤더, [n_total+1..n_total+n_data]=P값, [n_total+n_data+1]=1
+        def extract_val(parts_list):
+            return "".join(p.get("eq", p.get("t", "")) for p in parts_list)
+
+        for i, hp in enumerate(header_parts[:n_data]):
+            val = extract_val(hp) if isinstance(hp, list) else str(hp)
+            cells[1 + i] = _inject_cell_value(cells[1 + i], val)
+
+        for i, pp in enumerate(prob_row[:n_data]):
+            val = extract_val(pp) if isinstance(pp, list) else str(pp)
+            cells[n_total + 1 + i] = _inject_cell_value(cells[n_total + 1 + i], val)
+
+        # 재조립 (2행)
+        header_tag = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
+        tr0 = f'<hp:tr>{"".join(cells[:n_total])}</hp:tr>'
+        tr1 = f'<hp:tr>{"".join(cells[n_total:])}</hp:tr>'
+        return header_tag + tr0 + tr1 + '</hp:tbl>'
 
     return ""
+
+def _inject_cell_value(cell_xml, value):
+    """빈 셀(empty run)에 값(텍스트 or 수식)을 삽입"""
+    if not value:
+        return cell_xml
+
+    arrow_map = {"NEARROW": "NEARROW", "SEARROW": "SEARROW"}
+    if value in arrow_map:
+        eq_xml = make_equation_xml(arrow_map[value])
+        params = lineseg_params_for_eq(arrow_map[value])
+        run = f'<hp:run charPrIDRef="1">{eq_xml}<hp:t/></hp:run>'
+        ls = make_lineseg(0, params[0], params[1], params[2], params[3])
+    elif re.search(r'[a-zA-Z_{}^\\`]', value):
+        eq_xml = make_equation_xml(value)
+        params = lineseg_params_for_eq(value)
+        run = f'<hp:run charPrIDRef="1">{eq_xml}<hp:t/></hp:run>'
+        ls = make_lineseg(0, params[0], params[1], params[2], params[3])
+    else:
+        run = f'<hp:run charPrIDRef="1"><hp:t>{xml_escape(value)}</hp:t></hp:run>'
+        ls = make_lineseg(0, 1000, 1000, 850, 600)
+
+    cell_xml = re.sub(r'<hp:run charPrIDRef="\d+"/>', run, cell_xml, count=1)
+    cell_xml = re.sub(r'<hp:linesegarray>.*?</hp:linesegarray>', ls, cell_xml, count=1, flags=re.DOTALL)
+    return cell_xml
+
+
+def _replace_table_ids(xml):
+    """테이블 XML의 id/zOrder를 새 값으로 교체"""
+    xml = re.sub(r'(<hp:tbl\b[^>]+ id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', xml, count=1)
+    xml = re.sub(r'(<hp:equation\b[^>]+ id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', xml)
+    xml = re.sub(r'(zOrder=)"[^"]*"', lambda m: f'{m.group(1)}"{next_zorder()}"', xml)
+    return xml
+
+
+def make_increase_decrease_table(explanation_table):
+    """증감표 생성
+    x값 1개: 양식지 템플릿 사용
+    x값 2개 이상: 동일 셀 구조로 프로그래매틱 생성
+    """
+    x_values = explanation_table.get("x_values", [])
+    rows = explanation_table.get("rows", [])
+
+    if len(x_values) == 1:
+        # 템플릿 사용
+        with open(f"{BASE}/increase_decrease_template.xml", encoding="utf-8") as f:
+            tbl_xml = f.read()
+        tbl_xml = _replace_table_ids(tbl_xml)
+        cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
+        cells[2] = _inject_cell_value(cells[2], str(x_values[0]))
+        for ri, row_data in enumerate(rows[:2]):
+            base = 4 + ri * 4
+            for vi, val in enumerate(row_data.get("values", [])[:3]):
+                cells[base + vi] = _inject_cell_value(cells[base + vi], str(val))
+        hdr = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
+        return (hdr + f'<hp:tr>{"".join(cells[0:4])}</hp:tr>'
+                    + f'<hp:tr>{"".join(cells[4:8])}</hp:tr>'
+                    + f'<hp:tr>{"".join(cells[8:12])}</hp:tr>'
+                    + '</hp:tbl>')
+
+    # x값 2개 이상 — 프로그래매틱 생성
+    # 구조: label | ... | x1 | ... | x2 | ...
+    n_x = len(x_values)
+    n_val_cols = 2 * n_x + 1  # 값 열 수
+    n_cols = 1 + n_val_cols
+    n_rows = 1 + len(rows)
+
+    LABEL_W = 3805
+    val_w = min(4937, (29000 - LABEL_W) // n_val_cols)
+    total_w = LABEL_W + val_w * n_val_cols
+    H_HDR, H_DATA = 1690, 1973
+
+    def tc(content_xml, col, row, w, h, bfr="4"):
+        return (f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="{bfr}">'
+                f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" '
+                f'linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">'
+                f'{content_xml}</hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{row}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+                f'<hp:cellSz width="{w}" height="{h}"/>'
+                f'<hp:cellMargin left="510" right="510" top="141" bottom="141"/>'
+                f'</hp:tc>')
+
+    def eq_p(script, h):
+        eq_xml = make_equation_xml(script)
+        p = lineseg_params_for_eq(script)
+        return (f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                f'<hp:run charPrIDRef="1">{eq_xml}<hp:t/></hp:run>'
+                f'{make_lineseg(0, p[0], p[1], p[2], p[3])}</hp:p>')
+
+    def txt_p(t, h):
+        return (f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                f'<hp:run charPrIDRef="1"><hp:t>{xml_escape(t)}</hp:t></hp:run>'
+                f'{make_lineseg(0, h, h, int(h*0.85), int(h*0.6))}</hp:p>')
+
+    def val_p(v, h):
+        if not v:
+            return txt_p("", h)
+        if v in ("NEARROW", "SEARROW"):
+            return eq_p(v, h)
+        if re.search(r'[a-zA-Z_{}^\\`]', v):
+            return eq_p(v, h)
+        return txt_p(v, h)
+
+    tbl_id = next_eq_id()
+    zo = next_zorder()
+    total_h = H_HDR + H_DATA * len(rows)
+
+    trs = []
+    # 헤더 행
+    hdr_cells = tc(eq_p("{x}", H_HDR), 0, 0, LABEL_W, H_HDR)
+    for vi in range(n_val_cols):
+        if vi % 2 == 0:
+            content = eq_p("{CDOTS }", H_HDR)
+        else:
+            content = eq_p(x_values[vi // 2], H_HDR)
+        hdr_cells += tc(content, vi + 1, 0, val_w, H_HDR)
+    trs.append(f'<hp:tr>{hdr_cells}</hp:tr>')
+
+    # 데이터 행
+    for ri, row_data in enumerate(rows):
+        label = row_data.get("label", "")
+        values = row_data.get("values", [])
+        row_cells = tc(eq_p(label, H_DATA) if re.search(r'[a-zA-Z_{}^\\`\']', label) else txt_p(label, H_DATA),
+                       0, ri + 1, LABEL_W, H_DATA)
+        for vi, val in enumerate(values):
+            row_cells += tc(val_p(str(val), H_DATA), vi + 1, ri + 1, val_w, H_DATA)
+        trs.append(f'<hp:tr>{row_cells}</hp:tr>')
+
+    return (f'<hp:tbl id="{tbl_id}" zOrder="{zo}" numberingType="TABLE" '
+            f'textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None" '
+            f'pageBreak="CELL" repeatHeader="1" rowCnt="{n_rows}" colCnt="{n_cols}" '
+            f'cellSpacing="0" borderFillIDRef="4" noAdjust="0">'
+            f'<hp:sz width="{total_w}" widthRelTo="ABSOLUTE" height="{total_h}" heightRelTo="ABSOLUTE" protect="0"/>'
+            f'<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0" '
+            f'holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT" '
+            f'vertOffset="0" horzOffset="0"/>'
+            f'<hp:outMargin left="0" right="0" top="284" bottom="284"/>'
+            f'<hp:inMargin left="140" right="140" top="140" bottom="140"/>'
+            f'{"".join(trs)}</hp:tbl>')
+
+
+def make_synthetic_division_table(explanation_table):
+    """조립제법 표 생성 — 양식지 템플릿 기반 (10행×5열)
+    solver 형식: {divisor, coefficients, result}
+    템플릿 배치:
+      Row 0: [divisor, c0, c1, c2, c3]  (계수 행)
+      Row 1: [empty, empty, m1, m2, m3]  (곱셈 행)
+      Row 2: thin separator
+      Row 3: [empty, r0, r1, r2, r3]    (결과 행)
+    """
+    divisor = explanation_table.get("divisor", "")
+    coefficients = explanation_table.get("coefficients", [])
+    result = explanation_table.get("result", [])
+
+    # 곱셈 행 계산: multiplied[i] = divisor × result[i-1]
+    try:
+        d = float(divisor)
+        multiplied = [""] + [str(d * float(r)) for r in result[:-1]]
+        multiplied = [m.rstrip("0").rstrip(".") if "." in m else m for m in multiplied]
+    except (ValueError, TypeError):
+        multiplied = [""] * (len(coefficients))
+
+    # rows 형식으로 변환 (10행×5열)
+    n = max(len(coefficients), 5)
+    row0 = [divisor] + list(coefficients[:n-1])
+    row1 = [""] + list(multiplied[1:n])
+    row3 = [""] + list(result[:n-1])
+
+    rows_data = [
+        row0,   # idx 0: 계수
+        row1,   # idx 1: 곱셈
+        [],     # idx 2: thin separator (비워둠)
+        row3,   # idx 3: 결과
+    ]
+
+    with open(f"{BASE}/synthetic_division_template.xml", encoding="utf-8") as f:
+        tbl_xml = f.read()
+
+    tbl_xml = _replace_table_ids(tbl_xml)
+    cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
+
+    for ri, row_vals in enumerate(rows_data):
+        for ci, val in enumerate(row_vals[:5]):
+            cell_idx = ri * 5 + ci
+            if val:
+                cells[cell_idx] = _inject_cell_value(cells[cell_idx], str(val))
+
+    header = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
+    trs = ""
+    for ri in range(10):
+        trs += f'<hp:tr>{"".join(cells[ri*5:(ri+1)*5])}</hp:tr>'
+    return header + trs + '</hp:tbl>'
+
+
+def make_empty_box(condition_box):
+    """서술형 빈 답안 박스 (empty_box_template.xml)"""
+    height = condition_box.get("height", 5059)
+    center_y = height // 2
+    sca_y = round(height / 12587, 6)
+    rect_id = next_eq_id()
+    zorder = next_zorder()
+    iid = next_inst_id()
+
+    with open(f"{BASE}/empty_box_template.xml", encoding="utf-8") as f:
+        tmpl = f.read()
+
+    xml = tmpl.replace("{{RECT_ID}}", str(rect_id))
+    xml = xml.replace("{{ZORDER}}", str(zorder))
+    xml = xml.replace("{{INST_ID}}", str(iid))
+    xml = xml.replace("{{HEIGHT}}", str(height))
+    xml = xml.replace("{{CENTER_Y}}", str(center_y))
+    xml = xml.replace("{{SCA_Y}}", str(sca_y))
+    return xml
+
+
+def make_proof_table(condition_box):
+    """[ 증 명 ] 테이블 (proof_table_template.xml)"""
+    items = condition_box.get("items", [])
+
+    with open(f"{BASE}/proof_table_template.xml", encoding="utf-8") as f:
+        tbl_xml = f.read()
+
+    tbl_xml = _replace_table_ids(tbl_xml)
+
+    # 내용 문단 생성
+    items_content = ""
+    for idx, item in enumerate(items):
+        content = ""
+        max_eq = (1000, 1000, 850, 600)
+        for part in item.get("parts", []):
+            if "eq" in part:
+                content += make_equation_xml(part["eq"])
+                params = lineseg_params_for_eq(part["eq"])
+                if params[0] > max_eq[0]:
+                    max_eq = params
+            elif "t" in part:
+                content += f'<hp:t>{xml_escape(part["t"])}</hp:t>'
+        vpos = idx * max_eq[0]
+        items_content += (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                         f'<hp:run charPrIDRef="1">{content}</hp:run>'
+                         f'{make_lineseg(vpos, max_eq[0], max_eq[1], max_eq[2], max_eq[3])}'
+                         f'</hp:p>')
+
+    # 셀 [6] (colAddr=1, rowAddr=2) — 내용 영역에 주입
+    cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
+    content_height = max(len(items) * 1600 + 500, 2383)
+    old_cell = cells[6]
+    new_cell = re.sub(r'<hp:run charPrIDRef="\d+"/>',
+                      f'<hp:run charPrIDRef="1">{items_content}</hp:run>',
+                      old_cell, count=1)
+    new_cell = re.sub(r'<hp:cellSz width="\d+" height="\d+"',
+                      f'<hp:cellSz width="28096" height="{content_height}"',
+                      new_cell, count=1)
+    tbl_xml = tbl_xml.replace(old_cell, new_cell, 1)
+
+    table_height = 963 + 963 + content_height + 580
+    tbl_xml = re.sub(r'(heightRelTo="ABSOLUTE" protect="0"/>.*?<hp:sz[^>]+height=)"\d+"',
+                     lambda m: m.group(0),  # 내부 sz는 유지
+                     tbl_xml)
+    tbl_xml = re.sub(r'(<hp:tbl\b.*?height=)"\d+"', lambda m: f'{m.group(1)}"{table_height}"',
+                     tbl_xml, count=1)
+
+    return tbl_xml
+
+
+def make_choice_table(condition_box):
+    """그리드형 선지 테이블 (choice_table_*.xml)"""
+    table_type = condition_box.get("table_type", "6x3")
+    tpl_name = f"choice_table_{table_type}.xml"
+    rows_data = condition_box.get("rows", [])  # [[v0,v1,...], ...]
+
+    with open(f"{BASE}/{tpl_name}", encoding="utf-8") as f:
+        tbl_xml = f.read()
+
+    tbl_xml = _replace_table_ids(tbl_xml)
+
+    if not rows_data:
+        return tbl_xml
+
+    cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
+    n_cols = int(table_type.split("x")[1])
+    n_rows = int(table_type.split("x")[0])
+
+    for ri, row_vals in enumerate(rows_data[:n_rows]):
+        for ci, val in enumerate(row_vals[:n_cols]):
+            cell_idx = ri * n_cols + ci
+            if val and cell_idx < len(cells):
+                cells[cell_idx] = _inject_cell_value(cells[cell_idx], str(val))
+
+    header = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
+    trs = ""
+    for ri in range(n_rows):
+        trs += f'<hp:tr>{"".join(cells[ri*n_cols:(ri+1)*n_cols])}</hp:tr>'
+    return header + trs + '</hp:tbl>'
+
+
+def make_bogi_table(condition_box):
+    """Generate < 보 기 > table using template"""
+    items = condition_box["items"]
+    n_items = len(items)
+
+    tpl_name = "bogi_table_6items.xml" if n_items > 3 else "bogi_table_3items.xml"
+    with open(f"{BASE}/{tpl_name}", "r", encoding="utf-8") as f:
+        tbl_xml = f.read()
+
+    # Replace table id, equation ids, zOrders
+    tbl_xml = re.sub(r'(<hp:tbl id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', tbl_xml, count=1)
+    tbl_xml = re.sub(r'(<hp:equation\b[^>]+ id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', tbl_xml)
+    tbl_xml = re.sub(r'(zOrder=)"[^"]*"', lambda m: f'{m.group(1)}"{next_zorder()}"', tbl_xml)
+
+    # Inject item content after each label (ㄱ. / ㄴ. / ...)
+    labels = ["ㄱ", "ㄴ", "ㄷ", "ㄹ", "ㅁ", "ㅂ"]
+    for idx, item in enumerate(items):
+        if idx >= len(labels):
+            break
+        label = labels[idx]
+        item_content = ""
+        for part in item.get("parts", []):
+            if "eq" in part:
+                item_content += make_equation_xml(part["eq"])
+            elif "t" in part:
+                item_content += f'<hp:t>{xml_escape(part["t"])}</hp:t>'
+        if item_content:
+            tbl_xml = tbl_xml.replace(
+                f'<hp:t>{label}. </hp:t></hp:run>',
+                f'<hp:t>{label}. </hp:t>{item_content}</hp:run>',
+                1
+            )
+
+    return tbl_xml
+
 
 def png_to_bmp_bytes(png_path):
     """Convert PNG image to BMP bytes for HWPX"""
@@ -544,8 +905,8 @@ endnote_num = 1  # endNote numbering starts at 1 (0 is in header)
 problem_count = 0
 essay_count = 0
 
-# Track images for Q18
 extra_images = []  # List of (bindata_name, file_data) tuples
+extra_image_counter = 3  # image1/2 are reserved (저작권바, 로고)
 
 for prob in problems:
     num = prob["number"]
@@ -555,6 +916,7 @@ for prob in problems:
     choices = prob.get("choices")
     answer = prob["answer"]
     explanation = prob.get("explanation_parts", [])
+    explanation_table = prob.get("explanation_table")
     condition_box = prob.get("condition_box")
     data_table = prob.get("data_table")
     has_figure = prob.get("has_figure", False)
@@ -577,35 +939,39 @@ for prob in problems:
 
     # --- Build problem paragraph ---
 
-    # For essay type: [서술형 N] label
     if ptype == "essay":
         essay_count += 1
 
     # Generate endNote
-    endnote_xml = make_endnote(endnote_num, answer, explanation, ptype)
+    endnote_xml = make_endnote(endnote_num, answer, explanation, ptype, explanation_table)
     endnote_num += 1
 
-    # Problem text: endNote marker + parts conversion
-    # The parts already include score for choice type
-    # We need to separate the score from parts first
+    # [서술형 N] prefix for essay problems
+    prefix = f'<hp:t>[서술형 {essay_count}] </hp:t>' if ptype == "essay" else ""
 
-    # Build parts content (excluding score which is already in parts)
-    prob_content = endnote_xml
+    prob_content = endnote_xml + prefix
     max_eq_params = (1000, 1000, 850, 600)
 
     # Convert parts to XML
     for part in parts:
         if "eq" in part:
+            if part.get("indent"):
+                prob_content += '<hp:tab width="2000" leader="0" type="1"/>'
             prob_content += make_equation_xml(part["eq"])
             params = lineseg_params_for_eq(part["eq"])
             if params[0] > max_eq_params[0]:
                 max_eq_params = params
         elif "t" in part:
-            text = part["t"]
-            # Handle newlines in text - they should create visual line breaks
-            # For inline text, replace \n with space since HWPX handles wrapping
-            text = text.replace("\n", " ")
+            text = part["t"].replace("\n", " ")
             prob_content += f'<hp:t>{xml_escape(text)}</hp:t>'
+
+    # Score at end: [(score)점]
+    score_val = prob.get("score")
+    if score_val is not None:
+        score_script = str(score_val)
+        prob_content += f'<hp:t>[</hp:t>'
+        prob_content += make_equation_xml(score_script)
+        prob_content += f'<hp:t>점]</hp:t>'
 
     # Problem paragraph
     prob_p = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
@@ -617,16 +983,17 @@ for prob in problems:
     # Empty line between problem and choices/table
     problem_paras.append(make_empty_para())
 
-    # Figure (Q18)
+    # Figure
     if has_figure and figure_info and figure_info.get("final_image"):
         img_path = figure_info["final_image"]
         if os.path.exists(img_path):
-            img_name = f"image3"
+            img_name = f"image{extra_image_counter}"
+            extra_image_counter += 1
             bmp_data = png_to_bmp_bytes(img_path)
-            extra_images.append((f"image3.bmp", bmp_data))
+            extra_images.append((f"{img_name}.bmp", bmp_data))
 
-            pic_xml = make_pic_xml("image3.bmp", img_path)
-            pic_p = (f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+            pic_xml = make_pic_xml(f"{img_name}.bmp", img_path)
+            pic_p = (f'<hp:p id="2147483648" paraPrIDRef="2" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
                      f'<hp:run charPrIDRef="1">{pic_xml}<hp:t/></hp:run>'
                      f'{make_lineseg(0, 1000, 1000, 850, 600)}'
                      f'</hp:p>')
@@ -636,14 +1003,31 @@ for prob in problems:
     # Condition box
     if condition_box:
         cond_type = condition_box.get("type", "condition")
+        box_xml = None
+        box_para_pr = "0"
+
         if cond_type == "condition":
-            rect_xml = make_condition_rect(condition_box)
-            # Wrap in a paragraph
-            cond_p = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-                      f'<hp:run charPrIDRef="1">{rect_xml}<hp:t/></hp:run>'
-                      f'{make_lineseg(0, 1000, 1000, 850, 600)}'
-                      f'</hp:p>')
-            problem_paras.append(cond_p)
+            box_xml = make_condition_rect(condition_box)
+        elif cond_type == "image_choice":
+            box_xml = make_condition_rect(condition_box)  # 동일 템플릿, 높이만 크게
+        elif cond_type == "bogi":
+            box_xml = make_bogi_table(condition_box)
+            box_para_pr = "3"
+        elif cond_type == "empty_box":
+            box_xml = make_empty_box(condition_box)
+        elif cond_type == "proof":
+            box_xml = make_proof_table(condition_box)
+            box_para_pr = "3"
+        elif cond_type == "choice_table":
+            box_xml = make_choice_table(condition_box)
+            box_para_pr = "3"
+
+        if box_xml:
+            box_p = (f'<hp:p id="2147483648" paraPrIDRef="{box_para_pr}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                     f'<hp:run charPrIDRef="1">{box_xml}<hp:t/></hp:run>'
+                     f'{make_lineseg(0, 1000, 1000, 850, 600)}'
+                     f'</hp:p>')
+            problem_paras.append(box_p)
             problem_paras.append(make_empty_para())
 
     # Data table
@@ -729,10 +1113,19 @@ for prob in problems:
 prv_text = "\n".join(prv_lines[:20])
 
 # === Output filename ===
-# [코드][고][년도][학기-차수][지역][학교][과목][범위][코드][작업자][검수자][그림코드]
-code = "04039"
-filename = (f"[{code}][고][2025][3-1-b][경기부천시][소명여고][확통]"
-            f"[조건부확률-통계적추정][{code}][그림1-0-1-0].hwpx")
+if "filename_base" in info:
+    filename = info["filename_base"] + ".hwpx"
+else:
+    code = info.get("code", "00000")
+    year = info.get("year", "?")
+    grade = info.get("grade", "?")
+    sem_num = "1" if "1학기" in info.get("semester", "") else "2"
+    exam_code = "a" if "중간" in info.get("exam_type", "") else "b"
+    region = info.get("region", "")
+    school = info.get("school", "")
+    subject_code = info.get("subject_code", info.get("subject", ""))
+    range_str = info.get("range", "")
+    filename = f"[{code}][고][{year}][{grade}-{sem_num}-{exam_code}][{region}][{school}][{subject_code}][{range_str}][{code}].hwpx"
 
 output_path = os.path.join(OUTPUT_DIR, filename)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
