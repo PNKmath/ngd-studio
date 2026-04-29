@@ -14,8 +14,12 @@ argument-hint: "[이미지 폴더 경로 또는 메타 정보]"
 ```
 ngd-exam-create-v3 (이 스킬 = 오케스트레이터)
 │
-├─ Phase 1: 문제별 병렬 처리 (4개씩 배치)
-│   ├─ [1] ngd-exam-extractor : 이미지 → 문제 JSON
+├─ Phase 1-A: Extractor 전체 (4개씩 배치, 병렬)
+│   └─ [1] ngd-exam-extractor : 이미지 → 문제 JSON
+│
+├─ [프론트엔드 편집] 사용자가 추출 결과를 직접 수정
+│
+├─ Phase 1-B: Solver + Verifier (4개씩 배치, 병렬)
 │   ├─ [2] ngd-exam-solver    : 문제 JSON → 해설 생성
 │   └─ [3] ngd-exam-verifier  : 해설 검증 (↔ solver 최대 3회)
 │
@@ -103,9 +107,10 @@ def detect_resume_state(total_questions):
 
 **자동 resume** (`V3 resume` — 문제/단계 미지정):
 1. `detect_resume_state()`로 각 문제 상태 확인
-2. `verified` → 스킵, `solved` → verifier부터, `extracted` → solver부터, `none` → extractor부터
-3. 모든 문제가 `verified`이면 Phase 2로 직접 진행
-4. `exam_data.json`이 있고 모든 verified가 있으면 → 사용자 검증 단계로
+2. 모든 문제가 `extracted`이고 `solved`가 하나도 없으면 → **Step 3.5(프론트엔드 편집) 단계로**
+3. `verified` → 스킵, `solved` → verifier부터, `extracted` → solver부터, `none` → extractor부터
+4. 모든 문제가 `verified`이면 Phase 2로 직접 진행
+5. `exam_data.json`이 있고 모든 verified가 있으면 → 최종 검증 단계로
 
 **지정 resume** (`--q=3 --from=solver`):
 1. `cleanup_from_stage([3], 'solver')` 실행
@@ -311,58 +316,54 @@ Agent(subagent_type="ngd-exam-extractor", prompt="""
 
 ---
 
-### Step 3.5: 추출 결과 사용자 검증 및 편집
+### Step 3.5: 추출 결과 프론트엔드 편집 대기
 
-**모든 extractor가 완료된 후, solver를 시작하기 전에** 추출 결과를 사용자에게 보여준다.
-이 단계에서 오류를 수정하면 solver가 올바른 입력으로 해설을 생성할 수 있다.
+**모든 extractor가 완료된 후, solver를 시작하기 전에** Claude는 추출 데이터를 출력하고 프론트엔드 편집을 기다린다.
 
-#### 검증 화면 출력
+#### Claude의 역할: 추출 데이터 출력
 
-각 문제에 대해 순서대로 출력한다:
-
-```
-=== 추출 결과 검증 (N문제) ===
-
-── 문제 {N}번 ──────────────────────
-[원본] (Read 도구로 inputs/시험지 제작/question_images/q{N:02d}.png 표시)
-[정리본] (Read 도구로 inputs/시험지 제작/question_images/cleaned/q{N:02d}.png 표시)
-
-유형: choice / 배점: X.X / 단원: [subtopic] / 난이도: [난이도]
-본문: (parts 배열을 텍스트로 렌더링)
-선지: ① ... ② ... ③ ... ④ ... ⑤ ...
-정답: [정답]
-그림: 있음 (right, [0.55, 0.1, 0.95, 0.7]) / 없음
-```
-
-**본문 렌더링 규칙** (`parts` 배열 → 텍스트):
-- `{"t": "한글"}` → 그대로 출력
-- `{"eq": "수식"}` → 수식 스크립트 그대로 출력 (백틱으로 감싸기)
-- `condition_box`가 있으면 ㄱ/ㄴ/ㄷ 항목도 표시
-- `data_table`이 있으면 테이블 타입과 행 수 표시
-
-모든 문제 출력 후:
+각 `q{N}_extracted.json`을 Read 도구로 읽어 아래 형식으로 출력한다. 프론트엔드가 이 출력을 파싱하여 편집 UI를 렌더링한다.
 
 ```
-수정이 필요한 문제가 있으면 번호와 수정 내용을 알려주세요.
-문제없으면 "진행"이라고 답해주세요.
+[EXTRACTION_REVIEW]
+total: N
+---
+[Q1]
+type: choice
+score: 4.2
+subtopic: 지수함수
+difficulty: 중
+parts: [{"t":"함수 "},{"eq":"f(x) = 2^x"},{"t":"의 그래프와 직선 "},{"eq":"y = 4"},{"t":"가 만나는 점의 "},{"eq":"x"},{"t":"좌표를 구하시오."}]
+choices: [[{"eq":"1"}],[{"eq":"2"}],[{"eq":"3"}],[{"eq":"4"}],[{"eq":"5"}]]
+answer: ②
+has_figure: true
+figure_position: right
+figure_crop_ratio: [0.55, 0.1, 0.95, 0.7]
+condition_box: null
+---
+[Q2]
+...
+[/EXTRACTION_REVIEW]
 ```
 
-#### 사용자 수정 처리
+#### 프론트엔드의 역할
 
-사용자가 수정을 요청하면 해당 `q{N}_extracted.json`을 직접 편집한다:
+프론트엔드는 위 출력을 파싱하여 각 문제별 편집 UI를 표시한다:
+- 원본 이미지 + 정리본 이미지 나란히 표시
+- `parts` → 편집 가능한 텍스트/수식 필드
+- `choices` → 편집 가능한 선지 필드 (5개)
+- `answer` → 정답 선택 드롭다운
+- `subtopic`, `difficulty` → 드롭다운
+- `figure_crop_ratio` → 수치 입력 필드 (그림이 있는 경우)
 
-| 수정 요청 예시 | 처리 |
-|-------------|------|
-| "3번 정답 ③으로 수정" | `answer` 필드 수정 |
-| "5번 선지 2번 `2` → `` `sqrt 2` ``로" | `choices[1]` parts 수정 |
-| "7번 본문 '이상'을 '초과'로" | `parts` 중 해당 `t` 값 수정 |
-| "12번 그림 crop_ratio [0.6, 0.2, 0.95, 0.8]로" | `figure_info.crop_ratio` 수정 |
-| "2번 subtopic 로그함수로 변경" | `subtopic` 수정 |
-| "9번 재추출 필요" | 해당 문제만 `V3 resume --q=9 --from=extractor` 실행 후 다시 검증 |
+사용자가 필드를 수정하면 **프론트엔드가 직접 `q{N}_extracted.json`을 저장**한다. Claude는 이 단계에서 JSON을 수정하지 않는다.
 
-수정 후 해당 문제의 검증 화면만 다시 표시하고, 추가 수정 요청이 없으면 진행한다.
+#### 진행 / 재추출
 
-**사용자가 "진행" 응답 → Step 4(Solver) 시작**
+| 사용자 액션 | 프론트엔드 전송 |
+|-----------|--------------|
+| [진행] 클릭 | `V3 resume --from=solver` → Step 4 시작 |
+| [문제N 재추출] 클릭 | `V3 resume --q=N --from=extractor` → 해당 문제만 재추출 후 Step 3.5로 복귀 |
 
 ---
 
