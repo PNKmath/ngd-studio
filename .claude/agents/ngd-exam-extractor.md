@@ -2,7 +2,7 @@
 name: ngd-exam-extractor
 description: "NGD V3 문제 추출 에이전트. 문제 이미지 1장을 받아 구조화된 JSON으로 추출한다."
 tools: Read, Write, Bash, Glob, Grep
-model: inherit
+model: sonnet
 skills:
   - hwp-equation
 ---
@@ -138,6 +138,10 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 
 ## 출력 JSON 형식
 
+> **중요**: `condition_box`, `bogi_box`, `data_table`은 해당 요소가 **이미지에 있으면 반드시 채운다**. `null`은 해당 요소가 아예 없을 때만 사용한다.
+
+### 예시 1: 그림만 있는 선택형 (보기/표 없음)
+
 ```json
 {
   "number": 1,
@@ -174,6 +178,146 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 }
 ```
 
+### 예시 2: 보기(ㄱㄴㄷ)가 있는 선택형
+
+```json
+{
+  "number": 15,
+  "type": "choice",
+  "score": "4.2",
+  "difficulty": "상",
+  "subtopic": "수열의 극한(미적분)",
+  "has_figure": false,
+  "figure_info": null,
+  "parts": [
+    {"t": "수열 "},
+    {"eq": "{a_n}"},
+    {"t": "에 대하여 "},
+    {"eq": "lim_{n rarr infty} a_n = 3"},
+    {"t": "일 때, 옳은 것만을 <보기>에서 있는 대로 고른 것은?"}
+  ],
+  "choices": [
+    [{"t": "ㄱ"}],
+    [{"t": "ㄴ"}],
+    [{"t": "ㄱ, ㄴ"}],
+    [{"t": "ㄴ, ㄷ"}],
+    [{"t": "ㄱ, ㄴ, ㄷ"}]
+  ],
+  "answer": "④",
+  "condition_box": {
+    "type": "bogi",
+    "items": [
+      {
+        "label": "ㄱ",
+        "parts": [
+          {"eq": "lim_{n rarr infty} (a_n + 1) = 4"}
+        ]
+      },
+      {
+        "label": "ㄴ",
+        "parts": [
+          {"eq": "lim_{n rarr infty} 2 a_n = 6"}
+        ]
+      },
+      {
+        "label": "ㄷ",
+        "parts": [
+          {"eq": "lim_{n rarr infty} a_n^2 = 9"}
+        ]
+      }
+    ]
+  },
+  "bogi_box": null,
+  "data_table": null
+}
+```
+
+### 예시 3: 표(표준정규분포표)가 있는 선택형
+
+```json
+{
+  "number": 20,
+  "type": "choice",
+  "score": "4.2",
+  "difficulty": "상",
+  "subtopic": "통계적추정(확률과통계)",
+  "has_figure": false,
+  "figure_info": null,
+  "parts": [
+    {"t": "표준정규분포표를 이용하여 구한 값은?"}
+  ],
+  "choices": [
+    [{"eq": "0.14"}],
+    [{"eq": "0.16"}],
+    [{"eq": "0.18"}],
+    [{"eq": "0.20"}],
+    [{"eq": "0.22"}]
+  ],
+  "answer": "③",
+  "condition_box": null,
+  "bogi_box": null,
+  "data_table": {
+    "type": "normal_dist",
+    "headers": ["z", "P(0≤Z≤z)"],
+    "rows": [["1.0", "0.3413"], ["1.5", "0.4332"], ["2.0", "0.4772"]],
+    "header_parts": [
+      [{"eq": "z"}],
+      [{"eq": "rmP LEFT ( it 0 le Z le z RIGHT )"}]
+    ],
+    "row_parts": [
+      [[{"eq": "1.0"}], [{"eq": "0.3413"}]],
+      [[{"eq": "1.5"}], [{"eq": "0.4332"}]],
+      [[{"eq": "2.0"}], [{"eq": "0.4772"}]]
+    ]
+  }
+}
+```
+
+### 예시 4: 조건(condition_box)이 있는 서답형
+
+```json
+{
+  "number": 29,
+  "type": "essay",
+  "score": "4.2",
+  "difficulty": "킬",
+  "subtopic": "함수의 극한(미적분)",
+  "has_figure": false,
+  "figure_info": null,
+  "parts": [
+    {"t": "다음 조건을 만족시키는 함수 "},
+    {"eq": "f(x)"},
+    {"t": "에 대하여 "},
+    {"eq": "f(3)"},
+    {"t": "의 값을 구하시오."}
+  ],
+  "choices": null,
+  "answer": "24",
+  "condition_box": {
+    "type": "condition",
+    "items": [
+      {
+        "label": "(가)",
+        "parts": [
+          {"eq": "lim_{x rarr 1} {f(x) - 2} over {x - 1} = 3"}
+        ]
+      },
+      {
+        "label": "(나)",
+        "parts": [
+          {"t": "모든 실수 "},
+          {"eq": "x"},
+          {"t": "에 대하여 "},
+          {"eq": "f(x + 2) = f(x) + x"}
+        ]
+      }
+    ]
+  },
+  "bogi_box": null,
+  "data_table": null
+}
+```
+
 ### Parts 배열 규칙
 
 | 키 | 의미 | 예시 |
@@ -193,18 +337,24 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 
 ### 보기(condition_box) 구조
 
+**이미지에 보기/조건 박스가 보이면 반드시 채운다. `null` 금지.**
+
+- `"bogi"` — ㄱ/ㄴ/ㄷ 보기 박스
+- `"condition"` — (가)/(나) 조건 박스
+- `"empty_box"` — 빈 풀이 공간
+- `"proof"` — 증명틀
+- `"image_choice"` — 그림 보기틀
+
 ```json
 {
   "type": "bogi",
   "items": [
-    {"label": "ㄱ", "parts": [{"t": "조건 내용 "}, {"eq": "수식"}]},
-    {"label": "ㄴ", "parts": [...]},
-    {"label": "ㄷ", "parts": [...]}
+    {"label": "ㄱ", "parts": [{"t": "내용 "}, {"eq": "수식"}]},
+    {"label": "ㄴ", "parts": [{"eq": "수식"}]},
+    {"label": "ㄷ", "parts": [{"t": "내용"}]}
   ]
 }
 ```
-
-기타 타입: `empty_box` (빈 풀이 공간), `proof` (증명틀), `image_choice` (그림 보기틀)
 
 ### 데이터 테이블 구조
 
@@ -260,6 +410,9 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 - [ ] subtopic이 unit_classification.json의 정규 값인지
 - [ ] 선지 개수가 올바른지 (선택형: 5개, 서답형: null)
 - [ ] 정답이 있는지
+- [ ] **이미지에 보기(ㄱㄴㄷ) 박스가 있으면 `condition_box`가 채워져 있는지**
+- [ ] **이미지에 조건(가)(나) 박스가 있으면 `condition_box`가 채워져 있는지**
+- [ ] **이미지에 표(정규분포표, 확률분포표, 증감표 등)가 있으면 `data_table`이 채워져 있는지**
 
 ## 출력
 
