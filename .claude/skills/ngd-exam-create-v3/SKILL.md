@@ -50,6 +50,9 @@ ngd-exam-create-v3 (이 스킬 = 오케스트레이터)
 | `V3 resume --from=builder` | Phase 2 resume | builder부터 재실행 |
 | `V3 resume --q=3 --from=cleaned` | 지정 resume | 3번 이미지 정리부터 재실행 |
 | `V3 resume --q=3 --from=image_replace` | 이미지 교체 resume | 3번 원본 이미지 교체 후 정리→추출 자동 재실행 |
+| `V3 resume --from=extractor` | 전체 resume | 모든 문제 extractor부터 재실행 → [EXTRACTION_REVIEW] 출력 |
+| `V3 resume --from=solver` | 전체 resume | 모든 문제 solver부터 재실행 |
+| `V3 resume --from=verifier` | 전체 resume | 모든 문제 verifier부터 재실행 |
 | `V3 resume --from=figure` | Phase 2 resume | figure부터 재실행 |
 | `V3 resume --q=3 --from=figure` | 지정 resume | 3번 그림만 재처리 |
 | `V3 resume --from=confirm` | confirm | figure 결과 확인 완료 → builder 진행 |
@@ -140,6 +143,16 @@ def detect_resume_state(total_questions):
 3. `verified` → 스킵, `solved` → verifier부터, `extracted` → solver부터, `none` → extractor부터
 4. 모든 문제가 `verified`이면 Phase 2로 직접 진행
 5. `exam_data.json`이 있고 모든 verified가 있으면 → Phase 2(figure)부터 재실행
+
+**전체 resume with stage** (`--from=<stage>` — `--q` 미지정):
+1. `cleanup_from_stage(list(range(1, total+1)), from_stage)` 실행 — 전체 문제에 적용
+2. 전체 문제를 해당 단계부터 배치 병렬 실행 (Phase 1-A/1-B와 동일 방식)
+3. 완료 후 처리:
+   - `--from=extractor`: 전체 `[EXTRACTION_REVIEW]` 블록 출력 → Step 3.5
+   - `--from=solver`: solver → verifier 배치 처리 (Step 4로 진행)
+   - `--from=verifier`: verifier 배치 처리 후 Step 5로 진행
+
+> `--from=extractor/solver/verifier`에서 `--q`가 없으면 항상 이 분기. `--q`가 있으면 아래 "지정 resume"으로.
 
 **지정 resume** (`--q=3 --from=solver`):
 1. `cleanup_from_stage([3], 'solver')` 실행
@@ -550,14 +563,17 @@ for n in range(1, total_questions + 1):
 
 exam_data = {
     "info": {
-        "school": "...",
+        "school": "...",         # 학교명 (예: 소명여고등학교)
         "year": 2025,
         "semester": "1학기",
         "exam_type": "중간",
         "grade": 2,
         "subject": "수학 I",
+        "subject_code": "수1",   # 파일명용 과목 약칭
         "textbook": "",
-        "range": "...",
+        "range": "...",          # 범위 (예: 지수로그함수~삼각함수)
+        "region": "...",         # 지역 (예: 경기부천시)
+        "code": "00000",         # 작업 코드
         "total_pages": 5
     },
     "problems": problems
@@ -594,25 +610,26 @@ Bash("python3 figure_processor.py", run_in_background=True)
 
 ---
 
-### Step 6: Phase 2 — Builder 호출
+### Step 6: Phase 2 — HWPX 조립
 
-Agent 도구로 `ngd-exam-builder` 에이전트를 호출:
+`build_hwpx.py` 스크립트를 직접 실행:
 
+```python
+JSON_PATH = "inputs/시험지 제작/.v3cache/exam_data.json"
+OUTPUT_DIR = "outputs"
+
+Bash(f"python3 /mnt/c/NGD/build_hwpx.py {JSON_PATH} {OUTPUT_DIR}")
 ```
-Agent(subagent_type="ngd-exam-builder", prompt="""
-inputs/시험지 제작/.v3cache/exam_data.json과 outputs/images/의 이미지로 HWPX를 생성해줘
-- 양식지: ngd-studio/inputs/시험지 제작/[NGD고등부]기출작업양식지[2025년08월10일].hwpx
-- 모든 문제, 해설, 이미지 빠짐없이 포함
-- 특수 테이블(표준정규분포표, 확률분포표, 증감표 등)은 양식지에서 XML 템플릿을 추출하여 사용 (docs/hwpx-templates.md 참조)
-  - data_table.type == "normal_dist" → 양식지의 "표준 정규분포표" 템플릿
-  - data_table.type == "probability" → 양식지의 "확률분포표 양식" 템플릿
-  - data_table.type == "increase_decrease" → 양식지의 "함수 증감표양식" 템플릿
-  - explanation_table.type == "synthetic_division" → 양식지의 "조립제법 틀" 템플릿
-- fix_namespaces.py 후처리 필수
-- validate.py --fix 검증 필수
-- outputs/에 파일명 규칙대로 저장
-""")
+
+성공 시 출력에서 `HWPX written: <경로>` 확인 후 후처리:
+
+```python
+# 출력 파일 경로 파악 후
+Bash(f"python3 /mnt/c/NGD/.claude/skills/ngd-exam-create/scripts/fix_namespaces.py <hwpx_path>")
+Bash(f"python3 /mnt/c/NGD/.claude/skills/ngd-exam-create/scripts/validate.py --fix <hwpx_path>")
 ```
+
+**실패 시**: 에러 메시지를 그대로 리포트하고 중단. 스크립트 재실행은 동일한 결과가 나오므로 의미 없음.
 
 **확인**: HWPX 파일 생성, 문제 누락 없는지 검증.
 
@@ -630,9 +647,9 @@ Agent(subagent_type="ngd-exam-checker", prompt="""
 
 ### Step 8: Checker 피드백 반영 (최대 2회)
 
-checker FAIL 시 해당 에이전트 재호출:
-- XML 구조 오류 → builder 재호출
-- 수식 오류 → builder 재호출 (V3에서는 해설 오류는 verifier가 이미 잡았으므로 거의 없음)
+checker FAIL 시:
+- XML 구조 오류 / 수식 오류 → 에러 내용 리포트 (스크립트 재실행 불가, 수동 확인 필요)
+- 내용 누락 / 순서 오류 → exam_data.json 수정 후 Step 6 재실행
 - 수정 후 checker 재호출 (최대 2회)
 
 ---

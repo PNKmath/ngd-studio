@@ -121,16 +121,17 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 3. **배점**: 문자열 (예: `"3.6"`)
 4. **본문**: `parts` 배열 형식으로 텍스트/수식 교차 배치
 5. **선지**: 선택형이면 5개 선지 (각각 parts 배열), 서답형이면 `null`
-6. **정답**: 선택형은 원숫자 (`"②"`), 서답형은 수식 값
-7. **그림 유무**: `has_figure` (boolean)
+6. **그림 유무**: `has_figure` (boolean)
 8. **그림 정보**: 그림이 있으면 아래 3가지를 포함
    - `description_en`: 영어로 그림 내용 기술 (nano-banana 프롬프트에 사용)
    - `position`: 그림 위치 (`"right"`, `"center"`, `"below"`)
    - `crop_ratio`: 문제 이미지 내 그림 영역의 **비율 좌표** `[left, top, right, bottom]` (0.0~1.0). figure 에이전트가 이 좌표로 문제 이미지에서 그림만 잘라냄
-9. **단원 분류**: `subtopic` (unit_classification.json 정규 값)
-10. **난이도**: 하/중/상/킬
-11. **단서 조항**: `condition_box` (보기, 빈박스, 증명틀 등)
-12. **데이터 테이블**: `data_table` (표가 있는 경우)
+8. **단원 분류**: `subtopic` (unit_classification.json 정규 값)
+9. **난이도**: 하/중/상/킬
+10. **단서 조항**: `condition_box` (보기, 빈박스, 증명틀 등)
+11. **데이터 테이블**: `data_table` (표가 있는 경우)
+
+> **정답(`answer`) 필드는 추출하지 않는다.** 입력 이미지는 학생이 푼 시험지이므로 학생이 표시한 답이 보일 수 있다. 이를 정답으로 오인하는 것을 방지하기 위해 answer 추출은 하지 않는다. 정답 도출은 solver가 담당한다.
 
 ### 3. 출력 JSON 저장
 
@@ -171,7 +172,6 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
     [{"eq": "4"}],
     [{"eq": "5"}]
   ],
-  "answer": "②",
   "condition_box": null,
   "bogi_box": null,
   "data_table": null
@@ -203,7 +203,6 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
     [{"t": "ㄴ, ㄷ"}],
     [{"t": "ㄱ, ㄴ, ㄷ"}]
   ],
-  "answer": "④",
   "condition_box": {
     "type": "bogi",
     "items": [
@@ -253,7 +252,6 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
     [{"eq": "0.20"}],
     [{"eq": "0.22"}]
   ],
-  "answer": "③",
   "condition_box": null,
   "bogi_box": null,
   "data_table": {
@@ -292,7 +290,6 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
     {"t": "의 값을 구하시오."}
   ],
   "choices": null,
-  "answer": "24",
   "condition_box": {
     "type": "condition",
     "items": [
@@ -409,7 +406,6 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 - [ ] 수식이 `_`로 시작하지 않는지
 - [ ] subtopic이 unit_classification.json의 정규 값인지
 - [ ] 선지 개수가 올바른지 (선택형: 5개, 서답형: null)
-- [ ] 정답이 있는지
 - [ ] **이미지에 보기(ㄱㄴㄷ) 박스가 있으면 `condition_box`가 채워져 있는지**
 - [ ] **이미지에 조건(가)(나) 박스가 있으면 `condition_box`가 채워져 있는지**
 - [ ] **이미지에 표(정규분포표, 확률분포표, 증감표 등)가 있으면 `data_table`이 채워져 있는지**
@@ -421,6 +417,6 @@ HWPX에서는 **모든 수학적 내용**이 `<hp:equation>`으로 들어간다.
 === 문제 추출 결과 ===
 문제 N번: [유형] / 배점 X.X / 단원: [subtopic] / 난이도: [난이도]
 그림: 있음/없음
-선지: N개 / 정답: [정답]
+선지: N개
 JSON 저장: inputs/시험지 제작/.v3cache/q{N}_extracted.json
 ```

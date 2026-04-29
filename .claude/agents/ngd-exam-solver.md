@@ -185,8 +185,9 @@ feedback 예시:
 1. extractor JSON 읽기 → 문제 내용 파악
 2. 교과 컨텍스트 확인 (제공된 경우)
 3. verifier feedback 확인 (제공된 경우)
-4. 풀이 과정을 `explanation_parts` 형식으로 생성
-5. 출력 JSON 저장
+4. **문제를 독립적으로 풀어 정답 도출** — extractor JSON에 `answer` 필드가 있어도 무시한다
+5. 풀이 과정을 `explanation_parts` 형식으로 생성
+6. 출력 JSON 저장
 
 ### 출력 JSON 형식
 
@@ -207,6 +208,8 @@ feedback 예시:
   ]
 }
 ```
+
+> `answer`는 solver가 **직접 풀어서 도출한 값**이다. 선택형은 원숫자(`"②"` 등), 서답형은 수식 값.
 
 ### 저장
 
