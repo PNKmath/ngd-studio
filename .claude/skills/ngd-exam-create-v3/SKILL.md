@@ -134,7 +134,7 @@ rm -f "inputs/시험지 제작/question_images/q"*.png
    - 또는 프롬프트에서 지정한 경로
 2. 이미지 개수 = 문제 수 확인
 3. 메타 정보 확인 (학교, 학년, 과목, 범위 — 프롬프트에서 제공 또는 기존 exam_data.json에서 로드)
-4. 양식지 존재 확인: `inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx`
+4. 양식지 존재 확인: `ngd-studio/inputs/시험지 제작/[NGD고등부]기출작업양식지[2025년08월10일].hwpx`
 5. GEMINI_API_KEY 환경변수 확인
 
 ```bash
@@ -509,7 +509,7 @@ Agent 도구로 `ngd-exam-builder` 에이전트를 호출:
 ```
 Agent(subagent_type="ngd-exam-builder", prompt="""
 inputs/시험지 제작/.v3cache/exam_data.json과 outputs/images/의 이미지로 HWPX를 생성해줘
-- 양식지: inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx
+- 양식지: ngd-studio/inputs/시험지 제작/[NGD고등부]기출작업양식지[2025년08월10일].hwpx
 - 모든 문제, 해설, 이미지 빠짐없이 포함
 - 특수 테이블(표준정규분포표, 확률분포표, 증감표 등)은 양식지에서 XML 템플릿을 추출하여 사용 (docs/hwpx-templates.md 참조)
   - data_table.type == "normal_dist" → 양식지의 "표준 정규분포표" 템플릿

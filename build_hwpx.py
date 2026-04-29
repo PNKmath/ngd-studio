@@ -155,7 +155,7 @@ def make_lineseg(vertpos=0, vertsize=1000, textheight=1000, baseline=850, spacin
             f'spacing="{spacing}" horzpos="0" horzsize="{horzsize}" flags="393216"/>'
             f'</hp:linesegarray>')
 
-def make_paragraph(content="", para_id="2147483648", paraPrIDRef="1", charPrIDRef="7",
+def make_paragraph(content="", para_id="2147483648", paraPrIDRef="0", charPrIDRef="1",
                    pageBreak="0", columnBreak="0", vertpos=0,
                    vertsize=1000, textheight=1000, baseline=850, spacing=600, horzsize=30188):
     if content:
@@ -172,7 +172,7 @@ def make_paragraph(content="", para_id="2147483648", paraPrIDRef="1", charPrIDRe
                 f'</hp:p>')
 
 def make_empty_para(para_id="0"):
-    return make_paragraph(content="", para_id=para_id, charPrIDRef="7",
+    return make_paragraph(content="", para_id=para_id, charPrIDRef="1",
                          vertsize=1000, textheight=1000, baseline=850, spacing=600)
 
 def make_colbreak():
@@ -227,8 +227,8 @@ def make_choices_xml(choices):
                 elif "t" in part:
                     line1_content += f'<hp:t>{xml_escape(part["t"])}</hp:t>'
 
-        p1 = (f'<hp:p id="2147483648" paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-              f'<hp:run charPrIDRef="7">{line1_content}</hp:run>'
+        p1 = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+              f'<hp:run charPrIDRef="1">{line1_content}</hp:run>'
               f'{make_lineseg(0, max_eq_params1[0], max_eq_params1[1], max_eq_params1[2], max_eq_params1[3])}'
               f'</hp:p>')
         paragraphs.append(p1)
@@ -251,8 +251,8 @@ def make_choices_xml(choices):
                     elif "t" in part:
                         line2_content += f'<hp:t>{xml_escape(part["t"])}</hp:t>'
 
-            p2 = (f'<hp:p id="2147483648" paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-                  f'<hp:run charPrIDRef="7">{line2_content}</hp:run>'
+            p2 = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                  f'<hp:run charPrIDRef="1">{line2_content}</hp:run>'
                   f'{make_lineseg(0, max_eq_params2[0], max_eq_params2[1], max_eq_params2[2], max_eq_params2[3])}'
                   f'</hp:p>')
             paragraphs.append(p2)
@@ -270,8 +270,8 @@ def make_choices_xml(choices):
                 elif "t" in part:
                     content += f'<hp:t>{xml_escape(part["t"])}</hp:t>'
 
-            p = (f'<hp:p id="2147483648" paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-                 f'<hp:run charPrIDRef="7">{content}</hp:run>'
+            p = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                 f'<hp:run charPrIDRef="1">{content}</hp:run>'
                  f'{make_lineseg(0, max_eq[0], max_eq[1], max_eq[2], max_eq[3])}'
                  f'</hp:p>')
             paragraphs.append(p)
@@ -288,13 +288,13 @@ def make_endnote(number, answer, explanation_parts, prob_type="choice"):
     else:
         answer_text = f' [정답] {answer}'
 
-    answer_run = (f'<hp:run charPrIDRef="5">'
+    answer_run = (f'<hp:run charPrIDRef="11">'
                   f'<hp:ctrl><hp:autoNum num="{number}" numType="ENDNOTE">'
                   f'<hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar="." supscript="0"/>'
                   f'</hp:autoNum></hp:ctrl></hp:run>'
-                  f'<hp:run charPrIDRef="7"><hp:t>{xml_escape(answer_text)}</hp:t></hp:run>')
+                  f'<hp:run charPrIDRef="1"><hp:t>{xml_escape(answer_text)}</hp:t></hp:run>')
 
-    answer_p = (f'<hp:p id="2147483648" paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+    answer_p = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
                 f'{answer_run}'
                 f'{make_lineseg(0, 1200, 1200, 1020, 720)}'
                 f'</hp:p>')
@@ -318,8 +318,8 @@ def make_endnote(number, answer, explanation_parts, prob_type="choice"):
     for parts_group in explanation_paragraphs:
         content, max_eq = parts_to_run_content(parts_group)
         if content:
-            expl_xml += (f'<hp:p id="0" paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-                        f'<hp:run charPrIDRef="7">{content}</hp:run>'
+            expl_xml += (f'<hp:p id="0" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                        f'<hp:run charPrIDRef="1">{content}</hp:run>'
                         f'{make_lineseg(0, max_eq[0], max_eq[1], max_eq[2], max_eq[3])}'
                         f'</hp:p>')
 
@@ -362,7 +362,7 @@ def make_condition_rect(condition_box):
                 item_run_content += f'<hp:t>{xml_escape(part["t"])}</hp:t>'
 
         items_content += (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-                         f'<hp:run charPrIDRef="7">{item_run_content}</hp:run>'
+                         f'<hp:run charPrIDRef="1">{item_run_content}</hp:run>'
                          f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="{vpos}" '
                          f'vertsize="{max_eq[0]}" textheight="{max_eq[1]}" baseline="{max_eq[2]}" '
                          f'spacing="{max_eq[3]}" horzpos="0" horzsize="27736" flags="393216"/>'
@@ -608,8 +608,8 @@ for prob in problems:
             prob_content += f'<hp:t>{xml_escape(text)}</hp:t>'
 
     # Problem paragraph
-    prob_p = (f'<hp:p id="2147483648" paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-              f'<hp:run charPrIDRef="7">{prob_content}</hp:run>'
+    prob_p = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+              f'<hp:run charPrIDRef="1">{prob_content}</hp:run>'
               f'{make_lineseg(0, max_eq_params[0], max_eq_params[1], max_eq_params[2], max_eq_params[3])}'
               f'</hp:p>')
     problem_paras.append(prob_p)
@@ -626,8 +626,8 @@ for prob in problems:
             extra_images.append((f"image3.bmp", bmp_data))
 
             pic_xml = make_pic_xml("image3.bmp", img_path)
-            pic_p = (f'<hp:p id="2147483648" paraPrIDRef="2" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-                     f'<hp:run charPrIDRef="7">{pic_xml}<hp:t/></hp:run>'
+            pic_p = (f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                     f'<hp:run charPrIDRef="1">{pic_xml}<hp:t/></hp:run>'
                      f'{make_lineseg(0, 1000, 1000, 850, 600)}'
                      f'</hp:p>')
             problem_paras.append(pic_p)
@@ -639,8 +639,8 @@ for prob in problems:
         if cond_type == "condition":
             rect_xml = make_condition_rect(condition_box)
             # Wrap in a paragraph
-            cond_p = (f'<hp:p id="2147483648" paraPrIDRef="1" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-                      f'<hp:run charPrIDRef="7">{rect_xml}<hp:t/></hp:run>'
+            cond_p = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                      f'<hp:run charPrIDRef="1">{rect_xml}<hp:t/></hp:run>'
                       f'{make_lineseg(0, 1000, 1000, 850, 600)}'
                       f'</hp:p>')
             problem_paras.append(cond_p)
@@ -655,14 +655,14 @@ for prob in problems:
         if dt_label:
             label_p = make_paragraph(
                 content=f'<hp:t>{xml_escape(dt_label)}</hp:t>',
-                paraPrIDRef="2", charPrIDRef="7",
+                paraPrIDRef="3", charPrIDRef="1",
                 vertsize=1000, textheight=1000, baseline=850, spacing=600
             )
             problem_paras.append(label_p)
 
         tbl_xml = make_data_table_xml(data_table)
-        tbl_p = (f'<hp:p id="2147483648" paraPrIDRef="2" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
-                 f'<hp:run charPrIDRef="7">{tbl_xml}<hp:t/></hp:run>'
+        tbl_p = (f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                 f'<hp:run charPrIDRef="1">{tbl_xml}<hp:t/></hp:run>'
                  f'{make_lineseg(0, 1000, 1000, 850, 600)}'
                  f'</hp:p>')
         problem_paras.append(tbl_p)
@@ -677,7 +677,7 @@ for prob in problems:
     topic_name = get_subtopic_name(prob.get("subtopic", ""))
     meta_topic = make_paragraph(
         content=f'<hp:t>[중단원] {xml_escape(topic_name)}</hp:t>',
-        charPrIDRef="4",
+        charPrIDRef="2",
         vertsize=1000, textheight=1000, baseline=850, spacing=600
     )
     problem_paras.append(meta_topic)
@@ -685,7 +685,7 @@ for prob in problems:
     difficulty = prob.get("difficulty", "중")
     meta_diff = make_paragraph(
         content=f'<hp:t>[난이도] {xml_escape(difficulty)}</hp:t>',
-        charPrIDRef="4",
+        charPrIDRef="2",
         vertsize=1000, textheight=1000, baseline=850, spacing=600
     )
     problem_paras.append(meta_diff)
@@ -750,6 +750,10 @@ with zipfile.ZipFile(output_path, 'w') as zout:
     zout.write(f'{BASE}/BinData/image1.bmp', 'BinData/image1.bmp', compress_type=zipfile.ZIP_DEFLATED)
     zout.write(f'{BASE}/Contents/masterpage0.xml', 'Contents/masterpage0.xml', compress_type=zipfile.ZIP_DEFLATED)
     zout.write(f'{BASE}/BinData/image2.bmp', 'BinData/image2.bmp', compress_type=zipfile.ZIP_DEFLATED)
+    for img_idx in range(3, 9):
+        img_path = f'{BASE}/BinData/image{img_idx}.bmp'
+        if os.path.exists(img_path):
+            zout.write(img_path, f'BinData/image{img_idx}.bmp', compress_type=zipfile.ZIP_DEFLATED)
 
     # Extra images (Q18 figure)
     for img_name, img_data in extra_images:
