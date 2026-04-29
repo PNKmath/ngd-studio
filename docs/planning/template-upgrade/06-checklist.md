@@ -10,46 +10,46 @@
 ## Phase 1: 경로 참조 일괄 교체 → [01-path-references.md](./01-path-references.md)
 
 ### 사전 검증
-- [ ] 신규 양식지 파일 존재 확인 (`ngd-studio/inputs/시험지 제작/[…2025년08월10일].hwpx`)
-- [ ] 옛 양식지 파일 보존 확인 (`inputs/시험지 제작/[…2022년5월20일].hwpx`)
-- [ ] 변경 대상 8건 grep 일치
+- [x] 신규 양식지 파일 존재 확인 (`ngd-studio/inputs/시험지 제작/[…2025년08월10일].hwpx`)
+- [x] 옛 양식지 파일 보존 확인 (`inputs/시험지 제작/[…2022년5월20일].hwpx`)
+- [x] 변경 대상 8건 grep 일치
 
 ### 경로 갱신 (8건)
-- [ ] `.claude/skills/ngd-exam-create/SKILL.md:28`
-- [ ] `.claude/skills/ngd-exam-create/SKILL.md:81`
-- [ ] `.claude/skills/ngd-exam-create-v3/skill.md:137`
-- [ ] `.claude/skills/ngd-exam-create-v3/skill.md:512`
-- [ ] `docs/builder-upgrade-todo.md:57`
-- [ ] `docs/hwpx-templates.md:3`
-- [ ] `ngd-studio/scripts/test-sse.sh:13` (HWPX_TEMPLATE_PATH)
-- [ ] `.claude/data/unit_classification.json:3` (source 필드)
+- [x] `.claude/skills/ngd-exam-create/SKILL.md:28`
+- [x] `.claude/skills/ngd-exam-create/SKILL.md:81`
+- [x] `.claude/skills/ngd-exam-create-v3/skill.md:137`
+- [x] `.claude/skills/ngd-exam-create-v3/skill.md:512`
+- [x] `docs/builder-upgrade-todo.md:57`
+- [x] `docs/hwpx-templates.md:3`
+- [x] `ngd-studio/scripts/test-sse.sh:13` (HWPX_TEMPLATE_PATH)
+- [x] `.claude/data/unit_classification.json:3` (source 필드)
 
 ### 사후 검증
-- [ ] 옛 경로 잔여 grep 0건 (ngd-studio/data/jobs 제외)
-- [ ] 신규 경로 grep 8건 이상
-- [ ] `unit_classification.json` valid JSON
-- [ ] `git diff`로 의도하지 않은 변경 없음 확인
+- [x] 옛 경로 잔여 grep 0건 (ngd-studio/data/jobs 제외)
+- [x] 신규 경로 grep 8건 이상
+- [x] `unit_classification.json` valid JSON
+- [x] `git diff`로 의도하지 않은 변경 없음 확인
 
 ---
 
 ## Phase 2: 신규 양식지 진단 → [02-template-diagnosis.md](./02-template-diagnosis.md)
 
 ### 비교/추출
-- [ ] ZIP 구조 변화 표 작성
-- [ ] `content.hpf` 비교 (item 추가/삭제/변경)
-- [ ] `header.xml` charPr/paraPr/borderFill/style ID 매핑 표
-- [ ] `header.xml` 기준 builder 영향 분석 (`build_hwpx.py` charPrIDRef 사용처)
-- [ ] `masterpage0.xml` 머릿말/꼬릿말 변경 요약
-- [ ] `section0.xml` secPr 변경 요약
-- [ ] 단원분류표(8p) raw 텍스트 추출 (Phase 4 입력)
-- [ ] 18개 base_hwpx 템플릿 매핑 표 (UNCHANGED/CHANGED/MISSING)
-- [ ] NEW 템플릿 후보 식별
+- [x] ZIP 구조 변화 표 작성
+- [x] `content.hpf` 비교 (item 추가/삭제/변경)
+- [x] `header.xml` charPr/paraPr/borderFill/style ID 매핑 표
+- [x] `header.xml` 기준 builder 영향 분석 (`build_hwpx.py` charPrIDRef 사용처)
+- [x] `masterpage0.xml` 머릿말/꼬릿말 변경 요약
+- [x] `section0.xml` secPr 변경 요약
+- [x] 단원분류표(8p) raw 텍스트 추출 (Phase 4 입력)
+- [x] 18개 base_hwpx 템플릿 매핑 표 (UNCHANGED/CHANGED/MISSING)
+- [x] NEW 템플릿 후보 식별
 
 ### 산출물
-- [ ] `docs/planning/template-upgrade/diagnosis-report.md` 생성 (9개 섹션 모두)
-- [ ] §6 18개 행 모두 분류 완료
-- [ ] §3.5 builder 영향 분석 결론 명시
-- [ ] §8/§9 다음 페이즈 권고 작성
+- [x] `docs/planning/template-upgrade/diagnosis-report.md` 생성 (9개 섹션 모두)
+- [x] §6 18개 행 모두 분류 완료
+- [x] §3.5 builder 영향 분석 결론 명시
+- [x] §8/§9 다음 페이즈 권고 작성
 
 ---
 
@@ -161,12 +161,12 @@
 
 | Phase | 항목 수 | 완료 | 상태 | 보고서 |
 |---|---|---|---|---|
-| 1: 경로 참조 | 14 | 0 | ⬜ 대기 | (간단 — 별도 보고서 없음) |
-| 2: 신규 양식지 진단 | 13 | 0 | ⬜ 대기 | `diagnosis-report.md` |
+| 1: 경로 참조 | 14 | 14 | ✅ 완료 | (간단 — 별도 보고서 없음) |
+| 2: 신규 양식지 진단 | 13 | 13 | ✅ 완료 | `diagnosis-report.md` |
 | 3: base_hwpx 재추출 | 27 | 0 | ⬜ 대기 | `extraction-report.md` |
 | 4: 단원분류표 재검증 | 11 | 0 | ⬜ 대기 | `unit-classification-report.md` |
 | 5: 통합 검증 | 18 | 0 | ⬜ 대기 | `integration-report.md` |
-| **합계** | **83** | **0** | ⬜ 대기 | — |
+| **합계** | **83** | **27** | 🟡 진행중 | — |
 
 상태 표기: ⬜ 대기 / 🟡 진행중 / ✅ 완료 / ❌ FAIL (회귀)
 

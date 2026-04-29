@@ -10,7 +10,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "=== 1. SSE 서버 시작 ==="
-HWPX_TEMPLATE_PATH="inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx" \
+HWPX_TEMPLATE_PATH="inputs/시험지 제작/[NGD고등부]기출작업양식지[2025년08월10일].hwpx" \
   npx tsx server/sse.ts &
 SSE_PID=$!
 sleep 3

@@ -25,7 +25,7 @@ ngd-exam-create (이 스킬 = 오케스트레이터)
 ### Step 1: 입력 확인
 
 - PDF 파일 경로 확인 (`inputs/시험지 제작/` 폴더)
-- 양식지 존재 확인: `inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx`
+- 양식지 존재 확인: `ngd-studio/inputs/시험지 제작/[NGD고등부]기출작업양식지[2025년08월10일].hwpx`
 - GEMINI_API_KEY 환경변수 확인 (그림 처리용)
 
 ### Step 2: reader 에이전트 호출
@@ -78,7 +78,7 @@ Agent 도구로 `ngd-exam-builder` 에이전트를 호출한다:
 
 ```
 inputs/시험지 제작/.v3cache/exam_data.json과 outputs/images/의 이미지로 HWPX를 생성해줘
-- 양식지: inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx
+- 양식지: ngd-studio/inputs/시험지 제작/[NGD고등부]기출작업양식지[2025년08월10일].hwpx
 - 참조용: inputs/오검/ 폴더의 HWPX
 - 모든 문제, 해설, 이미지 빠짐없이 포함
 - 배점 수식은 <hp:t>[</hp:t><hp:equation>...</hp:equation><hp:t>점]</hp:t> 구조
