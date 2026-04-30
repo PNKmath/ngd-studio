@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Backup files
+*.backup*
+*.bak-*
+*.bak
+archive/*.backup*
+
+# Runtime cache
+.v3cache/
+.v3cache_prev/
+inputs/시험지 제작/.v3cache/
+inputs/시험지 제작/.v3cache_prev/
+inputs/시험지 제작/session_meta.json
+inputs/시험지 제작/question_images/
+
+# Job-specific input files (not templates)
+inputs/시험지 제작/*.pdf
+inputs/오검/*.pdf
+inputs/오검/*.hwpx
+inputs/오검/*.hwp
+!inputs/오검/2.5..NGD오검 체크리스트.*
+
+# Generated outputs
+outputs/
+
+# NGD Studio runtime
+ngd-studio/bat_*.txt
+ngd-studio/sse_test*.txt
+ngd-studio/data/jobs/
+
+# Node
+ngd-studio/node_modules/
+ngd-studio/.next/
