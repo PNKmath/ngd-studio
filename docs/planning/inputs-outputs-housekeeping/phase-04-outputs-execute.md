@@ -123,3 +123,18 @@ test "$(find /mnt/c/NGD/archive/outputs/ -maxdepth 1 -type f | wc -l)" -eq 12 \
 **추가 발견사항**: 없음
 
 **질문**: 없음
+
+#### Scope Audit (orchestrator)
+pass — outputs/(scope, 사전 ignored), archive/outputs/(scope), phase-04 본인 파일(workflow). 무관 파일 변경 없음.
+
+#### Verification Re-run (orchestrator)
+1회차 exit 1 (rtk의 `(empty)` 데코레이션 + `**active**` bold 미매칭 regex) → fix_required → 2회차 exit 0 (find 기반으로 정정).
+
+#### Simplify (orchestrator)
+스킵 — 변경 파일은 phase-04 본인 파일만 (실제 outputs는 ignored). 마크다운 외 정리 대상 없음.
+
+#### Review (orchestrator)
+VERDICT: pass — outputs/ empty(0개), archive/outputs/ 12개 inventory archive 분류와 100% 일치. archive 구조 미세 불일치(사용자 "단일 폴더" 답변 vs spec의 `archive/outputs/`)는 archive 전체 ignored이므로 functional 영향 없음 — pass.
+
+#### Commit
+3d56b10 — `chore(housekeeping): Phase 4 — outputs/ 정리`

@@ -121,7 +121,7 @@ exit 0 — 체크리스트 2종 존재, inputs/오검/에 2개만 남음, git st
 VERDICT: pass — A~I 통과. 체크리스트 보존, scope 격리. 체크리스트 [ ] 잔존은 경미 — orchestrator가 commit 전 [x]로 정정.
 
 #### Commit
-({hash} — 다음 단계에서 채움)
+cbd8dc5 — `chore(housekeeping): Phase 6 — inputs/오검/ 정리`
 ✓ 체크리스트 2개만 남음
 ✓ git tracked 변경 없음 (모두 untracked 파일 삭제)
 ✓ 6개 파일 정상 삭제

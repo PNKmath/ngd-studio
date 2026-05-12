@@ -126,3 +126,18 @@ cd /mnt/c/NGD && git status --short
 - `ngd-studio/inputs/시험지 제작/` → V3 양식지(2025) 1개만 존재
 - `git ls-files` → 2022 양식지 2곳 모두 인덱스에서 제거됨, V3 양식지만 tracked
 - `git status` → 2022 양식지 2곳 `D` (deleted from index) 표시 확인
+
+#### Scope Audit (orchestrator)
+pass — inputs/시험지 제작/(scope, 비움), ngd-studio/inputs/시험지 제작/(scope, V3만 유지), phase-05 본인 파일(workflow). archive/inputs/시험지 제작/, archive/templates/은 사용되지 않음 (스펙대로 이동 대상 없음).
+
+#### Verification Re-run (orchestrator)
+exit 0 — V3 양식지 단일, inputs/시험지 제작/ empty, 구버전 양식지 2곳 git `D` 확인.
+
+#### Simplify (orchestrator)
+스킵 — 마크다운 문서 외 수정 대상 없음.
+
+#### Review (orchestrator)
+VERDICT: pass — 모든 spot check 통과. V3 양식지 무손상, scope 이탈 없음.
+
+#### Commit
+c6e62cf — `chore(housekeeping): Phase 5 — inputs/시험지 제작/ 정리`
