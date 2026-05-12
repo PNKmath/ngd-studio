@@ -281,16 +281,28 @@ def make_choices_xml(choices):
 
     return "".join(paragraphs)
 
+_HWP_EQ_MARKERS = ['over', 'sqrt', 'left(', 'right)', 'int_', 'sum_', 'LSUB', 'LSUP', 'cdot', 'leq', 'geq']
+
+def _is_hwp_eq_string(s):
+    s = str(s)
+    return ('{' in s and any(m in s for m in _HWP_EQ_MARKERS)) or ('^' in s and ('{' in s or 'x' in s))
+
 def make_endnote(number, answer, explanation_parts, prob_type="choice", explanation_table=None):
     """Generate endNote XML"""
     inst_id = next_inst_id()
 
-    answer_text = f' [정답] {answer}'
+    ans_str = str(answer)
+    if prob_type == "essay" and _is_hwp_eq_string(ans_str):
+        answer_content = f'<hp:t> [정답] </hp:t>' + make_equation_xml(ans_str)
+    else:
+        answer_text = f' [정답] {ans_str}'
+        answer_content = f'<hp:t>{xml_escape(answer_text)}</hp:t>'
+
     answer_run = (f'<hp:run charPrIDRef="11">'
                   f'<hp:ctrl><hp:autoNum num="{number}" numType="ENDNOTE">'
                   f'<hp:autoNumFormat type="DIGIT" userChar="" prefixChar="" suffixChar="." supscript="0"/>'
                   f'</hp:autoNum></hp:ctrl></hp:run>'
-                  f'<hp:run charPrIDRef="1"><hp:t>{xml_escape(answer_text)}</hp:t></hp:run>')
+                  f'<hp:run charPrIDRef="1">{answer_content}</hp:run>')
 
     answer_p = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
                 f'{answer_run}'
@@ -410,33 +422,38 @@ def make_data_table_xml(data_table):
         with open(f"{BASE}/{tpl_name}", "r", encoding="utf-8") as f:
             tbl_xml = f.read()
 
-        # Replace IDs
-        tbl_xml = tbl_xml.replace("{{TABLE_ID}}", str(next_eq_id()))
-        tbl_xml = tbl_xml.replace("{{ZORDER}}", str(next_zorder()))
+        # 템플릿에 placeholder가 없고 ID/예시값이 하드코딩되어 있어,
+        # ID는 정규식으로 새로 할당하고 데이터 셀은 비운 뒤 입력값으로 주입한다.
+        tbl_xml = _replace_table_ids(tbl_xml)
 
-        # Replace equation IDs (count them from template)
-        import re as _re
-        eq_count = len(_re.findall(r'\{\{EQ_ID_\d+\}\}', tbl_xml))
-        for i in range(1, eq_count + 1):
-            tbl_xml = tbl_xml.replace(f"{{{{EQ_ID_{i}}}}}", str(next_eq_id()))
-            tbl_xml = tbl_xml.replace(f"{{{{EQ_ZO_{i}}}}}", str(next_zorder()))
+        template_rows = int(re.search(r'normal_dist_(\d+)rows', tpl_name).group(1))
+        cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
 
-        # Replace Z and P values from row_parts
-        for ri, row in enumerate(row_parts):
-            row_num = ri + 1
-            # row = [[{"eq": "1.0"}], [{"eq": "0.3413"}]]
-            z_val = ""
-            p_val = ""
-            if len(row) >= 1:
-                for part in row[0]:
-                    z_val += part.get("eq", part.get("t", ""))
-            if len(row) >= 2:
-                for part in row[1]:
-                    p_val += part.get("eq", part.get("t", ""))
-            tbl_xml = tbl_xml.replace(f"{{{{Z_{row_num}}}}}", z_val)
-            tbl_xml = tbl_xml.replace(f"{{{{P_{row_num}}}}}", p_val)
+        # 셀 [0]=제목, [1..2]=헤더(z, P), [3..]=데이터 셀 (Z, P 쌍)
+        for i in range(3, 3 + template_rows * 2):
+            if i < len(cells):
+                cells[i] = _empty_cell(cells[i])
 
-        return tbl_xml
+        for ri, row in enumerate(row_parts[:template_rows]):
+            z_idx = 3 + ri * 2
+            p_idx = 4 + ri * 2
+            if p_idx >= len(cells):
+                break
+            z_val = "".join(part.get("eq", part.get("t", "")) for part in row[0]) if len(row) >= 1 else ""
+            p_val = "".join(part.get("eq", part.get("t", "")) for part in row[1]) if len(row) >= 2 else ""
+            if z_val:
+                cells[z_idx] = _inject_cell_value(cells[z_idx], z_val)
+            if p_val:
+                cells[p_idx] = _inject_cell_value(cells[p_idx], p_val)
+
+        # 재조립: 제목 1셀 + 헤더 2셀 + 데이터 행(Z, P) × template_rows
+        header_tag = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
+        trs = f'<hp:tr>{cells[0]}</hp:tr>'
+        trs += f'<hp:tr>{cells[1]}{cells[2]}</hp:tr>'
+        for ri in range(template_rows):
+            z_idx = 3 + ri * 2
+            trs += f'<hp:tr>{cells[z_idx]}{cells[z_idx + 1]}</hp:tr>'
+        return header_tag + trs + '</hp:tbl>'
 
     elif dt_type == "probability":
         # header_parts: x값 목록 [[{"eq":"0"}], [{"eq":"1"}], ...]
@@ -458,14 +475,8 @@ def make_data_table_xml(data_table):
         with open(f"{BASE}/{tpl_name}", "r", encoding="utf-8") as f:
             tbl_xml = f.read()
 
-        tbl_xml = tbl_xml.replace("{{TABLE_ID}}", str(next_eq_id()))
-        tbl_xml = tbl_xml.replace("{{ZORDER}}", str(next_zorder()))
-
-        import re as _re
-        eq_count = len(_re.findall(r'\{\{EQ_ID_\d+\}\}', tbl_xml))
-        for i in range(1, eq_count + 1):
-            tbl_xml = tbl_xml.replace(f"{{{{EQ_ID_{i}}}}}", str(next_eq_id()))
-            tbl_xml = tbl_xml.replace(f"{{{{EQ_ZO_{i}}}}}", str(next_zorder()))
+        # 템플릿에 placeholder가 없고 ID가 하드코딩되어 있어, 정규식으로 새 ID 할당
+        tbl_xml = _replace_table_ids(tbl_xml)
 
         # 셀 분리 후 데이터 주입
         cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
@@ -514,43 +525,63 @@ def _inject_cell_value(cell_xml, value):
     cell_xml = re.sub(r'<hp:linesegarray>.*?</hp:linesegarray>', ls, cell_xml, count=1, flags=re.DOTALL)
     return cell_xml
 
+def _empty_cell(cell_xml):
+    """셀 안의 <hp:run> 내용(예시 수식·텍스트)을 비워 자기닫힘 형식으로 만든다.
+    이후 _inject_cell_value()로 다시 채울 수 있도록."""
+    m = re.search(r'<hp:run charPrIDRef="(\d+)">.*?</hp:run>', cell_xml, re.DOTALL)
+    if m:
+        cell_xml = cell_xml.replace(m.group(0), f'<hp:run charPrIDRef="{m.group(1)}"/>', 1)
+    return cell_xml
+
 
 def _replace_table_ids(xml):
     """테이블 XML의 id/zOrder를 새 값으로 교체"""
-    xml = re.sub(r'(<hp:tbl\b[^>]+ id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', xml, count=1)
-    xml = re.sub(r'(<hp:equation\b[^>]+ id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', xml)
+    # `[^>]*`로 0개 이상 매칭 (id가 첫 속성인 경우 포함)
+    xml = re.sub(r'(<hp:tbl\b[^>]* id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', xml, count=1)
+    xml = re.sub(r'(<hp:equation\b[^>]* id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', xml)
     xml = re.sub(r'(zOrder=)"[^"]*"', lambda m: f'{m.group(1)}"{next_zorder()}"', xml)
     return xml
 
 
 def make_increase_decrease_table(explanation_table):
     """증감표 생성
-    x값 1개: 양식지 템플릿 사용
-    x값 2개 이상: 동일 셀 구조로 프로그래매틱 생성
+    x값 1개: 양식지 1-x 템플릿 (3행 4열) 사용
+    x값 2개: 양식지 2-x 템플릿 (3행 6열) 사용
+    x값 3개 이상: 양식지 borderFill 패턴으로 프로그래매틱 생성
     """
     x_values = explanation_table.get("x_values", [])
     rows = explanation_table.get("rows", [])
+    n_x = len(x_values)
 
-    if len(x_values) == 1:
-        # 템플릿 사용
-        with open(f"{BASE}/increase_decrease_template.xml", encoding="utf-8") as f:
+    # 양식지 템플릿이 있는 케이스 (n_x = 1, 2)
+    if n_x in (1, 2):
+        tpl_name = ("increase_decrease_template.xml" if n_x == 1
+                    else "increase_decrease_template_2x.xml")
+        with open(f"{BASE}/{tpl_name}", encoding="utf-8") as f:
             tbl_xml = f.read()
         tbl_xml = _replace_table_ids(tbl_xml)
         cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
-        cells[2] = _inject_cell_value(cells[2], str(x_values[0]))
+        n_cols = 2 * n_x + 2  # 1-x→4, 2-x→6
+        # 헤더 row의 x값 셀: cells[2], cells[4], ... (홀수 col idx)
+        for vi, xv in enumerate(x_values):
+            cells[2 + vi * 2] = _inject_cell_value(cells[2 + vi * 2], str(xv))
+        # 데이터 행: row 0 → cells[n_cols..2n_cols-1], row 1 → cells[2n_cols..3n_cols-1]
+        # 각 데이터 행: cells[base+0]=label(보존), cells[base+1..n_cols-1]=values
         for ri, row_data in enumerate(rows[:2]):
-            base = 4 + ri * 4
-            for vi, val in enumerate(row_data.get("values", [])[:3]):
-                cells[base + vi] = _inject_cell_value(cells[base + vi], str(val))
+            base = (ri + 1) * n_cols
+            n_val_slots = n_cols - 1
+            values = row_data.get("values", [])
+            for vi in range(n_val_slots):
+                if vi < len(values):
+                    cells[base + 1 + vi] = _inject_cell_value(cells[base + 1 + vi], str(values[vi]))
         hdr = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
-        return (hdr + f'<hp:tr>{"".join(cells[0:4])}</hp:tr>'
-                    + f'<hp:tr>{"".join(cells[4:8])}</hp:tr>'
-                    + f'<hp:tr>{"".join(cells[8:12])}</hp:tr>'
-                    + '</hp:tbl>')
+        out = hdr
+        for ri in range(3):
+            out += f'<hp:tr>{"".join(cells[ri * n_cols:(ri + 1) * n_cols])}</hp:tr>'
+        return out + '</hp:tbl>'
 
-    # x값 2개 이상 — 프로그래매틱 생성
+    # x값 3개 이상 — 양식지 borderFill 패턴으로 프로그래매틱 생성
     # 구조: label | ... | x1 | ... | x2 | ...
-    n_x = len(x_values)
     n_val_cols = 2 * n_x + 1  # 값 열 수
     n_cols = 1 + n_val_cols
     n_rows = 1 + len(rows)
@@ -560,7 +591,23 @@ def make_increase_decrease_table(explanation_table):
     total_w = LABEL_W + val_w * n_val_cols
     H_HDR, H_DATA = 1690, 1973
 
-    def tc(content_xml, col, row, w, h, bfr="4"):
+    # 양식지의 borderFillIDRef 패턴 (1-x/2-x 양식지에서 도출)
+    # col 0: label, col 1: 첫 cdots, 중간 cols: 27/4/29, 마지막 col: 28/22/30
+    BFR_LABEL = ["37", "38", "39"]   # row 0(헤더), row 1(f'(x)), row 2(f(x))
+    BFR_FIRST = ["31", "32", "33"]
+    BFR_MID   = ["27", "4",  "29"]
+    BFR_LAST  = ["28", "22", "30"]
+
+    def get_bfr(col, row):
+        r = min(row, 2)  # 데이터 row가 2개 이상이어도 마지막 패턴 재사용
+        if col == 0:           return BFR_LABEL[r]
+        if col == 1:           return BFR_FIRST[r]
+        if col == n_cols - 1:  return BFR_LAST[r]
+        return BFR_MID[r]
+
+    def tc(content_xml, col, row, w, h, bfr=None):
+        if bfr is None:
+            bfr = get_bfr(col, row)
         return (f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0" borderFillIDRef="{bfr}">'
                 f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER" '
                 f'linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0" hasTextRef="0" hasNumRef="0">'
@@ -607,14 +654,15 @@ def make_increase_decrease_table(explanation_table):
         hdr_cells += tc(content, vi + 1, 0, val_w, H_HDR)
     trs.append(f'<hp:tr>{hdr_cells}</hp:tr>')
 
-    # 데이터 행
+    # 데이터 행 — values를 n_val_cols 길이로 패딩하여 헤더와 폭 일치
     for ri, row_data in enumerate(rows):
         label = row_data.get("label", "")
-        values = row_data.get("values", [])
+        values = list(row_data.get("values", []))
+        values += [""] * max(0, n_val_cols - len(values))
         row_cells = tc(eq_p(label, H_DATA) if re.search(r'[a-zA-Z_{}^\\`\']', label) else txt_p(label, H_DATA),
                        0, ri + 1, LABEL_W, H_DATA)
-        for vi, val in enumerate(values):
-            row_cells += tc(val_p(str(val), H_DATA), vi + 1, ri + 1, val_w, H_DATA)
+        for vi in range(n_val_cols):
+            row_cells += tc(val_p(str(values[vi]), H_DATA), vi + 1, ri + 1, val_w, H_DATA)
         trs.append(f'<hp:tr>{row_cells}</hp:tr>')
 
     return (f'<hp:tbl id="{tbl_id}" zOrder="{zo}" numberingType="TABLE" '
@@ -790,7 +838,7 @@ def make_bogi_table(condition_box):
     items = condition_box["items"]
     n_items = len(items)
 
-    tpl_name = "bogi_table_6items.xml" if n_items > 3 else "bogi_table_3items.xml"
+    tpl_name = "bogi_table_6items.xml" if n_items > 4 else "bogi_table_3items.xml"
     with open(f"{BASE}/{tpl_name}", "r", encoding="utf-8") as f:
         tbl_xml = f.read()
 
@@ -812,10 +860,11 @@ def make_bogi_table(condition_box):
             elif "t" in part:
                 item_content += f'<hp:t>{xml_escape(part["t"])}</hp:t>'
         if item_content:
-            tbl_xml = tbl_xml.replace(
-                f'<hp:t>{label}. </hp:t></hp:run>',
-                f'<hp:t>{label}. </hp:t>{item_content}</hp:run>',
-                1
+            # 3items 템플릿은 라벨이 'ㄱ. ' (trailing space), 6items 템플릿은 'ㄱ.' — 둘 다 매치
+            tbl_xml = re.sub(
+                rf'<hp:t>{label}\.(\s?)</hp:t></hp:run>',
+                lambda m: f'<hp:t>{label}.{m.group(1)}</hp:t>{item_content}</hp:run>',
+                tbl_xml, count=1
             )
 
     return tbl_xml
@@ -946,8 +995,9 @@ for prob in problems:
     endnote_xml = make_endnote(endnote_num, answer, explanation, ptype, explanation_table)
     endnote_num += 1
 
-    # [서술형 N] prefix for essay problems
-    prefix = f'<hp:t>[서술형 {essay_count}] </hp:t>' if ptype == "essay" else ""
+    # [서술형 N] prefix for essay problems — skip if parts already starts with marker
+    parts_has_marker = bool(parts) and parts[0].get("t", "").startswith("[서술형")
+    prefix = f'<hp:t>[서술형 {essay_count}] </hp:t>' if ptype == "essay" and not parts_has_marker else ""
 
     prob_content = endnote_xml + prefix
     max_eq_params = (1000, 1000, 850, 600)
@@ -965,13 +1015,16 @@ for prob in problems:
             text = part["t"].replace("\n", " ")
             prob_content += f'<hp:t>{xml_escape(text)}</hp:t>'
 
-    # Score at end: [(score)점]
+    # Score at end: [(score)점] — skip if parts already contain a score marker
     score_val = prob.get("score")
     if score_val is not None:
-        score_script = str(score_val)
-        prob_content += f'<hp:t>[</hp:t>'
-        prob_content += make_equation_xml(score_script)
-        prob_content += f'<hp:t>점]</hp:t>'
+        all_texts = " ".join(p.get("t", "") for p in parts)
+        has_score_in_parts = "점]" in all_texts or "점수" in all_texts
+        if not has_score_in_parts:
+            score_script = str(score_val)
+            prob_content += f'<hp:t>[</hp:t>'
+            prob_content += make_equation_xml(score_script)
+            prob_content += f'<hp:t>점]</hp:t>'
 
     # Problem paragraph
     prob_p = (f'<hp:p id="2147483648" paraPrIDRef="0" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
@@ -1124,7 +1177,7 @@ else:
     region = info.get("region", "")
     school = info.get("school", "")
     subject_code = info.get("subject_code", info.get("subject", ""))
-    range_str = info.get("range", "")
+    range_str = info.get("range", "").replace(" ~ ", "~")
     filename = f"[{code}][고][{year}][{grade}-{sem_num}-{exam_code}][{region}][{school}][{subject_code}][{range_str}][{code}].hwpx"
 
 output_path = os.path.join(OUTPUT_DIR, filename)
