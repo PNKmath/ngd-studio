@@ -7,7 +7,6 @@ __pycache__/
 *.backup*
 *.bak-*
 *.bak
-archive/*.backup*
 
 # Runtime cache
 .v3cache/
@@ -37,3 +36,17 @@ ngd-studio/data/jobs/
 # Node
 ngd-studio/node_modules/
 ngd-studio/.next/
+
+# claude-phase-skills runtime logs
+.claude/phase-run-edits.log
+.claude/phase-run-sessions.log
+
+# engram structural index
+.engram/
+
+# Archive (local snapshot — not tracked)
+archive/
+
+# 구버전 양식지 (완전 폐기 — Phase 5에서 git rm --cached 실행)
+inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx
+ngd-studio/inputs/시험지 제작/[NGD고등부]기출작업양식지[2022년5월20일].hwpx
