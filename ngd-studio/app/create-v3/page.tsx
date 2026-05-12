@@ -77,6 +77,10 @@ export default function CreateV3Page() {
   const handleStart = useCallback(async () => {
     if (filledSlotCount === 0) return;
 
+    // 신규 작업 시작: 이전 .v3cache를 .v3cache_prev로 백업 후 정리
+    // (백엔드 V3 스킬의 0-3 단계가 도달 전 중단되어도 우선순위 충돌이 생기지 않게)
+    await fetch("/api/v3cache-reset", { method: "POST" }).catch(() => {});
+
     const filledSlots = questionSlots.filter((s) => s.file !== null);
     let questionImageNums: number[] = [];
 

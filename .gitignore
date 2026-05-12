@@ -12,8 +12,10 @@ archive/*.backup*
 # Runtime cache
 .v3cache/
 .v3cache_prev/
+.v3cache_*/
 inputs/시험지 제작/.v3cache/
 inputs/시험지 제작/.v3cache_prev/
+inputs/시험지 제작/.v3cache_*/
 inputs/시험지 제작/session_meta.json
 inputs/시험지 제작/question_images/
 

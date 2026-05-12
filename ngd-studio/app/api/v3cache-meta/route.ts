@@ -31,18 +31,18 @@ function extractFromInfo(info: Record<string, unknown>): MetaResult {
 }
 
 export async function GET() {
-  // 1순위: exam_data.json (solver 완료 후 생성)
-  try {
-    const raw = await readFile(EXAM_DATA_PATH, "utf-8");
-    const data = JSON.parse(raw);
-    if (data?.info) return NextResponse.json(extractFromInfo(data.info));
-  } catch { /* not found */ }
-
-  // 2순위: session_meta.json (신규 작업 시작 시 저장)
+  // 1순위: session_meta.json (신규 작업 시작 시 사용자가 입력한 최신 메타)
   try {
     const raw = await readFile(SESSION_META_PATH, "utf-8");
     const meta = JSON.parse(raw);
     if (meta) return NextResponse.json(extractFromInfo(meta));
+  } catch { /* not found */ }
+
+  // 2순위: exam_data.json (solver 완료 후 생성 — 폴백)
+  try {
+    const raw = await readFile(EXAM_DATA_PATH, "utf-8");
+    const data = JSON.parse(raw);
+    if (data?.info) return NextResponse.json(extractFromInfo(data.info));
   } catch { /* not found */ }
 
   return NextResponse.json({ found: false });
