@@ -11,7 +11,7 @@ import { fileURLToPath } from "url";
 
 // Import from relative paths (tsx doesn't support @/ alias)
 import { runClaude, transformToSSE, toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
-import { buildCreatePrompt, buildCreateV3Prompt, buildResumeV3Prompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
+import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
 const __server_file = fileURLToPath(import.meta.url);
@@ -133,21 +133,21 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
-  if (mode !== "create" && mode !== "create-v3" && mode !== "resume-v3" && mode !== "crop" && !files?.pdf) {
+  if (mode !== "create" && mode !== "resume" && mode !== "crop" && !files?.pdf) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Missing required fields: pdf" }));
     return;
   }
 
-  if (mode === "create-v3" && (!files?.questionImages || files.questionImages.length === 0)) {
+  if (mode === "create" && (!files?.questionImages || files.questionImages.length === 0)) {
     res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "V3 모드에는 문제 이미지가 필요합니다." }));
+    res.end(JSON.stringify({ error: "제작 모드에는 문제 이미지가 필요합니다." }));
     return;
   }
 
-  if (mode === "resume-v3" && !meta?.resumeFrom) {
+  if (mode === "resume" && !meta?.resumeFrom) {
     res.writeHead(400, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "resume-v3 모드에는 resumeFrom이 필요합니다." }));
+    res.end(JSON.stringify({ error: "resume 모드에는 resumeFrom이 필요합니다." }));
     return;
   }
 
@@ -194,24 +194,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   if (mode === "crop") {
     const cropOutDir = toAbsWsl(path.join(BASE_DIR, "inputs", "시험지 제작", "question_images"));
     prompt = buildCropPrompt(wslFiles.pdf, cropOutDir);
-  } else if (mode === "create-v3") {
-    const v3ImagePaths = questionImages.map((num: number) => {
-      const padded = String(num).padStart(2, "0");
-      return {
-        number: num,
-        path: toAbsWsl(path.join("inputs", "시험지 제작", "question_images", `q${padded}.png`)),
-      };
-    });
-    prompt = buildCreateV3Prompt({ hwpx: wslFiles.hwpx }, v3ImagePaths, meta ?? {});
-  } else if (mode === "resume-v3") {
-    prompt = buildResumeV3Prompt(
+  } else if (mode === "create") {
+    prompt = buildCreatePrompt({ hwpx: wslFiles.hwpx }, questionImagePaths, meta ?? {});
+  } else if (mode === "resume") {
+    prompt = buildResumePrompt(
       { hwpx: wslFiles.hwpx },
       meta?.resumeFrom ?? "extractor",
       meta?.questionCount ?? 0,
       meta ?? {}
     );
-  } else if (mode === "create") {
-    prompt = buildCreatePrompt(wslFiles, questionImagePaths);
   } else {
     prompt = buildReviewPrompt(wslFiles);
   }
@@ -253,7 +244,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   // Spawn Claude CLI
   const { process: proc, events, exitCode } = runClaude(prompt, {
     cwd: BASE_DIR,
-    maxTurns: mode === "crop" ? 30 : (mode === "create-v3" || mode === "resume-v3") ? 200 : mode === "create" ? 100 : 50,
+    maxTurns: mode === "crop" ? 30 : (mode === "create" || mode === "resume") ? 200 : 50,
   });
   activeProcesses.add(proc);
   proc.on("close", () => activeProcesses.delete(proc));
@@ -324,51 +315,28 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     });
     finalStatus = "failed";
   } finally {
-    // outputFile이 없으면 폴백: 모드별로 결과 파일 탐색
-    if (!outputFile) {
+    // outputFile이 없으면 폴백: outputs/ 폴더에서 최신 .hwpx 스캔
+    if (!outputFile && (mode === "create" || mode === "review")) {
       try {
-        if (mode === "create" || mode === "create-v3") {
-          // 제작 모드: outputs/ 폴더에서 최신 .hwpx 스캔
-          const outputsDir = path.join(BASE_DIR, "outputs");
-          const dirFiles = await readdir(outputsDir);
-          const hwpxFiles = dirFiles.filter((f) => f.endsWith(".hwpx"));
-          if (hwpxFiles.length > 0) {
-            let latest = { name: "", mtime: 0 };
-            for (const f of hwpxFiles) {
-              const s = await stat(path.join(outputsDir, f));
-              if (s.mtimeMs > latest.mtime) {
-                latest = { name: f, mtime: s.mtimeMs };
-              }
-            }
-            const jobStart = new Date(jobData.startedAt).getTime();
-            if (latest.mtime > jobStart) {
-              outputFile = `outputs/${latest.name}`;
+        const outputsDir = path.join(BASE_DIR, "outputs");
+        const dirFiles = await readdir(outputsDir);
+        const hwpxFiles = dirFiles.filter((f) => f.endsWith(".hwpx"));
+        if (hwpxFiles.length > 0) {
+          let latest = { name: "", mtime: 0 };
+          for (const f of hwpxFiles) {
+            const s = await stat(path.join(outputsDir, f));
+            if (s.mtimeMs > latest.mtime) {
+              latest = { name: f, mtime: s.mtimeMs };
             }
           }
-        } else if (mode === "review") {
-          // 오검 모드: outputs/ 폴더에서 최신 .hwpx 스캔 (에이전트가 outputs/에 저장)
-          const outputsDir = path.join(BASE_DIR, "outputs");
-          try {
-            const dirFiles = await readdir(outputsDir);
-            const hwpxFiles = dirFiles.filter((f) => f.endsWith(".hwpx"));
-            if (hwpxFiles.length > 0) {
-              let latest = { name: "", mtime: 0 };
-              for (const f of hwpxFiles) {
-                const s = await stat(path.join(outputsDir, f));
-                if (s.mtimeMs > latest.mtime) {
-                  latest = { name: f, mtime: s.mtimeMs };
-                }
-              }
-              const jobStart = new Date(jobData.startedAt).getTime();
-              if (latest.mtime > jobStart) {
-                outputFile = `outputs/${latest.name}`;
-              }
-            }
-          } catch { /* outputs 폴더 없을 수 있음 */ }
-          // outputs/에서 못 찾으면 입력 파일 폴백
-          if (!outputFile) outputFile = resolvedFiles.hwpx;
+          const jobStart = new Date(jobData.startedAt).getTime();
+          if (latest.mtime > jobStart) {
+            outputFile = `outputs/${latest.name}`;
+          }
         }
       } catch { /* 폴더가 없을 수 있음 */ }
+      // 오검 모드: outputs/에서 못 찾으면 입력 파일 폴백
+      if (mode === "review" && !outputFile) outputFile = resolvedFiles.hwpx;
     }
 
     // outputFile 경로를 상대경로로 정규화

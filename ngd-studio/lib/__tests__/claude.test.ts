@@ -2,12 +2,8 @@ import { describe, it, expect } from "vitest";
 import { detectStageFromTool } from "../claude";
 
 describe("detectStageFromTool", () => {
-  it("Skill ngd-exam-create → reader (V1 orchestrator start)", () => {
-    expect(detectStageFromTool("Skill", { skill: "ngd-exam-create" })).toBe("reader");
-  });
-
-  it("Skill ngd-exam-create-v3 → extractor (V3 orchestrator start)", () => {
-    expect(detectStageFromTool("Skill", { skill: "ngd-exam-create-v3" })).toBe("extractor");
+  it("Skill ngd-exam-create → extractor (V3 flow is now standard)", () => {
+    expect(detectStageFromTool("Skill", { skill: "ngd-exam-create" })).toBe("extractor");
   });
 
   it("Skill ngd-exam-crop → cropper", () => {
@@ -30,8 +26,12 @@ describe("detectStageFromTool", () => {
     expect(detectStageFromTool("Agent", { subagent_type: "ngd-exam-builder" })).toBe("builder");
   });
 
-  it("Read file_path x.pdf → reader", () => {
-    expect(detectStageFromTool("Read", { file_path: "x.pdf" })).toBe("reader");
+  it("Read file_path x.pdf → extractor (V3 entry stage)", () => {
+    expect(detectStageFromTool("Read", { file_path: "x.pdf" })).toBe("extractor");
+  });
+
+  it("Write q01_extracted.json → extractor (V3 per-question artifact)", () => {
+    expect(detectStageFromTool("Write", { file_path: "q01_extracted.json" })).toBe("extractor");
   });
 
   it("Write file_path section0.xml → builder", () => {

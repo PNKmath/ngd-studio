@@ -569,10 +569,10 @@ function ActionButtons({ qNum }: { qNum: number }) {
   const handleAction = useCallback(async (from: string) => {
     if (!jobId || loading !== null) return;
     setLoading(from);
-    const instruction = `V3 resume --q=${qNum} --from=${from}`;
+    const instruction = `resume --q=${qNum} --from=${from}`;
     await sendResumeAction(jobId, instruction, store);
     setLoading(null);
-  }, [jobId, status, qNum, store]);
+  }, [jobId, qNum, store]);
 
   const handleImageReplace = useCallback(async (file: File) => {
     if (!jobId || loading !== null) return;
@@ -590,7 +590,7 @@ function ActionButtons({ qNum }: { qNum: number }) {
       return;
     }
 
-    const instruction = `V3 resume --q=${qNum} --from=image_replace`;
+    const instruction = `resume --q=${qNum} --from=image_replace`;
     await sendResumeAction(jobId, instruction, store);
     setLoading(null);
   }, [jobId, loading, qNum, store]);
@@ -614,7 +614,7 @@ function ActionButtons({ qNum }: { qNum: number }) {
       <Button
         variant="ghost"
         size="sm"
-        disabled={disabled || loading !== null}
+        disabled={disabled}
         onClick={() => fileInputRef.current?.click()}
         className="h-6 px-2 text-[10px] text-red-600 hover:bg-muted"
       >
@@ -632,7 +632,7 @@ function ActionButtons({ qNum }: { qNum: number }) {
           key={action.from}
           variant="ghost"
           size="sm"
-          disabled={disabled || loading !== null}
+          disabled={disabled}
           onClick={() => handleAction(action.from)}
           className={`h-6 px-2 text-[10px] ${action.color} hover:bg-muted`}
         >
@@ -834,7 +834,7 @@ export function QuestionResultPanel() {
   const handleGlobalAction = async (from: string) => {
     if (!jobId || status === "running") return;
     setGlobalLoading(from);
-    const instruction = `V3 resume --from=${from}`;
+    const instruction = `resume --from=${from}`;
     // 편집 모드 → solver 진행 시 모드 종료
     if (from === "solver") setReviewActive(false);
     await sendResumeAction(jobId, instruction, store);
@@ -900,7 +900,7 @@ export function QuestionResultPanel() {
             onConfirm={() => handleGlobalAction("confirm")}
             onRetryFigure={(qNum) => {
               if (!jobId) return;
-              sendResumeAction(jobId, `V3 resume --q=${qNum} --from=figure`, store);
+              sendResumeAction(jobId, `resume --q=${qNum} --from=figure`, store);
             }}
             onRetryAll={() => handleGlobalAction("figure")}
           />

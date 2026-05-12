@@ -28,7 +28,7 @@ export function useJobRunner() {
 
   const startJob = useCallback(
     async (
-      mode: "create" | "create-v3" | "resume-v3" | "crop" | "review",
+      mode: "create" | "resume" | "crop" | "review",
       files: { pdf: string; hwpx?: string; questionImages?: number[] },
       meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number }
     ) => {
@@ -41,7 +41,7 @@ export function useJobRunner() {
       store.setMode(mode, meta?.resumeFrom);
       store.setStatus("running");
       // Re-set v3Meta after reset so it persists during job execution
-      if (meta && (mode === "create-v3" || mode === "resume-v3")) {
+      if (meta && (mode === "create" || mode === "resume")) {
         store.setV3Meta(meta);
       }
 
@@ -50,9 +50,8 @@ export function useJobRunner() {
       // "confirm" triggers builder; use "builder" as the first visible stage
       const effectiveResumeFrom = rawResumeFrom === "confirm" ? "builder" : rawResumeFrom;
       const firstStage = mode === "crop" ? "cropper"
-        : mode === "create-v3" ? "cleaned"
-        : mode === "resume-v3" ? effectiveResumeFrom
-        : mode === "create" ? "reader"
+        : mode === "create" ? "cleaned"
+        : mode === "resume" ? effectiveResumeFrom
         : "reviewer";
       store.updateStage(firstStage, {
         status: "running",

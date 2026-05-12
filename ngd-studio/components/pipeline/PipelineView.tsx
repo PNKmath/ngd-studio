@@ -13,14 +13,6 @@ export interface PipelineStage {
 }
 
 const defaultCreateStages: PipelineStage[] = [
-  { name: "reader", label: "PDF 읽기", status: "pending" },
-  { name: "solver", label: "해설 생성", status: "pending" },
-  { name: "figure", label: "그림 처리", status: "pending" },
-  { name: "builder", label: "HWPX 조립", status: "pending" },
-  { name: "checker", label: "품질 검수", status: "pending" },
-];
-
-const defaultCreateV3Stages: PipelineStage[] = [
   { name: "extractor", label: "문제 추출", status: "pending" },
   { name: "solver", label: "해설 생성", status: "pending" },
   { name: "verifier", label: "해설 검증", status: "pending" },
@@ -34,12 +26,12 @@ const defaultReviewStages: PipelineStage[] = [
 ];
 
 interface PipelineViewProps {
-  mode: "create" | "create-v3" | "review";
+  mode: "create" | "review";
   stages?: PipelineStage[];
 }
 
 export function PipelineView({ mode, stages }: PipelineViewProps) {
-  const defaults = mode === "create" ? defaultCreateStages : mode === "create-v3" ? defaultCreateV3Stages : defaultReviewStages;
+  const defaults = mode === "create" ? defaultCreateStages : defaultReviewStages;
   const displayStages = stages ?? defaults;
 
   return (

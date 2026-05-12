@@ -24,7 +24,7 @@ export interface V3Meta {
 
 export interface JobState {
   jobId: string | null;
-  mode: "create" | "create-v3" | "resume-v3" | "crop" | "review" | null;
+  mode: "create" | "resume" | "crop" | "review" | null;
   status: "idle" | "uploading" | "running" | "done" | "failed";
   stages: PipelineStage[];
   logs: LogEntry[];
@@ -39,7 +39,7 @@ export interface JobState {
   // Actions
   reset: () => void;
   setJobId: (id: string) => void;
-  setMode: (mode: "create" | "create-v3" | "resume-v3" | "crop" | "review", resumeFrom?: string) => void;
+  setMode: (mode: "create" | "resume" | "crop" | "review", resumeFrom?: string) => void;
   setStatus: (status: JobState["status"]) => void;
   setFiles: (files: JobState["files"]) => void;
   setStages: (stages: PipelineStage[]) => void;
@@ -54,14 +54,6 @@ export interface JobState {
 }
 
 const createStages: PipelineStage[] = [
-  { name: "reader", label: "PDF 읽기", status: "pending" },
-  { name: "solver", label: "해설 생성", status: "pending" },
-  { name: "figure", label: "그림 처리", status: "pending" },
-  { name: "builder", label: "HWPX 조립", status: "pending" },
-  { name: "checker", label: "품질 검수", status: "pending" },
-];
-
-const createV3Stages: PipelineStage[] = [
   { name: "cleaned", label: "이미지 정리", status: "pending" },
   { name: "extractor", label: "문제 추출", status: "pending" },
   { name: "review_extract", label: "추출 편집", status: "pending" },
@@ -72,15 +64,15 @@ const createV3Stages: PipelineStage[] = [
   { name: "checker", label: "품질 검수", status: "pending" },
 ];
 
-const V3_STAGE_ORDER = ["cleaned", "extractor", "review_extract", "solver", "verifier", "figure", "builder", "checker"];
+const STAGE_ORDER = ["cleaned", "extractor", "review_extract", "solver", "verifier", "figure", "builder", "checker"];
 
-function buildResumeV3Stages(resumeFrom?: string): PipelineStage[] {
+function buildResumeStages(resumeFrom?: string): PipelineStage[] {
   // "confirm" means figure is done, proceed to builder
   const effectiveFrom = resumeFrom === "confirm" ? "builder" : resumeFrom;
-  const resumeIdx = effectiveFrom ? V3_STAGE_ORDER.indexOf(effectiveFrom) : 1;
-  return createV3Stages.map((s) => ({
+  const resumeIdx = effectiveFrom ? STAGE_ORDER.indexOf(effectiveFrom) : 1;
+  return createStages.map((s) => ({
     ...s,
-    status: (resumeIdx > 0 && V3_STAGE_ORDER.indexOf(s.name) < resumeIdx) ? "done" as const : "pending" as const,
+    status: (resumeIdx > 0 && STAGE_ORDER.indexOf(s.name) < resumeIdx) ? "done" as const : "pending" as const,
   }));
 }
 
@@ -128,10 +120,8 @@ export const useJobStore = create<JobState>((set) => ({
       mode,
       stages: mode === "create"
         ? createStages.map((s) => ({ ...s }))
-        : mode === "create-v3"
-        ? createV3Stages.map((s) => ({ ...s }))
-        : mode === "resume-v3"
-        ? buildResumeV3Stages(resumeFrom)
+        : mode === "resume"
+        ? buildResumeStages(resumeFrom)
         : mode === "crop"
         ? cropStages.map((s) => ({ ...s }))
         : reviewStages.map((s) => ({ ...s })),

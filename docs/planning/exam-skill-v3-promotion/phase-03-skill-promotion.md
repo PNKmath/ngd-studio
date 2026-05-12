@@ -128,3 +128,6 @@ exit 0 — 6개 test 조건 모두 충족 + `check_integrity.sh` ALL PASS.
 
 #### Review (orchestrator)
 VERDICT: pass — frontmatter/자기참조/V3 패턴 모두 일반화, 6 에이전트 실존. check_integrity.sh의 v3 경로 참조는 fallback 로직으로 무해 (별도 cleanup 권장 — 후속 phase에서 처리).
+
+#### Commit
+fdbe82b — `chore(skills): Phase 3 — V3 SKILL.md를 ngd-exam-create 폴더로 승격 + v3 폴더 삭제`

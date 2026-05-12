@@ -57,7 +57,7 @@ export async function POST(
       maxTurns: 30,
     });
 
-    const currentStage = { name: job.mode === "create" ? "builder" : "reviewer" };
+    const currentStage = { name: job.mode === "review" ? "reviewer" : "builder" };
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({

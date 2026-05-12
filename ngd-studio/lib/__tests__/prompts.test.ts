@@ -1,62 +1,72 @@
 import { describe, it, expect } from "vitest";
 import {
   buildCreatePrompt,
-  buildCreateV3Prompt,
-  buildResumeV3Prompt,
+  buildResumePrompt,
   buildCropPrompt,
   buildReviewPrompt,
 } from "../prompts";
 
 describe("buildCreatePrompt", () => {
   it("calls ngd-exam-create skill", () => {
-    const result = buildCreatePrompt({ pdf: "/tmp/test.pdf", hwpx: "/tmp/form.hwpx" });
-    expect(result).toContain('Skill 도구로 "ngd-exam-create" 스킬을 호출');
-  });
-
-  it("includes pdf path when provided", () => {
-    const result = buildCreatePrompt({ pdf: "/tmp/test.pdf", hwpx: "" });
-    expect(result).toContain("/tmp/test.pdf");
-  });
-
-  it("image-only mode when no pdf", () => {
-    const images = [{ number: 1, path: "/tmp/q1.jpg" }];
-    const result = buildCreatePrompt({ pdf: "", hwpx: "" }, images);
-    expect(result).toContain("이미지 전용 모드");
-    expect(result).toContain('Skill 도구로 "ngd-exam-create" 스킬을 호출');
-  });
-});
-
-describe("buildCreateV3Prompt", () => {
-  it("calls ngd-exam-create-v3 skill", () => {
-    const result = buildCreateV3Prompt(
+    const result = buildCreatePrompt(
       { hwpx: "/tmp/form.hwpx" },
       [{ number: 1, path: "/tmp/q1.jpg" }],
       {}
     );
-    expect(result).toContain('Skill 도구로 "ngd-exam-create-v3" 스킬을 호출');
+    expect(result).toContain('Skill 도구로 "ngd-exam-create" 스킬을 호출');
   });
 
-  it("includes V3 mode header", () => {
-    const result = buildCreateV3Prompt({ hwpx: "" }, [], {});
-    expect(result).toContain("V3 모드로 시험지를 제작해줘");
+  it("includes 시험지 제작 header (V3 flow input)", () => {
+    const result = buildCreatePrompt({ hwpx: "" }, [], {});
+    expect(result).toContain("시험지를 제작해줘");
+  });
+
+  it("includes question images list", () => {
+    const result = buildCreatePrompt(
+      { hwpx: "" },
+      [
+        { number: 1, path: "/tmp/q1.jpg" },
+        { number: 2, path: "/tmp/q2.jpg" },
+      ],
+      {}
+    );
+    expect(result).toContain("/tmp/q1.jpg");
+    expect(result).toContain("/tmp/q2.jpg");
+    expect(result).toContain("총 2문제");
+  });
+
+  it("includes meta fields when provided", () => {
+    const result = buildCreatePrompt(
+      { hwpx: "" },
+      [],
+      { school: "OO고", grade: 2, subject: "수학 I", semester: "1학기", examType: "중간", range: "지수~삼각" }
+    );
+    expect(result).toContain("OO고");
+    expect(result).toContain("수학 I");
+    expect(result).toContain("1학기");
   });
 });
 
-describe("buildResumeV3Prompt", () => {
-  it("first line starts with V3 resume --from=", () => {
-    const result = buildResumeV3Prompt({ hwpx: "" }, "solver", 20, {});
+describe("buildResumePrompt", () => {
+  it("first line is 'resume --from=<stage>'", () => {
+    const result = buildResumePrompt({ hwpx: "" }, "solver", 20, {});
     const firstLine = result.split("\n")[0];
-    expect(firstLine).toBe("V3 resume --from=solver");
+    expect(firstLine).toBe("resume --from=solver");
   });
 
-  it("calls ngd-exam-create-v3 skill", () => {
-    const result = buildResumeV3Prompt({ hwpx: "" }, "builder", 20, {});
-    expect(result).toContain('Skill 도구로 "ngd-exam-create-v3" 스킬을 호출');
+  it("calls ngd-exam-create skill", () => {
+    const result = buildResumePrompt({ hwpx: "" }, "builder", 20, {});
+    expect(result).toContain('Skill 도구로 "ngd-exam-create" 스킬을 호출');
   });
 
   it("embeds resumeFrom value", () => {
-    const result = buildResumeV3Prompt({ hwpx: "" }, "figure", 10, {});
+    const result = buildResumePrompt({ hwpx: "" }, "figure", 10, {});
     expect(result).toContain("--from=figure");
+  });
+
+  it("does not emit legacy V3 keyword in resume command", () => {
+    const result = buildResumePrompt({ hwpx: "" }, "extractor", 5, {});
+    expect(result).not.toMatch(/\bV3\s+resume\b/);
   });
 });
 

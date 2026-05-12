@@ -6,29 +6,8 @@ beforeEach(() => {
 });
 
 describe("setMode('create')", () => {
-  it("sets 5 stages: reader, solver, figure, builder, checker", () => {
+  it("sets 8 stages in V3 (standard) order", () => {
     useJobStore.getState().setMode("create");
-    const stages = useJobStore.getState().stages;
-    expect(stages).toHaveLength(5);
-    expect(stages.map((s) => s.name)).toEqual([
-      "reader",
-      "solver",
-      "figure",
-      "builder",
-      "checker",
-    ]);
-  });
-
-  it("all stages start as pending", () => {
-    useJobStore.getState().setMode("create");
-    const stages = useJobStore.getState().stages;
-    stages.forEach((s) => expect(s.status).toBe("pending"));
-  });
-});
-
-describe("setMode('create-v3')", () => {
-  it("sets 8 stages in V3 order", () => {
-    useJobStore.getState().setMode("create-v3");
     const stages = useJobStore.getState().stages;
     expect(stages).toHaveLength(8);
     expect(stages.map((s) => s.name)).toEqual([
@@ -44,15 +23,15 @@ describe("setMode('create-v3')", () => {
   });
 
   it("all stages start as pending", () => {
-    useJobStore.getState().setMode("create-v3");
+    useJobStore.getState().setMode("create");
     const stages = useJobStore.getState().stages;
     stages.forEach((s) => expect(s.status).toBe("pending"));
   });
 });
 
-describe("setMode('resume-v3')", () => {
+describe("setMode('resume')", () => {
   it("resumeFrom='extractor': cleaned is done, extractor+ are pending", () => {
-    useJobStore.getState().setMode("resume-v3", "extractor");
+    useJobStore.getState().setMode("resume", "extractor");
     const stages = useJobStore.getState().stages;
     const byName = Object.fromEntries(stages.map((s) => [s.name, s.status]));
     expect(byName["cleaned"]).toBe("done");
@@ -62,7 +41,7 @@ describe("setMode('resume-v3')", () => {
   });
 
   it("resumeFrom='builder': stages before builder are done", () => {
-    useJobStore.getState().setMode("resume-v3", "builder");
+    useJobStore.getState().setMode("resume", "builder");
     const stages = useJobStore.getState().stages;
     const byName = Object.fromEntries(stages.map((s) => [s.name, s.status]));
     expect(byName["cleaned"]).toBe("done");
@@ -76,7 +55,7 @@ describe("setMode('resume-v3')", () => {
   });
 
   it("resumeFrom='confirm' treats as 'builder' (figure done, builder pending)", () => {
-    useJobStore.getState().setMode("resume-v3", "confirm");
+    useJobStore.getState().setMode("resume", "confirm");
     const stages = useJobStore.getState().stages;
     const byName = Object.fromEntries(stages.map((s) => [s.name, s.status]));
     expect(byName["figure"]).toBe("done");
@@ -84,7 +63,7 @@ describe("setMode('resume-v3')", () => {
   });
 
   it("still returns 8 stages", () => {
-    useJobStore.getState().setMode("resume-v3", "solver");
+    useJobStore.getState().setMode("resume", "solver");
     expect(useJobStore.getState().stages).toHaveLength(8);
   });
 });
