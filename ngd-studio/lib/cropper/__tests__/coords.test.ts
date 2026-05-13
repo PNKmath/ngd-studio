@@ -108,21 +108,32 @@ describe("autoNumber", () => {
     expect(result[0].number).toBe(1);
   });
 
-  it("orders by page, then Y, then X", () => {
+  it("numbers boxes by array index (creation/sort order), not position", () => {
+    // 위치(y) 순서와 배열 순서가 다른 경우 — 배열 순서 우선이어야 함
     const boxes: CropBox[] = [
-      { id: "c", page: 1, x: 10, y: 50, w: 100, h: 100, number: 0 },
-      { id: "a", page: 0, x: 100, y: 300, w: 100, h: 100, number: 0 },
-      { id: "b", page: 0, x: 10, y: 100, w: 100, h: 100, number: 0 },
-      { id: "d", page: 1, x: 50, y: 50, w: 100, h: 100, number: 0 },
+      { id: "a", page: 0, x: 0, y: 300, w: 100, h: 100, number: 0 }, // y큼
+      { id: "b", page: 0, x: 0, y: 100, w: 100, h: 100, number: 0 }, // y작음
+      { id: "c", page: 1, x: 0, y: 50, w: 100, h: 100, number: 0 },
     ];
     const result = autoNumber(boxes);
-    // page 0: y=100(id=b) → 1, y=300(id=a) → 2
-    // page 1: y=50,x=10(id=c) → 3, y=50,x=50(id=d) → 4
-    const byId = Object.fromEntries(result.map((r) => [r.id, r.number]));
-    expect(byId["b"]).toBe(1);
-    expect(byId["a"]).toBe(2);
-    expect(byId["c"]).toBe(3);
-    expect(byId["d"]).toBe(4);
+    expect(result.map((r) => [r.id, r.number])).toEqual([
+      ["a", 1],
+      ["b", 2],
+      ["c", 3],
+    ]);
+  });
+
+  it("preserves user-reordered order across pages", () => {
+    // page 1 박스를 page 0 박스 앞에 배치한 시나리오 (drag-and-drop 재정렬)
+    const boxes: CropBox[] = [
+      { id: "x", page: 1, x: 0, y: 0, w: 100, h: 100, number: 0 },
+      { id: "y", page: 0, x: 0, y: 0, w: 100, h: 100, number: 0 },
+    ];
+    const result = autoNumber(boxes);
+    expect(result[0].id).toBe("x");
+    expect(result[0].number).toBe(1);
+    expect(result[1].id).toBe("y");
+    expect(result[1].number).toBe(2);
   });
 
   it("does not mutate original array", () => {

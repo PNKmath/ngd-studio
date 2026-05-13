@@ -64,14 +64,10 @@ export function clampBox(
 }
 
 /**
- * 같은 페이지의 박스들을 Y좌표(ties면 X) 순으로 정렬하여 자동 번호 부여.
- * 페이지 순(0,1,2…) → 각 페이지 내 Y → 같은 Y면 X 순으로 1부터 매김.
+ * 박스 배열의 현재 순서를 그대로 따라 1부터 번호 부여 (생성순/사용자 정렬순).
+ * 위치(y,x) 기반 정렬은 하지 않는다 — 새 박스는 mouseup 시점에 배열 끝에
+ * append되고, 박스 리스트 drag-and-drop 재정렬이 그대로 번호에 반영된다.
  */
 export function autoNumber(boxes: CropBox[]): CropBox[] {
-  const sorted = [...boxes].sort((a, b) => {
-    if (a.page !== b.page) return a.page - b.page;
-    if (a.y !== b.y) return a.y - b.y;
-    return a.x - b.x;
-  });
-  return sorted.map((box, i) => ({ ...box, number: i + 1 }));
+  return boxes.map((box, i) => ({ ...box, number: i + 1 }));
 }

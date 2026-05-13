@@ -68,6 +68,8 @@ export function CropperWorkspace() {
   // Box state (global, all pages)
   const [boxes, setBoxes] = useState<CropBox[]>([]);
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
+  // Drag-over highlight index for box-list reorder DnD
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   // Extraction state
   const [extracting, setExtracting] = useState(false);
@@ -186,12 +188,66 @@ export function CropperWorkspace() {
   }, [pdfPath, pdfMeta, currentPage, fetchPage, pageImages]);
 
   // ── box change handler ──
+  // Preserves the *global* creation order of `prev`:
+  //   - current-page boxes still in updatedPageBoxes → in-place update
+  //   - current-page boxes removed → dropped
+  //   - new boxes from current page (not in prev) → appended at end of global array
+  // Cross-page order is never re-shuffled here. Reordering happens via
+  // handleReorderBoxes (box list drag-and-drop).
   function handlePageBoxesChange(updatedPageBoxes: CropBox[]) {
     setBoxes((prev) => {
-      const otherPages = prev.filter((b) => b.page !== currentPage);
-      const merged = autoNumber([...otherPages, ...updatedPageBoxes]);
-      if (pdfPath) saveToLS(pdfPath, merged);
-      return merged;
+      const updatedById = new Map(updatedPageBoxes.map((b) => [b.id, b]));
+      const seen = new Set<string>();
+      const result: CropBox[] = [];
+
+      for (const b of prev) {
+        if (b.page === currentPage) {
+          const upd = updatedById.get(b.id);
+          if (upd) {
+            result.push(upd);
+            seen.add(b.id);
+          }
+          // else: removed from current page → drop
+        } else {
+          result.push(b);
+        }
+      }
+      // Append boxes new to this page (not present in prev)
+      for (const b of updatedPageBoxes) {
+        if (!seen.has(b.id)) {
+          result.push(b);
+        }
+      }
+
+      const numbered = autoNumber(result);
+      if (pdfPath) saveToLS(pdfPath, numbered);
+      return numbered;
+    });
+  }
+
+  function handleDeleteBox(id: string) {
+    setBoxes((prev) => {
+      const filtered = prev.filter((b) => b.id !== id);
+      const numbered = autoNumber(filtered);
+      if (pdfPath) saveToLS(pdfPath, numbered);
+      return numbered;
+    });
+    setSelectedBoxId((cur) => (cur === id ? null : cur));
+  }
+
+  function handleReorderBoxes(fromIdx: number, toIdx: number) {
+    if (fromIdx === toIdx) return;
+    setBoxes((prev) => {
+      if (fromIdx < 0 || fromIdx >= prev.length) return prev;
+      if (toIdx < 0 || toIdx > prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIdx, 1);
+      // Insert before the target index (account for removed element)
+      const adjusted = toIdx > fromIdx ? toIdx - 1 : toIdx;
+      next.splice(adjusted, 0, moved);
+      const numbered = autoNumber(next);
+      if (pdfPath) saveToLS(pdfPath, numbered);
+      return numbered;
     });
   }
 
@@ -387,21 +443,60 @@ export function CropperWorkspace() {
                 </p>
               ) : (
                 <ul className="divide-y">
-                  {boxes.map((box) => (
+                  {boxes.map((box, idx) => (
                     <li
                       key={box.id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", String(idx));
+                        e.dataTransfer.effectAllowed = "move";
+                        setDragOverIdx(null);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        if (dragOverIdx !== idx) setDragOverIdx(idx);
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverIdx === idx) setDragOverIdx(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const raw = e.dataTransfer.getData("text/plain");
+                        const fromIdx = parseInt(raw, 10);
+                        setDragOverIdx(null);
+                        if (Number.isFinite(fromIdx)) {
+                          handleReorderBoxes(fromIdx, idx);
+                        }
+                      }}
                       onClick={() => {
                         setCurrentPage(box.page);
                         setSelectedBoxId(box.id);
                       }}
-                      className={`px-3 py-2 text-xs cursor-pointer hover:bg-secondary ${
+                      className={`px-3 py-2 text-xs cursor-grab active:cursor-grabbing hover:bg-secondary flex items-center justify-between gap-2 ${
                         box.id === selectedBoxId ? "bg-secondary" : ""
+                      } ${
+                        dragOverIdx === idx ? "border-t-2 border-primary" : ""
                       }`}
                     >
-                      <span className="font-medium">#{box.number}</span>{" "}
-                      <span className="text-muted-foreground">
-                        p.{box.page + 1} ({Math.round(box.x)},{Math.round(box.y)})
+                      <span className="truncate">
+                        <span className="font-medium">#{box.number}</span>{" "}
+                        <span className="text-muted-foreground">
+                          p.{box.page + 1} ({Math.round(box.x)},
+                          {Math.round(box.y)})
+                        </span>
                       </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteBox(box.id);
+                        }}
+                        className="shrink-0 w-5 h-5 rounded text-muted-foreground hover:bg-destructive hover:text-destructive-foreground flex items-center justify-center"
+                        aria-label={`박스 #${box.number} 삭제`}
+                      >
+                        ×
+                      </button>
                     </li>
                   ))}
                 </ul>

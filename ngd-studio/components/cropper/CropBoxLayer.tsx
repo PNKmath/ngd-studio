@@ -177,6 +177,14 @@ export function CropBoxLayer({
     const target = e.target as SVGElement;
     const rel = svgRelative(e);
 
+    // -- delete button on selected box?
+    const deleteBoxId = target.dataset["deleteboxid"];
+    if (deleteBoxId) {
+      onBoxesChange(boxesRef.current.filter((b) => b.id !== deleteBoxId));
+      onSelectBox(null);
+      return;
+    }
+
     // -- resize handle?
     const handleDir = target.dataset["handle"] as HandleDir | undefined;
     const boxId = target.dataset["boxid"];
@@ -459,6 +467,35 @@ export function CropBoxLayer({
             >
               {labelText}
             </text>
+
+            {/* Delete button (only when selected) — outside top-right, offset
+                so it doesn't overlap the NE resize handle */}
+            {isSelected && (
+              <g style={{ cursor: "pointer" }}>
+                <circle
+                  cx={sc.x + scW + 12}
+                  cy={sc.y - 12}
+                  r={9}
+                  fill="#dc2626"
+                  stroke="white"
+                  strokeWidth={1.5}
+                  data-deleteboxid={box.id}
+                />
+                <text
+                  x={sc.x + scW + 12}
+                  y={sc.y - 11}
+                  fontSize={13}
+                  fill="white"
+                  fontFamily="sans-serif"
+                  fontWeight="bold"
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  pointerEvents="none"
+                >
+                  ×
+                </text>
+              </g>
+            )}
 
             {/* Resize handles (only when selected) */}
             {isSelected &&
