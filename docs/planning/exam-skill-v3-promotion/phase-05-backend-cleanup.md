@@ -165,4 +165,4 @@ SIMPLIFIED: 0 / CHANGES: 0 / VERIFY: pass / NOTES: 변경 파일 전부 삭제 +
 VERDICT: pass / ISSUES: 0 / SUMMARY: V1/V2 잔재 3개 파일 삭제 + settings.local.json 3줄 제거, 무결성·무참조·검증 전부 통과
 
 #### Commit
-(예정 — Step 7.5 ⑤에서 기록)
+c3ec88d — `chore(backend): Phase 5 — V1/V2 잔재 정리 (ngd-exam-reader, sample_analysis, auto_crop 삭제)`
