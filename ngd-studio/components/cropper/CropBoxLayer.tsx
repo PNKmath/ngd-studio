@@ -31,7 +31,6 @@ type DragState =
       mode: "create";
       startImgX: number;
       startImgY: number;
-      newId: string;
     }
   | {
       mode: "move";
@@ -48,6 +47,14 @@ type DragState =
       startImgY: number;
       origBox: Pick<CropBox, "x" | "y" | "w" | "h">;
     };
+
+/** Local preview of in-progress create drag — never written to parent state until mouseup. */
+interface PendingCreate {
+  startImgX: number;
+  startImgY: number;
+  currentImgX: number;
+  currentImgY: number;
+}
 
 // ──────────────────────────────────────────────
 // Props
@@ -115,6 +122,24 @@ export function CropBoxLayer({
   useEffect(() => {
     boxesRef.current = boxes;
   }, [boxes]);
+
+  // Local preview state — only used for the in-progress create drag.
+  // Parent's boxes state is NOT touched until mouseup commits the final box.
+  const [pendingCreate, setPendingCreate] = useState<PendingCreate | null>(
+    null
+  );
+
+  // Stable refs for parent callbacks. The window-mousemove/mouseup listeners
+  // are attached inside useEffect with deps [displayWidth,...] and would
+  // otherwise capture stale `onBoxesChange` / `onSelectBox` closures, which
+  // close over stale `pageIndex` / `currentPage` and route every newly created
+  // box to page 0 regardless of the page the user is on.
+  const onBoxesChangeRef = useRef(onBoxesChange);
+  const onSelectBoxRef = useRef(onSelectBox);
+  useEffect(() => {
+    onBoxesChangeRef.current = onBoxesChange;
+    onSelectBoxRef.current = onSelectBox;
+  });
 
   const viewport = {
     displayWidth,
@@ -187,28 +212,20 @@ export function CropBoxLayer({
       return;
     }
 
-    // -- background → create
+    // -- background → create (local preview only; parent state untouched until mouseup)
     onSelectBox(null);
     const img = toImg(rel.x, rel.y);
-    const newId = crypto.randomUUID();
     dragRef.current = {
       mode: "create",
       startImgX: img.x,
       startImgY: img.y,
-      newId,
     };
-    // Add a zero-size box immediately so it can be rendered while dragging
-    const newBox: CropBox = {
-      id: newId,
-      page: 0, // parent will set correct page via onBoxesChange
-      x: img.x,
-      y: img.y,
-      w: 0,
-      h: 0,
-      number: boxesRef.current.length + 1,
-    };
-    onBoxesChange([...boxesRef.current, newBox]);
-    onSelectBox(newId);
+    setPendingCreate({
+      startImgX: img.x,
+      startImgY: img.y,
+      currentImgX: img.x,
+      currentImgY: img.y,
+    });
   }
 
   // ── global mousemove / mouseup (attached to window) ──
@@ -222,19 +239,12 @@ export function CropBoxLayer({
       const img = screenToImage(rel.x, rel.y, viewport);
 
       if (drag.mode === "create") {
-        const dx = img.x - drag.startImgX;
-        const dy = img.y - drag.startImgY;
-        const updated = boxesRef.current.map((b) => {
-          if (b.id !== drag.newId) return b;
-          return {
-            ...b,
-            x: drag.startImgX,
-            y: drag.startImgY,
-            w: dx,
-            h: dy,
-          };
-        });
-        onBoxesChange(updated);
+        // Update local preview only — parent state untouched.
+        setPendingCreate((prev) =>
+          prev
+            ? { ...prev, currentImgX: img.x, currentImgY: img.y }
+            : prev
+        );
       } else if (drag.mode === "move") {
         const dx = img.x - drag.startImgX;
         const dy = img.y - drag.startImgY;
@@ -252,7 +262,7 @@ export function CropBoxLayer({
           );
           return { ...b, ...clamped };
         });
-        onBoxesChange(updated);
+        onBoxesChangeRef.current(updated);
       } else if (drag.mode === "resize") {
         const dx = img.x - drag.startImgX;
         const dy = img.y - drag.startImgY;
@@ -263,30 +273,57 @@ export function CropBoxLayer({
           if (b.id !== drag.boxId) return b;
           return { ...b, ...clamped };
         });
-        onBoxesChange(updated);
+        onBoxesChangeRef.current(updated);
       }
     }
 
-    function onMouseUp() {
+    function onMouseUp(e: MouseEvent) {
       const drag = dragRef.current;
       if (drag.mode === "none") return;
 
-      if (drag.mode === "create" || drag.mode === "resize") {
-        // Remove box if too small
+      if (drag.mode === "create") {
+        // Derive final box dimensions from the mouseup event directly.
+        // We deliberately do NOT read pending preview state here — that ref is
+        // updated via useEffect (async) and can be stale on fast drags.
+        if (svgRef.current) {
+          const rel = svgRelative(e);
+          const img = screenToImage(rel.x, rel.y, viewport);
+          const raw = normalizeBox({
+            x: drag.startImgX,
+            y: drag.startImgY,
+            w: img.x - drag.startImgX,
+            h: img.y - drag.startImgY,
+          });
+          if (raw.w >= MIN_BOX_SIZE && raw.h >= MIN_BOX_SIZE) {
+            const clamped = clampBox(raw, imageWidth, imageHeight);
+            const newBox: CropBox = {
+              id: crypto.randomUUID(),
+              page: 0, // parent overrides via PdfPageCanvas
+              x: clamped.x,
+              y: clamped.y,
+              w: clamped.w,
+              h: clamped.h,
+              number: boxesRef.current.length + 1, // parent autoNumber overrides
+            };
+            onBoxesChangeRef.current([...boxesRef.current, newBox]);
+            onSelectBoxRef.current(newBox.id);
+          } else {
+            onSelectBoxRef.current(null);
+          }
+        }
+        setPendingCreate(null);
+      } else if (drag.mode === "resize") {
         const boxes = boxesRef.current;
-        const id =
-          drag.mode === "create" ? drag.newId : drag.boxId;
-        const box = boxes.find((b) => b.id === id);
+        const box = boxes.find((b) => b.id === drag.boxId);
         if (box) {
           const normalized = normalizeBox(box);
           if (normalized.w < MIN_BOX_SIZE || normalized.h < MIN_BOX_SIZE) {
-            onBoxesChange(boxes.filter((b) => b.id !== id));
-            onSelectBox(null);
+            onBoxesChangeRef.current(boxes.filter((b) => b.id !== drag.boxId));
+            onSelectBoxRef.current(null);
           } else {
-            // Normalize the box in place
-            onBoxesChange(
+            onBoxesChangeRef.current(
               boxes.map((b) =>
-                b.id === id ? { ...b, ...normalized } : b
+                b.id === drag.boxId ? { ...b, ...normalized } : b
               )
             );
           }
@@ -333,6 +370,33 @@ export function CropBoxLayer({
       onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
     >
+      {/* In-progress create preview (dashed outline, no parent state) */}
+      {pendingCreate &&
+        (() => {
+          const norm = normalizeBox({
+            x: pendingCreate.startImgX,
+            y: pendingCreate.startImgY,
+            w: pendingCreate.currentImgX - pendingCreate.startImgX,
+            h: pendingCreate.currentImgY - pendingCreate.startImgY,
+          });
+          const sc = toScreen(norm.x, norm.y);
+          const scW = (norm.w / imageWidth) * displayWidth;
+          const scH = (norm.h / imageHeight) * displayHeight;
+          return (
+            <rect
+              x={sc.x}
+              y={sc.y}
+              width={scW}
+              height={scH}
+              fill="rgba(0,0,255,0.08)"
+              stroke="#2563eb"
+              strokeWidth={2}
+              strokeDasharray="4 2"
+              pointerEvents="none"
+            />
+          );
+        })()}
+
       {boxes.map((box) => {
         const isSelected = box.id === selectedBoxId;
         // normalise before rendering (may be mid-drag with negative w/h)
