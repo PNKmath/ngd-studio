@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import JSZip from "jszip";
 import type { CropBox } from "@/lib/cropper/types";
-import { autoNumber } from "@/lib/cropper/coords";
+import { autoNumber, normalizedBboxToCropBox } from "@/lib/cropper/coords";
 import { PdfPageCanvas } from "./PdfPageCanvas";
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -70,6 +70,10 @@ export function CropperWorkspace() {
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
   // Drag-over highlight index for box-list reorder DnD
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  // Auto-crop state
+  const [autoCropping, setAutoCropping] = useState(false);
+  const [autoCropError, setAutoCropError] = useState<string | null>(null);
 
   // Extraction state
   const [extracting, setExtracting] = useState(false);
@@ -283,6 +287,79 @@ export function CropperWorkspace() {
     setSelectedBoxId(null);
   }
 
+  // ── auto crop ──
+  async function handleAutoCrop() {
+    if (!pdfPath || !pdfMeta) return;
+
+    // Confirm if existing boxes
+    if (boxes.length > 0) {
+      const ok = window.confirm(
+        `기존 박스 ${boxes.length}개를 모두 비우고 자동 분할을 진행하시겠습니까?`
+      );
+      if (!ok) return;
+    }
+
+    setAutoCropping(true);
+    setAutoCropError(null);
+
+    try {
+      const res = await fetch("/api/auto-crop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdfPath }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(
+          (errData as { error?: string }).error ?? `HTTP ${res.status}`
+        );
+      }
+
+      const data = await res.json() as {
+        pages: Array<{
+          pageIndex: number;
+          imageWidth: number;
+          imageHeight: number;
+          answerPage: boolean;
+          questions: Array<{
+            number: number | string;
+            kind: "regular" | "essay";
+            bbox: [number, number, number, number];
+          }>;
+        }>;
+      };
+
+      const result: CropBox[] = [];
+      for (const page of data.pages) {
+        if (page.answerPage) continue;
+        for (const q of page.questions) {
+          const box = normalizedBboxToCropBox({
+            bbox: q.bbox,
+            pageIndex: page.pageIndex,
+            imageWidth: page.imageWidth,
+            imageHeight: page.imageHeight,
+            number: typeof q.number === "number" ? q.number : 0,
+            kind: q.kind,
+          });
+          result.push(box);
+        }
+      }
+
+      // Sort: pageIndex asc → response order within page (already in order)
+      result.sort((a, b) => a.page - b.page);
+
+      const numbered = autoNumber(result);
+      setBoxes(numbered);
+      setSelectedBoxId(null);
+      if (pdfPath) saveToLS(pdfPath, numbered);
+    } catch (err) {
+      setAutoCropError(err instanceof Error ? err.message : "자동 분할 실패");
+    } finally {
+      setAutoCropping(false);
+    }
+  }
+
   // ── extract → ZIP ──
   async function handleExtract() {
     if (boxes.length === 0) return;
@@ -371,6 +448,17 @@ export function CropperWorkspace() {
           </>
         )}
 
+        {/* Auto-crop button */}
+        {pdfMeta && (
+          <button
+            onClick={handleAutoCrop}
+            disabled={autoCropping}
+            className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            {autoCropping ? "자동 분할 중…" : "자동 분할"}
+          </button>
+        )}
+
         {/* Spacer */}
         <div className="flex-1" />
 
@@ -391,6 +479,20 @@ export function CropperWorkspace() {
       {uploadError && (
         <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm">
           {uploadError}
+        </div>
+      )}
+
+      {autoCropError && (
+        <div className="px-4 py-2 bg-destructive/10 text-destructive text-sm flex items-center justify-between">
+          <span>자동 분할 오류: {autoCropError}</span>
+          <button
+            type="button"
+            onClick={() => setAutoCropError(null)}
+            className="ml-4 text-destructive hover:opacity-70"
+            aria-label="오류 닫기"
+          >
+            ×
+          </button>
         </div>
       )}
 
