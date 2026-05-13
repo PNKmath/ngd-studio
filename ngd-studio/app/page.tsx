@@ -59,6 +59,16 @@ export default function DashboardPage() {
             </CardHeader>
           </Card>
         </Link>
+        <Link href="/pdf-cropper">
+          <Card className="hover:border-primary/40 transition-colors cursor-pointer border-dashed">
+            <CardHeader>
+              <CardTitle className="text-lg">PDF 크롭 (테스트)</CardTitle>
+              <CardDescription>
+                PDF 페이지에서 문제 영역을 박스로 선택해 PNG ZIP으로 추출합니다.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
       </div>
 
       {/* System status */}
