@@ -17,8 +17,9 @@ outputs/           완성된 HWPX + images/ (생성 그림)
     ngd-exam-create/ 시험지 제작 워크플로우
     ngd-exam-review/ 오검 워크플로우 + 체크리스트
   agents/          작업 에이전트 7개
-    ngd-exam-reader.md    PDF → JSON 추출
-    ngd-exam-solver.md    해설 생성 (부실 해설 보완)
+    ngd-exam-extractor.md PDF 이미지 1장 → 문제 JSON
+    ngd-exam-solver.md    해설 생성
+    ngd-exam-verifier.md  해설 독립 검증 (↔ solver 최대 3회)
     ngd-exam-figure.md    그림 처리 (nano-banana)
     ngd-exam-builder.md   JSON → HWPX 조립
     ngd-exam-checker.md   AI 생성 HWPX 품질 검수
@@ -29,16 +30,18 @@ outputs/           완성된 HWPX + images/ (생성 그림)
 
 ### 1. 시험지 제작
 
-- **오케스트레이터**: `ngd-exam-create` 스킬 → 5개 서브 에이전트 순차 호출
+- **오케스트레이터**: `ngd-exam-create` 스킬 → extractor 병렬 + solver/verifier 병렬 + figure/builder/checker 순차 호출
 - **입력**: `inputs/시험지 제작/`의 스캔 PDF + 양식지 HWPX
 - **출력**: `outputs/`에 완성된 HWPX
 - **흐름**:
   ```
-  [1] ngd-exam-reader  : PDF → JPG → 문제/수식/해설 추출 → /tmp/exam_data.json
-  [2] ngd-exam-solver  : 부실 해설 보완 → JSON 업데이트
-  [3] ngd-exam-figure  : JSON의 그림 → crop → nano-banana 재생성 → 트리밍+워터마크
-  [4] ngd-exam-builder : JSON + 이미지 → HWPX XML 조립 → 후처리 → 검증
-  [5] ngd-exam-checker : AI 생성 HWPX 품질 검수 → 피드백 루프 (최대 2회)
+  [Phase 1-A] ngd-exam-extractor (병렬, 8문제 배치): 이미지 1장 → 문제 JSON (.v3cache/q{N}_extracted.json)
+  [추출 편집]                  : 사용자가 프론트엔드에서 추출 결과 직접 수정
+  [Phase 1-B] ngd-exam-solver + ngd-exam-verifier (병렬): 해설 생성 + 독립 검증 (최대 3회)
+  [Phase 2] 순차 처리:
+    [4] ngd-exam-figure  : 그림 처리 (nano-banana)
+    [5] ngd-exam-builder : JSON + 이미지 → HWPX 조립 + 후처리(fix_namespaces.py) + 검증(validate.py)
+    [6] ngd-exam-checker : HWPX 품질 검수 → 피드백 루프
   ```
 
 ### 2. 오검 (오류검수)
