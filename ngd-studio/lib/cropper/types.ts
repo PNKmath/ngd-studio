@@ -7,6 +7,7 @@ export interface CropBox {
   w: number;
   h: number;
   number: number;      // 문제 번호 (1, 2, 3 ...)
+  kind?: "regular" | "essay";  // 문제 유형 (미지정 시 "regular"로 해석)
 }
 
 export interface PageMeta {

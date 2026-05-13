@@ -71,3 +71,34 @@ export function clampBox(
 export function autoNumber(boxes: CropBox[]): CropBox[] {
   return boxes.map((box, i) => ({ ...box, number: i + 1 }));
 }
+
+/**
+ * Gemini Vision의 1000×1000 정규화 bbox를 이미지 픽셀 좌표계 CropBox로 변환.
+ * bbox 형식: [y_min, x_min, y_max, x_max] (0-1000, Gemini native 좌표계).
+ */
+export function normalizedBboxToCropBox(args: {
+  bbox: [number, number, number, number];
+  pageIndex: number;
+  imageWidth: number;
+  imageHeight: number;
+  number: number;
+  kind?: "regular" | "essay";
+  id?: string;
+}): CropBox {
+  const [y_min, x_min, y_max, x_max] = args.bbox;
+  const x = Math.round((x_min / 1000) * args.imageWidth);
+  const y = Math.round((y_min / 1000) * args.imageHeight);
+  const w = Math.round(((x_max - x_min) / 1000) * args.imageWidth);
+  const h = Math.round(((y_max - y_min) / 1000) * args.imageHeight);
+  const clamped = clampBox({ x, y, w, h }, args.imageWidth, args.imageHeight);
+  return {
+    id: args.id ?? crypto.randomUUID(),
+    page: args.pageIndex,
+    x: clamped.x,
+    y: clamped.y,
+    w: clamped.w,
+    h: clamped.h,
+    number: args.number,
+    kind: args.kind,
+  };
+}

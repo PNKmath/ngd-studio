@@ -5,6 +5,7 @@ import {
   normalizeBox,
   clampBox,
   autoNumber,
+  normalizedBboxToCropBox,
 } from "../coords";
 import type { CropBox } from "../types";
 
@@ -144,5 +145,103 @@ describe("autoNumber", () => {
     const originalOrder = boxes.map((b) => b.id);
     autoNumber(boxes);
     expect(boxes.map((b) => b.id)).toEqual(originalOrder);
+  });
+});
+
+describe("normalizedBboxToCropBox", () => {
+  // imageWidth=800, imageHeight=1200 (같은 viewport 설정 활용)
+  const imgW = 800;
+  const imgH = 1200;
+
+  it("converts a typical bbox to pixel coordinates (round-trip verification)", () => {
+    // bbox [y_min, x_min, y_max, x_max] = [100, 200, 400, 600]
+    // x = round(200/1000 * 800) = 160
+    // y = round(100/1000 * 1200) = 120
+    // w = round((600-200)/1000 * 800) = 320
+    // h = round((400-100)/1000 * 1200) = 360
+    const result = normalizedBboxToCropBox({
+      bbox: [100, 200, 400, 600],
+      pageIndex: 0,
+      imageWidth: imgW,
+      imageHeight: imgH,
+      number: 1,
+      id: "test-id-1",
+    });
+    expect(result.id).toBe("test-id-1");
+    expect(result.page).toBe(0);
+    expect(result.x).toBe(160);
+    expect(result.y).toBe(120);
+    expect(result.w).toBe(320);
+    expect(result.h).toBe(360);
+    expect(result.number).toBe(1);
+    expect(result.kind).toBeUndefined();
+  });
+
+  it("maps full-page bbox [0,0,1000,1000] to entire image dimensions", () => {
+    const result = normalizedBboxToCropBox({
+      bbox: [0, 0, 1000, 1000],
+      pageIndex: 1,
+      imageWidth: imgW,
+      imageHeight: imgH,
+      number: 2,
+      id: "test-id-2",
+    });
+    expect(result.x).toBe(0);
+    expect(result.y).toBe(0);
+    expect(result.w).toBe(imgW);
+    expect(result.h).toBe(imgH);
+    expect(result.page).toBe(1);
+  });
+
+  it("preserves kind field for both regular and essay", () => {
+    const regular = normalizedBboxToCropBox({
+      bbox: [0, 0, 500, 500],
+      pageIndex: 0,
+      imageWidth: imgW,
+      imageHeight: imgH,
+      number: 3,
+      kind: "regular",
+      id: "test-id-3",
+    });
+    expect(regular.kind).toBe("regular");
+
+    const essay = normalizedBboxToCropBox({
+      bbox: [500, 0, 1000, 500],
+      pageIndex: 0,
+      imageWidth: imgW,
+      imageHeight: imgH,
+      number: 4,
+      kind: "essay",
+      id: "test-id-4",
+    });
+    expect(essay.kind).toBe("essay");
+  });
+
+  it("uses provided id when specified", () => {
+    const result = normalizedBboxToCropBox({
+      bbox: [0, 0, 500, 500],
+      pageIndex: 0,
+      imageWidth: imgW,
+      imageHeight: imgH,
+      number: 5,
+      id: "my-custom-id",
+    });
+    expect(result.id).toBe("my-custom-id");
+  });
+
+  it("clamps bbox that extends beyond image boundaries", () => {
+    // bbox [900, 900, 1100, 1100] — x_max/y_max 초과 (1000보다 큰 값)
+    // 실제 Gemini에서 발생할 수 있는 약간 넘치는 경계값 처리
+    const result = normalizedBboxToCropBox({
+      bbox: [900, 900, 1100, 1100],
+      pageIndex: 0,
+      imageWidth: imgW,
+      imageHeight: imgH,
+      number: 6,
+      id: "test-clamp",
+    });
+    // 클램프 후 x+w <= imgW, y+h <= imgH
+    expect(result.x + result.w).toBeLessThanOrEqual(imgW);
+    expect(result.y + result.h).toBeLessThanOrEqual(imgH);
   });
 });
