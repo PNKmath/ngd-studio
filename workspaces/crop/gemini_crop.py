@@ -4,11 +4,13 @@ Gemini Vision 기반 PDF 시험지 자동 크롭.
 Gemini의 native bounding box 기능으로 문제 영역을 감지하고 크롭한다.
 
 사용법:
-    python3 gemini_crop.py <pdf_path> <output_dir>
+    python3 gemini_crop.py <pdf_path> <output_dir>          # PNG + JSON 저장 (기존 동작)
+    python3 gemini_crop.py <pdf_path> --json-only            # 좌표만 stdout JSON 출력 (디스크 쓰기 없음)
 
 환경변수:
     GEMINI_API_KEY 또는 GOOGLE_API_KEY
 """
+import argparse
 import fitz  # PyMuPDF
 import google.generativeai as genai
 from PIL import Image
@@ -41,7 +43,7 @@ def detect_questions_gemini(page_images):
     """
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not api_key:
-        print("오류: GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
+        print("오류: GEMINI_API_KEY 환경변수가 설정되지 않았습니다.", file=sys.stderr)
         sys.exit(1)
 
     genai.configure(api_key=api_key)
@@ -85,7 +87,7 @@ JSON만 반환하세요. 다른 텍스트는 포함하지 마세요."""
     for i, img in enumerate(page_images):
         contents.append(img)
 
-    print(f"Gemini API 호출 중... ({len(page_images)} 페이지)")
+    print(f"Gemini API 호출 중... ({len(page_images)} 페이지)", file=sys.stderr)
     response = model.generate_content(contents)
 
     # JSON 파싱
@@ -97,8 +99,8 @@ JSON만 반환하세요. 다른 텍스트는 포함하지 마세요."""
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        print(f"Gemini 응답 파싱 실패:")
-        print(text[:1000])
+        print(f"Gemini 응답 파싱 실패:", file=sys.stderr)
+        print(text[:1000], file=sys.stderr)
         sys.exit(1)
 
 
@@ -124,41 +126,100 @@ def crop_from_bbox(img, box_2d):
     return img.crop((x1, y1, x2, y2))
 
 
-def main():
-    if len(sys.argv) < 3:
-        print("사용법: python3 gemini_crop.py <pdf_path> <output_dir>")
-        sys.exit(1)
+def _infer_kind(num) -> str:
+    """문제 번호 타입으로 kind를 추론. 정수 → regular, 문자열에 '서술형' → essay."""
+    if isinstance(num, int):
+        return "regular"
+    return "essay" if "서술형" in str(num) else "regular"
 
-    pdf_path = sys.argv[1]
-    output_dir = sys.argv[2]
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Gemini Vision 기반 PDF 시험지 자동 크롭"
+    )
+    parser.add_argument("pdf_path", help="입력 PDF 경로")
+    parser.add_argument(
+        "output_dir",
+        nargs="?",
+        help="출력 디렉터리 (--json-only 미지정 시 필수)",
+    )
+    parser.add_argument(
+        "--json-only",
+        action="store_true",
+        help="좌표 JSON만 stdout 출력. 디스크 쓰기 없음.",
+    )
+    args = parser.parse_args()
+
+    pdf_path = args.pdf_path
+    json_only = args.json_only
+
+    if not json_only and not args.output_dir:
+        parser.error("--json-only 없이 실행하려면 output_dir 인수가 필요합니다.")
 
     if not os.path.exists(pdf_path):
-        print(f"오류: PDF 파일을 찾을 수 없습니다: {pdf_path}")
+        print(f"오류: PDF 파일을 찾을 수 없습니다: {pdf_path}", file=sys.stderr)
         sys.exit(1)
 
-    os.makedirs(output_dir, exist_ok=True)
-
-    print(f"=== Gemini 기반 PDF 자동 크롭 ===")
-    print(f"PDF: {os.path.basename(pdf_path)}")
+    if not json_only:
+        os.makedirs(args.output_dir, exist_ok=True)
+        print(f"=== Gemini 기반 PDF 자동 크롭 ===")
+        print(f"PDF: {os.path.basename(pdf_path)}")
 
     # Step 1: PDF → 페이지 이미지
     doc = fitz.open(pdf_path)
     total_pages = len(doc)
-    print(f"페이지: {total_pages}장")
+    if not json_only:
+        print(f"페이지: {total_pages}장")
 
-    page_images = []
     page_pils = []
     for i in range(total_pages):
         pil_img = pdf_page_to_pil(doc[i])
-        page_images.append(pil_img)
         page_pils.append(pil_img)
-        print(f"  Page {i+1}: {pil_img.width}x{pil_img.height}px")
+        if not json_only:
+            print(f"  Page {i+1}: {pil_img.width}x{pil_img.height}px")
     doc.close()
 
     # Step 2: Gemini로 문제 영역 감지
-    result = detect_questions_gemini(page_images)
+    result = detect_questions_gemini(page_pils)
 
-    # Step 3: 크롭 실행
+    # --json-only 모드: 좌표만 반환, 디스크 쓰기 없음
+    if json_only:
+        pages_out = []
+        for page_data in result:
+            page_num = page_data["page"]          # 1-indexed (Gemini 원본)
+            page_idx = page_num - 1               # 0-indexed (cropper 일관성)
+            pil_img = page_pils[page_idx]
+            answer_page = page_data.get("answer_page", False)
+
+            questions_out = []
+            if not answer_page:
+                for q in page_data.get("questions", []):
+                    num = q["number"]
+                    kind = _infer_kind(num)
+                    questions_out.append({
+                        "number": num,
+                        "kind": kind,
+                        "bbox": q["box_2d"],   # Gemini 원본 정규화 좌표 보존
+                    })
+
+            pages_out.append({
+                "pageIndex": page_idx,
+                "imageWidth": pil_img.width,
+                "imageHeight": pil_img.height,
+                "answerPage": answer_page,
+                "questions": questions_out,
+            })
+
+        output = {
+            "pdf": os.path.basename(pdf_path),
+            "totalPages": total_pages,
+            "pages": pages_out,
+        }
+        print(json.dumps(output, ensure_ascii=False))
+        return
+
+    # 기존 PNG + JSON 저장 모드
+    output_dir = args.output_dir
     saved = []
     problem_pages = 0
     answer_pages = 0
