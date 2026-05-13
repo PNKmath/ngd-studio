@@ -58,7 +58,8 @@ print(json.dumps({"width": pix.width, "height": pix.height, "pages": len(doc)}))
       out: cachePath,
     });
 
-    const { stdout } = await execFileAsync("python3", ["-c", script, args], {
+    const pythonCmd = process.platform === "win32" ? "python" : "python3";
+    const { stdout } = await execFileAsync(pythonCmd, ["-c", script, args], {
       timeout: 15000,
     });
 

@@ -38,7 +38,8 @@ print(json.dumps({"pages": pages, "page0Width": width, "page0Height": height, "d
       dpi,
     });
 
-    const { stdout } = await execFileAsync("python3", ["-c", script, args], {
+    const pythonCmd = process.platform === "win32" ? "python" : "python3";
+    const { stdout } = await execFileAsync(pythonCmd, ["-c", script, args], {
       timeout: 15000,
     });
 
