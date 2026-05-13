@@ -1,0 +1,23 @@
+/** 박스 좌표는 PDF 페이지가 렌더된 이미지의 픽셀 좌표계 (dpi=200 기준). */
+export interface CropBox {
+  id: string;          // uuid (crypto.randomUUID())
+  page: number;        // 0-indexed
+  x: number;           // image-pixel
+  y: number;
+  w: number;
+  h: number;
+  number: number;      // 문제 번호 (1, 2, 3 ...)
+}
+
+export interface PageMeta {
+  index: number;       // 0-indexed
+  imageWidth: number;  // 렌더 PNG 픽셀 폭
+  imageHeight: number;
+}
+
+/** crop 결과 (Phase 4의 추출 단계에서 생성) */
+export interface CroppedProblem {
+  number: number;
+  blob: Blob;          // image/png
+  sourceBox: CropBox;
+}
