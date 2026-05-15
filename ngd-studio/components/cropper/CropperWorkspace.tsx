@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
 import type { CropBox } from "@/lib/cropper/types";
 import { autoNumber, normalizedBboxToCropBox } from "@/lib/cropper/coords";
@@ -13,6 +13,8 @@ interface PdfMeta {
   page0Width: number;
   page0Height: number;
 }
+
+type CropItem = { number: number; kind?: "regular" | "essay"; blob: Blob };
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,7 +54,17 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
 // ─── component ────────────────────────────────────────────────────────────────
 
-export function CropperWorkspace() {
+interface CropperWorkspaceProps {
+  /** Crop → callback (e.g. POST /api/question-images). Omit for ZIP download. */
+  onExtract?: (items: CropItem[]) => Promise<void>;
+  /** Auto-run 자동 분할 after PDF upload. Default false. */
+  autoSplitOnUpload?: boolean;
+}
+
+export function CropperWorkspace({
+  onExtract,
+  autoSplitOnUpload = false,
+}: CropperWorkspaceProps = {}) {
   // Upload state
   const [pdfPath, setPdfPath] = useState<string | null>(null);
   const [pdfMeta, setPdfMeta] = useState<PdfMeta | null>(null);
@@ -68,17 +80,15 @@ export function CropperWorkspace() {
   // Box state (global, all pages)
   const [boxes, setBoxes] = useState<CropBox[]>([]);
   const [selectedBoxId, setSelectedBoxId] = useState<string | null>(null);
-  // Drag-over highlight index for box-list reorder DnD
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
-  // Auto-crop state
   const [autoCropping, setAutoCropping] = useState(false);
   const [autoCropError, setAutoCropError] = useState<string | null>(null);
 
-  // Extraction state
+  const pendingAutoSplitRef = useRef(false);
+
   const [extracting, setExtracting] = useState(false);
 
-  // localStorage save (debounced)
   const saveToLS = useCallback(
     debounce((path: string, bxs: CropBox[]) => {
       try {
@@ -93,7 +103,6 @@ export function CropperWorkspace() {
     []
   );
 
-  // ── upload PDF ──
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -120,7 +129,6 @@ export function CropperWorkspace() {
       if (!metaRes.ok) throw new Error("PDF 메타 조회 실패");
       const meta: PdfMeta = await metaRes.json();
 
-      // restore from localStorage
       setPdfPath(path);
       setPdfMeta(meta);
       setCurrentPage(0);
@@ -130,16 +138,17 @@ export function CropperWorkspace() {
       try {
         const stored = localStorage.getItem(lsKey(path));
         if (stored) {
-          const { boxes: storedBoxes } = JSON.parse(stored) as {
-            boxes: CropBox[];
-            updatedAt: string;
-          };
+          const { boxes: storedBoxes } = JSON.parse(stored) as { boxes: CropBox[]; updatedAt: string };
           setBoxes(storedBoxes);
         } else {
           setBoxes([]);
         }
       } catch {
         setBoxes([]);
+      }
+
+      if (autoSplitOnUpload) {
+        pendingAutoSplitRef.current = true;
       }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "오류 발생");
@@ -148,7 +157,6 @@ export function CropperWorkspace() {
     }
   }
 
-  // ── fetch page image ──
   const fetchPage = useCallback(
     async (pageIndex: number, path: string, meta: PdfMeta) => {
       if (pageIndex < 0 || pageIndex >= meta.pages) return;
@@ -168,7 +176,7 @@ export function CropperWorkspace() {
           return next;
         });
       } catch {
-        // silently fail — keep loading indicator off
+        // silently fail
       } finally {
         setLoadingPage(false);
       }
@@ -191,13 +199,8 @@ export function CropperWorkspace() {
     }
   }, [pdfPath, pdfMeta, currentPage, fetchPage, pageImages]);
 
-  // ── box change handler ──
-  // Preserves the *global* creation order of `prev`:
-  //   - current-page boxes still in updatedPageBoxes → in-place update
-  //   - current-page boxes removed → dropped
-  //   - new boxes from current page (not in prev) → appended at end of global array
-  // Cross-page order is never re-shuffled here. Reordering happens via
-  // handleReorderBoxes (box list drag-and-drop).
+  // Preserves global creation order: in-place update existing, drop removed, append new.
+  // Cross-page order unchanged; reordering happens via handleReorderBoxes (DnD).
   function handlePageBoxesChange(updatedPageBoxes: CropBox[]) {
     setBoxes((prev) => {
       const updatedById = new Map(updatedPageBoxes.map((b) => [b.id, b]));
@@ -211,12 +214,10 @@ export function CropperWorkspace() {
             result.push(upd);
             seen.add(b.id);
           }
-          // else: removed from current page → drop
         } else {
           result.push(b);
         }
       }
-      // Append boxes new to this page (not present in prev)
       for (const b of updatedPageBoxes) {
         if (!seen.has(b.id)) {
           result.push(b);
@@ -246,7 +247,6 @@ export function CropperWorkspace() {
       if (toIdx < 0 || toIdx > prev.length) return prev;
       const next = [...prev];
       const [moved] = next.splice(fromIdx, 1);
-      // Insert before the target index (account for removed element)
       const adjusted = toIdx > fromIdx ? toIdx - 1 : toIdx;
       next.splice(adjusted, 0, moved);
       const numbered = autoNumber(next);
@@ -255,7 +255,6 @@ export function CropperWorkspace() {
     });
   }
 
-  // ── navigation ──
   function goPrev() {
     if (!pdfMeta) return;
     setCurrentPage((p) => Math.max(0, p - 1));
@@ -279,7 +278,6 @@ export function CropperWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pdfMeta]);
 
-  // ── localStorage clear ──
   function handleClearStorage() {
     if (!pdfPath) return;
     localStorage.removeItem(lsKey(pdfPath));
@@ -287,11 +285,9 @@ export function CropperWorkspace() {
     setSelectedBoxId(null);
   }
 
-  // ── auto crop ──
   async function handleAutoCrop() {
     if (!pdfPath || !pdfMeta) return;
 
-    // Confirm if existing boxes
     if (boxes.length > 0) {
       const ok = window.confirm(
         `기존 박스 ${boxes.length}개를 모두 비우고 자동 분할을 진행하시겠습니까?`
@@ -311,9 +307,7 @@ export function CropperWorkspace() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(
-          (errData as { error?: string }).error ?? `HTTP ${res.status}`
-        );
+        throw new Error((errData as { error?: string }).error ?? `HTTP ${res.status}`);
       }
 
       const data = await res.json() as {
@@ -346,7 +340,6 @@ export function CropperWorkspace() {
         }
       }
 
-      // Sort: pageIndex asc → response order within page (already in order)
       result.sort((a, b) => a.page - b.page);
 
       const numbered = autoNumber(result);
@@ -360,53 +353,70 @@ export function CropperWorkspace() {
     }
   }
 
-  // ── extract → ZIP ──
+  useEffect(() => {
+    if (!pendingAutoSplitRef.current) return;
+    if (!pdfPath || !pdfMeta) return;
+    pendingAutoSplitRef.current = false;
+    handleAutoCrop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfPath, pdfMeta]);
+
+  async function cropAllBoxesToBlobs(): Promise<CropItem[]> {
+    const items: CropItem[] = [];
+    for (const box of boxes) {
+      const blobUrl = pageImages.get(box.page);
+      if (!blobUrl) continue; // page not loaded yet — skip
+
+      const img = await loadImage(blobUrl);
+      const canvas = document.createElement("canvas");
+      canvas.width = box.w;
+      canvas.height = box.h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
+      ctx.drawImage(img, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+
+      const pngBlob: Blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => {
+          if (b) resolve(b);
+          else reject(new Error("canvas.toBlob failed"));
+        }, "image/png");
+      });
+
+      items.push({ number: box.number, kind: box.kind, blob: pngBlob });
+    }
+    return items;
+  }
+
   async function handleExtract() {
     if (boxes.length === 0) return;
     setExtracting(true);
     try {
-      const zip = new JSZip();
+      const items = await cropAllBoxesToBlobs();
 
-      for (const box of boxes) {
-        const blobUrl = pageImages.get(box.page);
-        if (!blobUrl) continue; // page not loaded yet — skip
-
-        const img = await loadImage(blobUrl);
-        const canvas = document.createElement("canvas");
-        canvas.width = box.w;
-        canvas.height = box.h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) continue;
-        ctx.drawImage(img, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
-
-        const pngBlob: Blob = await new Promise((resolve, reject) => {
-          canvas.toBlob((b) => {
-            if (b) resolve(b);
-            else reject(new Error("canvas.toBlob failed"));
-          }, "image/png");
-        });
-
-        const padded = zeroPad(box.number, boxes.length);
-        zip.file(`q${padded}.png`, pngBlob);
+      if (onExtract) {
+        await onExtract(items);
+      } else {
+        const zip = new JSZip();
+        for (const item of items) {
+          const padded = zeroPad(item.number, boxes.length);
+          zip.file(`q${padded}.png`, item.blob);
+        }
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "crop_result.zip";
+        a.click();
+        URL.revokeObjectURL(url);
       }
-
-      const zipBlob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "crop_result.zip";
-      a.click();
-      URL.revokeObjectURL(url);
     } finally {
       setExtracting(false);
     }
   }
 
-  // ── current page boxes ──
   const currentBoxes = boxes.filter((b) => b.page === currentPage);
   const currentImageUrl = pageImages.get(currentPage) ?? null;
 
-  // ── render ──
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
       {/* Header */}
@@ -459,7 +469,6 @@ export function CropperWorkspace() {
           </button>
         )}
 
-        {/* Spacer */}
         <div className="flex-1" />
 
         {/* Extract button */}
@@ -471,6 +480,8 @@ export function CropperWorkspace() {
           >
             {extracting
               ? "추출 중..."
+              : onExtract
+              ? `시험지 제작 시작 (${boxes.length}문제)`
               : `추출 실행 (${boxes.length}문제)`}
           </button>
         )}
