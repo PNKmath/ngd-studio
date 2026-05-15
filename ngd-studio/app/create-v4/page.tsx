@@ -39,10 +39,20 @@ export default function CreateV4Page() {
       try {
         const formData = new FormData();
 
+        // kind별 독립 카운터: "regular"(미지정 포함) → q{N}, "essay" → q_s{N}
+        let rIdx = 0;
+        let eIdx = 0;
         for (const item of items) {
-          // API route expects keys "q1", "q2", ..., "q30"
-          const file = new File([item.blob], `q${item.number}.png`, { type: "image/png" });
-          formData.append(`q${item.number}`, file);
+          let key: string;
+          if (item.kind === "essay") {
+            eIdx++;
+            key = `q_s${String(eIdx).padStart(2, "0")}`;
+          } else {
+            rIdx++;
+            key = `q${String(rIdx).padStart(2, "0")}`;
+          }
+          const file = new File([item.blob], `${key}.png`, { type: "image/png" });
+          formData.append(key, file);
         }
 
         const res = await fetch("/api/question-images", {

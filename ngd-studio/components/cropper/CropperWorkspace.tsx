@@ -30,11 +30,6 @@ function lsKey(pdfPath: string): string {
   return `pdf-cropper:${hashString(pdfPath)}`;
 }
 
-function zeroPad(n: number, total: number): string {
-  const width = String(total).length;
-  return String(n).padStart(width, "0");
-}
-
 function debounce<T extends (...args: Parameters<T>) => void>(fn: T, ms: number): T {
   let timer: ReturnType<typeof setTimeout> | null = null;
   return ((...args: Parameters<T>) => {
@@ -387,6 +382,35 @@ export function CropperWorkspace({
     return items;
   }
 
+  /**
+   * kind별 독립 카운터로 파일명 결정.
+   * "regular" (미지정 포함) → q{NN}.png
+   * "essay" → q_s{NN}.png
+   * kind별 1부터 zero-pad (총 kind별 count 기준).
+   */
+  function kindFilename(items: CropItem[]): Array<{ item: CropItem; fname: string }> {
+    const regularItems = items.filter((it) => (it.kind ?? "regular") !== "essay");
+    const essayItems   = items.filter((it) => it.kind === "essay");
+
+    const regularWidth = String(regularItems.length).length;
+    const essayWidth   = String(essayItems.length).length;
+
+    let rIdx = 0;
+    let eIdx = 0;
+
+    return items.map((item) => {
+      if (item.kind === "essay") {
+        eIdx++;
+        const pad = String(eIdx).padStart(Math.max(2, essayWidth), "0");
+        return { item, fname: `q_s${pad}.png` };
+      } else {
+        rIdx++;
+        const pad = String(rIdx).padStart(Math.max(2, regularWidth), "0");
+        return { item, fname: `q${pad}.png` };
+      }
+    });
+  }
+
   async function handleExtract() {
     if (boxes.length === 0) return;
     setExtracting(true);
@@ -397,9 +421,8 @@ export function CropperWorkspace({
         await onExtract(items);
       } else {
         const zip = new JSZip();
-        for (const item of items) {
-          const padded = zeroPad(item.number, boxes.length);
-          zip.file(`q${padded}.png`, item.blob);
+        for (const { item, fname } of kindFilename(items)) {
+          zip.file(fname, item.blob);
         }
         const zipBlob = await zip.generateAsync({ type: "blob" });
         const url = URL.createObjectURL(zipBlob);

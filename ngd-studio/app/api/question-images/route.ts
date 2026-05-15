@@ -13,8 +13,14 @@ export async function GET() {
     } catch { /* folder doesn't exist */ }
 
     const qRegex = /^q(\d+)\.(png|jpg|jpeg)$/i;
+    const essayRegex = /^q_s(\d+)\.(png|jpg|jpeg)$/i;
     const numbers = files
       .map((f) => qRegex.exec(f))
+      .filter(Boolean)
+      .map((m) => parseInt(m![1], 10))
+      .sort((a, b) => a - b);
+    const essayNumbers = files
+      .map((f) => essayRegex.exec(f))
       .filter(Boolean)
       .map((m) => parseInt(m![1], 10))
       .sort((a, b) => a - b);
@@ -23,9 +29,14 @@ export async function GET() {
     try {
       cleanedFiles = await readdir(path.join(IMAGES_DIR, "cleaned"));
     } catch { /* no cleaned folder */ }
-    const hasClean = cleanedFiles.some((f) => qRegex.test(f));
+    const hasClean = cleanedFiles.some((f) => qRegex.test(f) || essayRegex.test(f));
 
-    return NextResponse.json({ count: numbers.length, numbers, hasClean });
+    return NextResponse.json({
+      count: numbers.length + essayNumbers.length,
+      numbers,
+      essayNumbers,
+      hasClean,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Read failed";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -37,6 +48,7 @@ export async function PATCH(req: NextRequest) {
     const formData = await req.formData();
     const qNumStr = formData.get("qNum");
     const file = formData.get("file");
+    const kind = String(formData.get("kind") ?? "regular");
 
     if (!qNumStr || !(file instanceof File)) {
       return NextResponse.json({ error: "qNum and file required" }, { status: 400 });
@@ -51,7 +63,7 @@ export async function PATCH(req: NextRequest) {
 
     const padded = String(num).padStart(2, "0");
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
-    const fileName = `q${padded}.${ext}`;
+    const fileName = kind === "essay" ? `q_s${padded}.${ext}` : `q${padded}.${ext}`;
     const filePath = path.join(IMAGES_DIR, fileName);
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -79,18 +91,20 @@ export async function POST(req: NextRequest) {
       await mkdir(IMAGES_DIR, { recursive: true });
     } catch { /* ignore */ }
 
-    const saved: { number: number; path: string }[] = [];
+    const saved: { number: number; kind: "regular" | "essay"; path: string }[] = [];
 
     for (const [key, value] of formData.entries()) {
-      // Keys are "q1", "q2", ... "q30"
-      if (!key.startsWith("q") || !(value instanceof File)) continue;
-
-      const num = parseInt(key.slice(1), 10);
+      // Keys: "q1".."q30" (regular) or "q_s1".."q_s30" (essay).
+      if (!(value instanceof File)) continue;
+      const essay = key.startsWith("q_s");
+      const numPart = essay ? key.slice(3) : key.startsWith("q") ? key.slice(1) : null;
+      if (numPart === null) continue;
+      const num = parseInt(numPart, 10);
       if (isNaN(num)) continue;
 
       const padded = String(num).padStart(2, "0");
       const ext = value.name.split(".").pop()?.toLowerCase() ?? "png";
-      const fileName = `q${padded}.${ext}`;
+      const fileName = essay ? `q_s${padded}.${ext}` : `q${padded}.${ext}`;
       const filePath = path.join(IMAGES_DIR, fileName);
 
       const buffer = Buffer.from(await value.arrayBuffer());
@@ -98,6 +112,7 @@ export async function POST(req: NextRequest) {
 
       saved.push({
         number: num,
+        kind: essay ? "essay" : "regular",
         path: `inputs/시험지 제작/question_images/${fileName}`,
       });
     }

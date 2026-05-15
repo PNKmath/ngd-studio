@@ -60,6 +60,11 @@ def detect_questions_gemini(page_images):
 - 학생 필기는 무시하고 인쇄된 내용만 기준으로 합니다.
 - 해설/정답 페이지는 "answer_page": true로 표시하고 문제를 추출하지 않습니다.
 - bounding box는 [y_min, x_min, y_max, x_max] 형식 (0-1000 정규화)으로 반환합니다.
+- 각 문제에 "kind" 필드를 반드시 포함합니다:
+  - 객관식 또는 단답형이면 "regular"
+  - 서술형(예: "[서술형 N]", "서술형 1")이면 "essay"
+- "number" 필드는 **kind별로 1부터** 매깁니다. 객관식과 서술형은 각각 독립적으로 번호를 부여합니다.
+  예: 같은 페이지에 객관식 1, 2번 + 서술형 1번이 있으면 number는 각각 1, 2, 1입니다.
 
 JSON 형식으로 반환:
 ```json
@@ -68,8 +73,9 @@ JSON 형식으로 반환:
     "page": 1,
     "answer_page": false,
     "questions": [
-      {"number": 1, "box_2d": [y_min, x_min, y_max, x_max]},
-      {"number": 2, "box_2d": [y_min, x_min, y_max, x_max]}
+      {"number": 1, "kind": "regular", "box_2d": [y_min, x_min, y_max, x_max]},
+      {"number": 2, "kind": "regular", "box_2d": [y_min, x_min, y_max, x_max]},
+      {"number": 1, "kind": "essay",   "box_2d": [y_min, x_min, y_max, x_max]}
     ]
   },
   {
@@ -133,6 +139,24 @@ def _infer_kind(num) -> str:
     return "essay" if "서술형" in str(num) else "regular"
 
 
+def _resolve_num_kind(q: dict) -> tuple[int, str]:
+    """
+    Gemini 문제 dict에서 (number: int, kind: str) 정규화.
+    - 명시적 kind 우선, 없으면 number 패턴으로 추론 (레거시 fallback).
+    - number가 정수가 아닌 경우(레거시) 숫자를 추출하고 kind를 보강.
+    """
+    raw_num = q["number"]
+    kind = q.get("kind") or _infer_kind(raw_num)
+    if not isinstance(raw_num, int):
+        snum = re.search(r'\d+', str(raw_num))
+        num = int(snum.group()) if snum else 0
+        if not q.get("kind") and "서술형" in str(raw_num):
+            kind = "essay"
+    else:
+        num = raw_num
+    return num, kind
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Gemini Vision 기반 PDF 시험지 자동 크롭"
@@ -194,8 +218,7 @@ def main():
             questions_out = []
             if not answer_page:
                 for q in page_data.get("questions", []):
-                    num = q["number"]
-                    kind = _infer_kind(num)
+                    num, kind = _resolve_num_kind(q)
                     questions_out.append({
                         "number": num,
                         "kind": kind,
@@ -235,22 +258,22 @@ def main():
         pil_img = page_pils[page_num - 1]
 
         for q in page_data.get("questions", []):
-            num = q["number"]
             box = q["box_2d"]
             cropped = crop_from_bbox(pil_img, box)
+            num, kind = _resolve_num_kind(q)
 
-            # 번호가 문자열(서술형 등)이면 그대로, 정수면 zero-pad
-            if isinstance(num, int):
-                fname = f"q{num:02d}.png"
+            # kind별 파일명 분기 — zero-pad
+            if kind == "essay":
+                fname = f"q_s{num:02d}.png"
             else:
-                # "서술형 1" → "q_s1.png"
-                snum = re.search(r'\d+', str(num))
-                fname = f"q_s{snum.group() if snum else num}.png"
+                fname = f"q{num:02d}.png"
+
             fpath = os.path.join(output_dir, fname)
             cropped.save(fpath)
 
             saved.append({
                 "number": num,
+                "kind": kind,
                 "image": fname,
                 "page": page_num,
                 "box_2d": box,
@@ -261,7 +284,7 @@ def main():
                     "height": cropped.height,
                 },
             })
-            print(f"  문제 {num}번: {fname} ({cropped.width}x{cropped.height}px) [p{page_num}]")
+            print(f"  문제 {num}번 [{kind}]: {fname} ({cropped.width}x{cropped.height}px) [p{page_num}]")
 
     # Step 4: 결과 JSON 저장
     crop_result = {
