@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { MetaForm, type MetaValue } from "@/components/upload/MetaForm";
 import { QuestionSlotGrid } from "@/components/upload/QuestionSlotGrid";
 import type { QuestionSlot } from "@/components/upload/QuestionSlotGrid";
 import { PipelineView } from "@/components/pipeline/PipelineView";
@@ -12,6 +13,16 @@ import { FollowupChat } from "@/components/shared/FollowupChat";
 import { QuestionResultPanel } from "@/components/results/QuestionResultPanel";
 import { useJobStore } from "@/lib/store";
 import { useJobRunner } from "@/lib/useJobRunner";
+
+type FigureStatus = { pending: boolean; done: boolean; success: number[]; failed: number[]; images: string[] };
+type BuildStatus = {
+  pending: boolean;
+  status?: "running" | "retrying" | "fallback" | "success" | "failed";
+  hwpx_path?: string;
+  error?: string;
+  retried?: { problem: number; agent: string }[];
+  fallback?: boolean;
+};
 
 export default function CreatePage() {
   const { startJob, stopJob } = useJobRunner();
@@ -27,33 +38,22 @@ export default function CreatePage() {
   const [questionSlots, setQuestionSlots] = useState<QuestionSlot[]>([]);
   const [filledSlotCount, setFilledSlotCount] = useState(0);
 
-  // Meta info form state
-  const [school, setSchool] = useState("");
-  const [grade, setGrade] = useState(2);
-  const [subject, setSubject] = useState("수학 I");
-  const [semester, setSemester] = useState("1학기");
-  const [examType, setExamType] = useState("중간");
-  const [range, setRange] = useState("");
+  const [meta, setMeta] = useState<MetaValue>({
+    school: "",
+    grade: 2,
+    subject: "수학 I",
+    semester: "1학기",
+    examType: "중간",
+    range: "",
+  });
 
-  // Resume state
   const [existingImages, setExistingImages] = useState<{ count: number; hasClean: boolean } | null>(null);
   const [resumeFrom, setResumeFrom] = useState("extractor");
   const [showResumeForm, setShowResumeForm] = useState(false);
 
-  // Figure confirm state (after figure background processing)
-  type FigureStatus = { pending: boolean; done: boolean; success: number[]; failed: number[]; images: string[] };
   const [figureStatus, setFigureStatus] = useState<FigureStatus | null>(null);
   const figureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Build status polling
-  type BuildStatus = {
-    pending: boolean;
-    status?: "running" | "retrying" | "fallback" | "success" | "failed";
-    hwpx_path?: string;
-    error?: string;
-    retried?: { problem: number; agent: string }[];
-    fallback?: boolean;
-  };
   const [buildStatus, setBuildStatus] = useState<BuildStatus | null>(null);
   const buildIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -103,18 +103,18 @@ export default function CreatePage() {
       }
     }
 
-    const meta = { school, grade, subject, semester, examType, range, questionCount: filledSlotCount };
-    setV3Meta(meta);
+    const jobMeta = { ...meta, questionCount: filledSlotCount };
+    setV3Meta(jobMeta);
 
     // 캐시에 메타 저장 — extractor 단계 이전 resume 시 자동 로드용
     await fetch("/api/v3cache-meta", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ school, grade, subject, semester, examType, range }),
+      body: JSON.stringify(meta),
     }).catch(() => {});
 
-    await startJob("create", { pdf: "", questionImages: questionImageNums }, meta);
-  }, [filledSlotCount, questionSlots, startJob, school, grade, subject, semester, examType, range, setV3Meta]);
+    await startJob("create", { pdf: "", questionImages: questionImageNums }, jobMeta);
+  }, [filledSlotCount, questionSlots, startJob, meta, setV3Meta]);
 
   const handleResume = useCallback(async () => {
     if (!existingImages) return;
@@ -127,20 +127,20 @@ export default function CreatePage() {
       if (data.found) cachedMeta = data;
     } catch { /* ignore */ }
 
-    const meta = {
-      school: (cachedMeta.school as string) || school,
-      grade: (cachedMeta.grade as number) || grade,
-      subject: (cachedMeta.subject as string) || subject,
-      semester: (cachedMeta.semester as string) || semester,
-      examType: (cachedMeta.examType as string) || examType,
-      range: (cachedMeta.range as string) || range,
+    const jobMeta = {
+      school: (cachedMeta.school as string) || meta.school,
+      grade: (cachedMeta.grade as number) || meta.grade,
+      subject: (cachedMeta.subject as string) || meta.subject,
+      semester: (cachedMeta.semester as string) || meta.semester,
+      examType: (cachedMeta.examType as string) || meta.examType,
+      range: (cachedMeta.range as string) || meta.range,
       questionCount: existingImages.count,
       resumeFrom,
     };
-    setV3Meta({ ...meta });
+    setV3Meta({ ...jobMeta });
 
-    await startJob("resume", { pdf: "" }, meta);
-  }, [existingImages, school, grade, subject, semester, examType, range, resumeFrom, startJob, setV3Meta]);
+    await startJob("resume", { pdf: "" }, jobMeta);
+  }, [existingImages, meta, resumeFrom, startJob, setV3Meta]);
 
   const isRunning = status === "running";
   const isDone = status === "done" || status === "failed";
@@ -237,53 +237,7 @@ export default function CreatePage() {
           <div className="space-y-4">
             <Card className="p-4 space-y-3">
               <h3 className="text-sm font-medium">시험 정보</h3>
-              <div className="space-y-2 text-sm">
-                <div>
-                  <label className="text-xs text-muted-foreground">학교</label>
-                  <input type="text" value={school} onChange={(e) => setSchool(e.target.value)}
-                    placeholder="OO고등학교" className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm" />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-muted-foreground">학년</label>
-                    <select value={grade} onChange={(e) => setGrade(Number(e.target.value))}
-                      className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm">
-                      <option value={1}>1학년</option>
-                      <option value={2}>2학년</option>
-                      <option value={3}>3학년</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">과목</label>
-                    <select value={subject} onChange={(e) => setSubject(e.target.value)}
-                      className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm">
-                      <option>수학</option><option>수학 I</option><option>수학 II</option>
-                      <option>확률과 통계</option><option>미적분</option><option>기하</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-muted-foreground">학기</label>
-                    <select value={semester} onChange={(e) => setSemester(e.target.value)}
-                      className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm">
-                      <option>1학기</option><option>2학기</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">시험</label>
-                    <select value={examType} onChange={(e) => setExamType(e.target.value)}
-                      className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm">
-                      <option>중간</option><option>기말</option><option>모의</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground">범위</label>
-                  <input type="text" value={range} onChange={(e) => setRange(e.target.value)}
-                    placeholder="지수 ~ 삼각함수그래프" className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm" />
-                </div>
-              </div>
+              <MetaForm value={meta} onChange={setMeta} />
             </Card>
 
             <Card className="p-4 space-y-3">
