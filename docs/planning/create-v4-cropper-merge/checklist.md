@@ -32,7 +32,7 @@ created: 2026-05-14
 | 2 | [phase-02-cropbox-kind-and-bbox-util.md](./phase-02-cropbox-kind-and-bbox-util.md) | 4 | 4 | 100% | completed | c5a70c7 |
 | 3 | [phase-03-cropper-auto-split-entry.md](./phase-03-cropper-auto-split-entry.md) | 5 | 5 | 100% | completed | 699d22f |
 | 4 | [phase-04-create-v4-page-redesign.md](./phase-04-create-v4-page-redesign.md) | 5 | 5 | 100% | completed | 29e5f48 |
-| 5 | [phase-05-essay-kind-bug-fix-and-e2e.md](./phase-05-essay-kind-bug-fix-and-e2e.md) | 5 | 5 | 100% | completed | - |
+| 5 | [phase-05-essay-kind-bug-fix-and-e2e.md](./phase-05-essay-kind-bug-fix-and-e2e.md) | 5 | 5 | 100% | completed | 519fc66 |
 | **Total** | | **23** | **23** | **100%** | | |
 
 ## Phase 의존성
