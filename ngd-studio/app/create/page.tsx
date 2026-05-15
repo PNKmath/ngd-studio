@@ -57,14 +57,33 @@ export default function CreatePage() {
   const [buildStatus, setBuildStatus] = useState<BuildStatus | null>(null);
   const buildIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const isRunning = status === "running";
+  const isDone = status === "done" || status === "failed";
+  const hasJob = isRunning || isDone;
+
+  // 진행 중인 작업이 있으면 fetch 스킵 — store에 이미 jobId/status 있음
   useEffect(() => {
+    if (hasJob) return;
     fetch("/api/question-images")
       .then((r) => r.json())
       .then((data) => {
         if (data.count > 0) setExistingImages({ count: data.count, hasClean: data.hasClean });
       })
       .catch(() => {});
-  }, []);
+  }, [hasJob]);
+
+  // store v3Meta → 폼 자동 복원 (새로고침 후 idle 복귀 케이스)
+  useEffect(() => {
+    if (!v3Meta || hasJob) return; // 진행 중이면 폼 안 보임 → 복원 의미 없음
+    setMeta({
+      school: v3Meta.school ?? "",
+      grade: v3Meta.grade ?? 2,
+      subject: v3Meta.subject ?? "수학 I",
+      semester: v3Meta.semester ?? "1학기",
+      examType: v3Meta.examType ?? "중간",
+      range: v3Meta.range ?? "",
+    });
+  }, [v3Meta, hasJob]);
 
   const canStart = filledSlotCount > 0 && status === "idle";
   const canResume = status === "idle" && !!existingImages;
@@ -141,10 +160,6 @@ export default function CreatePage() {
 
     await startJob("resume", { pdf: "" }, jobMeta);
   }, [existingImages, meta, resumeFrom, startJob, setV3Meta]);
-
-  const isRunning = status === "running";
-  const isDone = status === "done" || status === "failed";
-  const hasJob = isRunning || isDone;
 
   // figure 백그라운드 처리 완료 대기 상태 — resumeFrom=figure job이 끝난 후
   const showFigureConfirm = isDone
@@ -225,8 +240,8 @@ export default function CreatePage() {
 
   const handleConfirmFigure = useCallback(async () => {
     if (!v3Meta) return;
-    const meta = { ...v3Meta, resumeFrom: "confirm" };
-    await startJob("resume", { pdf: "" }, meta);
+    const jobMeta = { ...v3Meta, resumeFrom: "confirm" };
+    await startJob("resume", { pdf: "" }, jobMeta);
   }, [v3Meta, startJob]);
 
   // --- Idle: 입력 폼 ---
