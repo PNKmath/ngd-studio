@@ -10,19 +10,16 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // Import from relative paths (tsx doesn't support @/ alias)
-import { transformToSSE, toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
+import { toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
 import {
-  MAX_PROVIDER_ATTEMPTS,
-  createProviderAttemptLog,
-  createProviderRetryLog,
   normalizeProviderId,
   resolveProviderId,
-  runAIProvider,
-  shouldRetryProviderAttempt,
   type AIProviderId,
 } from "../lib/ai";
+import type { ProviderTelemetryEntry } from "../lib/ai/retry";
 import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
 import { createJobStore } from "./stages/jobStore";
+import { runLegacyPromptJob } from "./stages/jobRunner";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
 const __server_file = fileURLToPath(import.meta.url);
@@ -270,105 +267,31 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     try { activeProviderProcess?.kill("SIGTERM"); } catch { /* already dead */ }
   });
 
-  const currentStage = { name: "" };
   let outputFile = "";
   let resultSummary = "";
   let finalStatus: "done" | "failed" | "cancelled" = "done";
-  let hadResultEvent = false;
   let finalProviderMetadata = { requestedProvider, provider: resolvedProvider };
+  let providerTelemetry: ProviderTelemetryEntry[] = [];
 
   try {
-    for (let attempt = 1; attempt <= MAX_PROVIDER_ATTEMPTS; attempt += 1) {
-      let providerFailed = false;
-      send({
-        event: "log",
-        data: {
-          stage: "system",
-          message: createProviderAttemptLog(resolvedProvider, attempt),
-          timestamp: new Date().toISOString(),
-          level: "info",
-        },
-      });
-
-      const { process: proc, events, exitCode, metadata } = runAIProvider(prompt, {
-        provider: requestedProvider,
-        cwd: BASE_DIR,
-        maxTurns: mode === "crop" ? 30 : (mode === "create" || mode === "resume") ? 200 : 50,
-      });
-      finalProviderMetadata = {
-        requestedProvider: metadata.requestedProvider,
-        provider: metadata.provider,
-      };
-      activeProviderProcess = proc;
-      activeProcesses.add(proc);
-      proc.on("close", () => {
-        activeProcesses.delete(proc);
-        if (activeProviderProcess === proc) activeProviderProcess = null;
-      });
-
-      send({ event: "log", data: { stage: "system", message: `CLI 프로세스 시작됨 (PID: ${proc.pid}). API 연결 대기중...`, timestamp: new Date().toISOString(), level: "info" } });
-
-      // Forward stderr as log messages (auth errors, warnings, etc.)
-      proc.stderr?.on("data", (chunk: Buffer) => {
-        const msg = chunk.toString().trim();
-        if (msg) {
-          send({ event: "log", data: { stage: "system", message: `[stderr] ${msg.slice(0, 300)}`, timestamp: new Date().toISOString(), level: "warn" } });
-        }
-      });
-
-      for await (const event of events) {
-        if (res.destroyed) break;
-        const sseEvents = transformToSSE(event, currentStage);
-        for (const sse of sseEvents) {
-          // hwpx 파일 이벤트에서 outputFile 추적
-          // CLI(WSL)가 보낸 경로는 /mnt/c/... 형태일 수 있으므로 즉시 변환
-          if (sse.event === "file" && sse.data.type === "hwpx") {
-            outputFile = fromWslPath(sse.data.path as string);
-          }
-          // result 이벤트에서 요약 텍스트 및 상태 추적
-          if (sse.event === "result") {
-            hadResultEvent = true;
-            resultSummary = (sse.data.result as string) ?? "";
-            finalStatus = sse.data.status === "success" ? "done" : "failed";
-            providerFailed = sse.data.status !== "success";
-            if (sse.data.outputPath) {
-              outputFile = fromWslPath(sse.data.outputPath as string);
-            }
-          }
-          if (sse.event === "error") {
-            finalStatus = "failed";
-            providerFailed = true;
-          }
-          send(sse);
-        }
-      }
-
-      const code = await exitCode;
-      if (code !== 0) finalStatus = "failed";
-
-      if (!shouldRetryProviderAttempt({ attempt, exitCode: code, providerFailed, aborted: clientDisconnected })) {
-        if (code !== 0 && !currentStage.name) {
-          send({ event: "error", data: { message: `${metadata.label} exited with code ${code}` } });
-          finalStatus = "failed";
-        }
-        break;
-      }
-
-      send({
-        event: "log",
-        data: {
-          stage: "system",
-          message: createProviderRetryLog(metadata.provider, attempt),
-          timestamp: new Date().toISOString(),
-          level: "warn",
-        },
-      });
-    }
-
-    // result 이벤트 없이 정상 종료 + 클라이언트 중단 → cancelled
-    if (!hadResultEvent && clientDisconnected) {
-      finalStatus = "cancelled";
-    }
+    const legacyResult = await runLegacyPromptJob({
+      prompt,
+      requestedProvider,
+      resolvedProvider,
+      baseDir: BASE_DIR,
+      mode,
+      jobId,
+      send,
+      isResponseDestroyed: () => res.destroyed,
+      isClientDisconnected: () => clientDisconnected,
+      setActiveProviderProcess: (proc) => { activeProviderProcess = proc; },
+      activeProcesses,
+    });
+    outputFile = legacyResult.outputFile ?? "";
+    resultSummary = legacyResult.resultSummary ?? "";
+    finalStatus = legacyResult.status;
+    finalProviderMetadata = legacyResult.providerMetadata;
+    providerTelemetry = legacyResult.providerTelemetry;
   } catch (err) {
     send({
       event: "error",
@@ -417,6 +340,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         ...jobData,
         requestedProvider: finalProviderMetadata.requestedProvider,
         provider: finalProviderMetadata.provider,
+        providerTelemetry,
         status: finalStatus,
         finishedAt: new Date().toISOString(),
         outputFile: outputFile || undefined,
