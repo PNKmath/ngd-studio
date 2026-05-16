@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: Tests / docs 정리
-status: pending
+status: completed
 depends_on: [3, 5]
 scope:
   - ngd-studio/lib/__tests__/
@@ -28,11 +28,11 @@ builder/checker runner helper 테스트를 추가하거나 `stageFoundation.test
 
 ## 체크리스트
 
-- [ ] builder runner focused test 추가 또는 보강
-- [ ] checker rule runner focused test 추가 또는 보강
-- [ ] `pnpm test` 또는 합리적 focused Vitest 명령 통과
-- [ ] README/checklist에 fallback 유지와 model harness 후속 연결 명시
-- [ ] 다음 추천 task를 `model-stage-harness-and-deepseek-rollout`로 기록
+- [x] builder runner focused test 추가 또는 보강
+- [x] checker rule runner focused test 추가 또는 보강
+- [x] `pnpm test` 또는 합리적 focused Vitest 명령 통과
+- [x] README/checklist에 fallback 유지와 model harness 후속 연결 명시
+- [x] 다음 추천 task를 `model-stage-harness-and-deepseek-rollout`로 기록
 
 ## 영향 범위
 
@@ -43,3 +43,23 @@ builder/checker runner helper 테스트를 추가하거나 `stageFoundation.test
 ```bash
 pnpm test
 ```
+
+## 실행 결과
+
+### 2026-05-16
+
+STATUS: completed
+PHASE: 6
+SUMMARY: `stageFoundation.test.ts`에 command/builder/checker focused coverage를 보강했고, README/checklist에 legacy fallback 유지, model harness 제외, 다음 추천 task를 기록했습니다.
+CHECKLIST: 5/5
+VERIFICATION: pass
+NEXT: `model-stage-harness-and-deepseek-rollout`
+COMMIT: pending
+
+#### Scope Audit (orchestrator)
+
+pass — 3 files in scope
+
+#### Verification Re-run (orchestrator)
+
+exit 0 — `pnpm test` 통과

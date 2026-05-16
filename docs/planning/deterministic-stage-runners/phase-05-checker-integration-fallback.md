@@ -56,7 +56,7 @@ SUMMARY: `resumeFrom === "checker"` 경로에 deterministic checker runner를 op
 CHECKLIST: 5/5
 VERIFICATION: pass
 NEXT: Phase 6 진행 가능
-COMMIT: pending
+COMMIT: 7aedeeb
 
 #### Scope Audit (orchestrator)
 

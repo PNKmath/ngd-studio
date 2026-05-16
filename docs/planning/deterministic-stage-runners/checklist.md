@@ -17,9 +17,9 @@ created: 2026-05-16
 | 2 | [phase-02-builder-runner.md](./phase-02-builder-runner.md) | 6 | 6 | 100% | completed | 2644065 |
 | 3 | [phase-03-builder-sse-job-integration.md](./phase-03-builder-sse-job-integration.md) | 5 | 5 | 100% | completed | f521c54 |
 | 4 | [phase-04-checker-rule-runner.md](./phase-04-checker-rule-runner.md) | 6 | 6 | 100% | completed | 0dccba8 |
-| 5 | [phase-05-checker-integration-fallback.md](./phase-05-checker-integration-fallback.md) | 5 | 5 | 100% | completed | pending |
-| 6 | [phase-06-tests-docs.md](./phase-06-tests-docs.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **32** | **27** | **84%** | | |
+| 5 | [phase-05-checker-integration-fallback.md](./phase-05-checker-integration-fallback.md) | 5 | 5 | 100% | completed | 7aedeeb |
+| 6 | [phase-06-tests-docs.md](./phase-06-tests-docs.md) | 5 | 5 | 100% | completed | pending |
+| **Total** | | **32** | **32** | **100%** | | |
 
 ## Phase 의존성
 
@@ -53,11 +53,11 @@ Phase 1에서 command runner와 script result 타입을 먼저 만든다. Phase 
 
 ### 공통 검증
 
-- [ ] 기존 legacy prompt workflow와 agent fallback이 제거되지 않음
-- [ ] builder/checker 이외 model stage harness가 이번 task에 포함되지 않음
-- [ ] DeepSeek provider rollout이 이번 task에 포함되지 않음
-- [ ] `pnpm test` 또는 focused Vitest 명령이 통과함
-- [ ] `pnpm exec tsc --noEmit` 통과
+- [x] 기존 legacy prompt workflow와 agent fallback이 제거되지 않음
+- [x] builder/checker 이외 model stage harness가 이번 task에 포함되지 않음
+- [x] DeepSeek provider rollout이 이번 task에 포함되지 않음
+- [x] `pnpm test` 또는 focused Vitest 명령이 통과함
+- [x] `pnpm exec tsc --noEmit` 통과
 
 ## 관련 문서
 
