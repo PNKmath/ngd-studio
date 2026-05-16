@@ -18,7 +18,7 @@ created: 2026-05-16
 | 3 | [phase-03-builder-sse-job-integration.md](./phase-03-builder-sse-job-integration.md) | 5 | 5 | 100% | completed | f521c54 |
 | 4 | [phase-04-checker-rule-runner.md](./phase-04-checker-rule-runner.md) | 6 | 6 | 100% | completed | 0dccba8 |
 | 5 | [phase-05-checker-integration-fallback.md](./phase-05-checker-integration-fallback.md) | 5 | 5 | 100% | completed | 7aedeeb |
-| 6 | [phase-06-tests-docs.md](./phase-06-tests-docs.md) | 5 | 5 | 100% | completed | pending |
+| 6 | [phase-06-tests-docs.md](./phase-06-tests-docs.md) | 5 | 5 | 100% | completed | b7f1063 |
 | **Total** | | **32** | **32** | **100%** | | |
 
 ## Phase 의존성
