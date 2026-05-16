@@ -1,0 +1,59 @@
+---
+phase: 6
+title: Provider 재시도 3회 정책
+status: pending
+depends_on: [4]
+scope:
+  - ngd-studio/server/sse.ts
+  - ngd-studio/lib/ai/
+  - ngd-studio/lib/__tests__/
+intervention_likely: false
+intervention_reason: ""
+executor: sonnet
+---
+
+# Phase 6: Provider 재시도 3회 정책
+
+> **범위**: Backend provider runner
+> **난이도**: M
+> **의존성**: Phase 4
+> **영향 파일**: `server/sse.ts`, `lib/ai/`
+
+## 배경
+
+선택한 provider가 실패하면 같은 provider로 최대 3회 재시도한다. 자동 fallback은 1차 범위가 아니다. 사용자가 Codex를 선택했으면 Codex만 3회 시도하고, Claude를 선택했으면 Claude만 3회 시도한다.
+
+## 설계
+
+provider 실행을 `runProviderWithRetry` 같은 순수한 orchestration 함수로 분리한다. TDD로 fake provider를 사용해 다음 케이스를 먼저 고정한다.
+
+- 1회 실패 후 2회차 성공
+- 3회 모두 실패
+- client disconnect 또는 abort 시 재시도 금지
+- 각 attempt 시작/실패 로그 SSE 발행
+
+재시도 기준은 provider process exit code non-zero, provider-level result failure, spawn error로 한정한다. 작업 자체가 성공적으로 완료된 뒤 checker가 문제를 보고하는 것은 provider failure가 아니다.
+
+## 체크리스트
+
+- [ ] fake provider 기반 retry unit test 작성
+- [ ] 최대 3회 attempt 정책 구현
+- [ ] attempt별 SSE log 이벤트 발행
+- [ ] client disconnect/abort 시 추가 attempt를 시작하지 않음
+- [ ] 최종 실패 시 job status와 result/error 이벤트가 일관됨
+- [ ] Claude/Codex provider 양쪽에 retry wrapper 적용
+
+## 영향 범위
+
+재시도는 긴 작업 시간을 늘릴 수 있다. UI에는 attempt log를 남겨 사용자가 멈춘 것처럼 보지 않게 한다.
+
+## 검증
+
+```bash
+cd ngd-studio
+npx vitest run lib/__tests__/provider*.test.ts --reporter=basic
+pnpm test
+```
+
+## 실행 결과
+
