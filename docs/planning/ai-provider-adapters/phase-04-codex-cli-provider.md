@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: Codex CLI provider
-status: pending
+status: completed
 depends_on: [2, 3]
 scope:
   - ngd-studio/lib/ai/providers/codexCli.ts
@@ -37,13 +37,13 @@ Codex 이벤트에서 Claude의 `tool_use`와 1:1 매핑이 불가능한 경우,
 
 ## 체크리스트
 
-- [ ] Codex JSONL fixture 기반 parser 테스트 작성
-- [ ] Codex provider 이벤트가 공통 `SSEEvent`로 변환되는 테스트 작성
-- [ ] `CodexCliProvider` spawn 구현
-- [ ] Codex prompt preamble에 `.claude/skills` reuse 지시 추가
-- [ ] provider registry에 `codex` 등록
-- [ ] Codex failure/exit code 처리 테스트 추가
-- [ ] Claude baseline 테스트가 계속 통과함
+- [x] Codex JSONL fixture 기반 parser 테스트 작성
+- [x] Codex provider 이벤트가 공통 `SSEEvent`로 변환되는 테스트 작성
+- [x] `CodexCliProvider` spawn 구현
+- [x] Codex prompt preamble에 `.claude/skills` reuse 지시 추가
+- [x] provider registry에 `codex` 등록
+- [x] Codex failure/exit code 처리 테스트 추가
+- [x] Claude baseline 테스트가 계속 통과함
 
 ## 영향 범위
 
@@ -60,3 +60,25 @@ codex --version
 
 ## 실행 결과
 
+### 2026-05-16 — Phase 4
+
+#### Summary
+- `lib/ai/providers/codexCli.ts`에 Codex CLI provider, prompt preamble, `codex exec --json --cd ... --sandbox danger-full-access --ask-for-approval never` args builder를 추가했다.
+- Codex JSONL을 Claude-compatible text/tool/result 이벤트로 낮춰 기존 `transformToSSE` stage/file/result 변환을 재사용하게 했다.
+- provider registry에 `codex`를 등록하고 registry 테스트 기대값을 갱신했다.
+- `providerCodex.test.ts`에서 JSONL parsing, SSE 변환, Bash/file fallback, failure result handling, malformed line 무시 동작을 fixture로 고정했다.
+
+#### Scope Audit (orchestrator)
+- pass — changed files are within Phase 4 scope: `ngd-studio/lib/ai/`, `ngd-studio/lib/__tests__/providerCodex.test.ts`, `ngd-studio/lib/__tests__/providerRegistry.test.ts`
+
+#### Verification Re-run (orchestrator)
+- pass — `npx vitest run lib/__tests__/provider*.test.ts --reporter=basic` (14 tests)
+- pass — `pnpm test` (76 tests)
+- pass — `codex --version` (`codex-cli 0.130.0`)
+- pass — `npx tsc --noEmit`
+
+#### Review (orchestrator)
+- pass — Codex is now selectable via registry while default `auto` remains Claude.
+
+#### Commit
+- pending — commit will be recorded in `checklist.md` after local commit creation.

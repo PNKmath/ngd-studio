@@ -9,6 +9,7 @@ export type {
 } from "./types";
 export {
   claudeCliProvider,
+  codexCliProvider,
   getProviderAdapter,
   listProviderAdapters,
   normalizeProviderId,
