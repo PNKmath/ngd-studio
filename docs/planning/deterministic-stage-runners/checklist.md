@@ -13,7 +13,7 @@ created: 2026-05-16
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-runner-command-foundation.md](./phase-01-runner-command-foundation.md) | 5 | 5 | 100% | completed | 990e836 |
+| 1 | [phase-01-runner-command-foundation.md](./phase-01-runner-command-foundation.md) | 5 | 5 | 100% | completed | 4e03e46 |
 | 2 | [phase-02-builder-runner.md](./phase-02-builder-runner.md) | 6 | 0 | 0% | pending | - |
 | 3 | [phase-03-builder-sse-job-integration.md](./phase-03-builder-sse-job-integration.md) | 5 | 0 | 0% | pending | - |
 | 4 | [phase-04-checker-rule-runner.md](./phase-04-checker-rule-runner.md) | 6 | 0 | 0% | pending | - |

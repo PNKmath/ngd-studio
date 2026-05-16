@@ -55,7 +55,7 @@ SUMMARY: `server/stages/commands.ts`에 deterministic stage command helper를 �
 CHECKLIST: 5/5
 VERIFICATION: pass
 NEXT: Phase 2 또는 Phase 4 진행 가능
-COMMIT: 990e836
+COMMIT: 4e03e46
 
 #### Scope Audit (orchestrator)
 
