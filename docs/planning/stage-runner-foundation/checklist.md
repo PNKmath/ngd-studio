@@ -14,12 +14,12 @@ created: 2026-05-16
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
 | 1 | [phase-01-stage-types-foundation.md](./phase-01-stage-types-foundation.md) | 5 | 5 | 100% | completed | - |
-| 2 | [phase-02-file-backed-job-cache.md](./phase-02-file-backed-job-cache.md) | 6 | 0 | 0% | pending | - |
+| 2 | [phase-02-file-backed-job-cache.md](./phase-02-file-backed-job-cache.md) | 6 | 6 | 100% | completed | - |
 | 3 | [phase-03-sse-event-helpers.md](./phase-03-sse-event-helpers.md) | 5 | 0 | 0% | pending | - |
 | 4 | [phase-04-stage-telemetry-foundation.md](./phase-04-stage-telemetry-foundation.md) | 5 | 0 | 0% | pending | - |
 | 5 | [phase-05-legacy-job-runner-wrapper.md](./phase-05-legacy-job-runner-wrapper.md) | 6 | 0 | 0% | pending | - |
 | 6 | [phase-06-foundation-tests-docs.md](./phase-06-foundation-tests-docs.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **32** | **5** | **16%** | | |
+| **Total** | | **32** | **11** | **34%** | | |
 
 ## Phase 의존성
 

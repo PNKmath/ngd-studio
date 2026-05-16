@@ -5,7 +5,7 @@
  * Usage: pnpm tsx server/sse.ts
  */
 import http from "http";
-import { writeFile, mkdir, readdir, stat } from "fs/promises";
+import { readdir, stat } from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -22,12 +22,14 @@ import {
   type AIProviderId,
 } from "../lib/ai";
 import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
+import { createJobStore } from "./stages/jobStore";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
 const __server_file = fileURLToPath(import.meta.url);
 const __server_dir = path.dirname(__server_file);
 const BASE_DIR = path.resolve(__server_dir, "../..");
 const DATA_DIR = path.join(__server_dir, "../data/jobs");
+const jobStore = createJobStore(DATA_DIR);
 const HWPX_TEMPLATE = process.env.HWPX_TEMPLATE_PATH ?? "";
 
 // 실행 중인 Claude CLI 프로세스 추적
@@ -229,7 +231,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
 
   // Save initial job data
-  await mkdir(DATA_DIR, { recursive: true });
   const jobData = {
     id: jobId,
     mode,
@@ -241,10 +242,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     logs: [],
     startedAt: new Date().toISOString(),
   };
-  await writeFile(
-    path.join(DATA_DIR, `${jobId}.json`),
-    JSON.stringify(jobData, null, 2)
-  );
+  await jobStore.write(jobData);
 
   // SSE headers — sent immediately, no buffering
   res.writeHead(200, {
@@ -415,18 +413,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     }
 
     try {
-      await writeFile(
-        path.join(DATA_DIR, `${jobId}.json`),
-        JSON.stringify({
-          ...jobData,
-          requestedProvider: finalProviderMetadata.requestedProvider,
-          provider: finalProviderMetadata.provider,
-          status: finalStatus,
-          finishedAt: new Date().toISOString(),
-          outputFile: outputFile || undefined,
-          resultSummary: resultSummary || undefined,
-        }, null, 2)
-      );
+      await jobStore.write({
+        ...jobData,
+        requestedProvider: finalProviderMetadata.requestedProvider,
+        provider: finalProviderMetadata.provider,
+        status: finalStatus,
+        finishedAt: new Date().toISOString(),
+        outputFile: outputFile || undefined,
+        resultSummary: resultSummary || undefined,
+      });
     } catch { /* ignore */ }
     res.end();
   }
