@@ -3,6 +3,8 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
 
+export const maxDuration = 180;
+
 const execFileAsync = promisify(execFile);
 const BASE_DIR = path.resolve(process.cwd(), "..");
 
@@ -26,7 +28,7 @@ export async function POST(req: NextRequest) {
     const { stdout, stderr } = await execFileAsync(
       pythonCmd,
       [scriptPath, fullPath, "--json-only"],
-      { timeout: 60000 },
+      { timeout: 180000, maxBuffer: 16 * 1024 * 1024 },
     );
 
     let parsed: unknown;
