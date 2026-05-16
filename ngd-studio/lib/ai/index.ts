@@ -16,3 +16,10 @@ export {
   resolveProviderId,
   runAIProvider,
 } from "./registry";
+export {
+  MAX_PROVIDER_ATTEMPTS,
+  createProviderAttemptLog,
+  createProviderRetryLog,
+  runProviderWithRetry,
+  shouldRetryProviderAttempt,
+} from "./retry";
