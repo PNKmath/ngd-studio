@@ -3,6 +3,7 @@ import {
   MAX_PROVIDER_ATTEMPTS,
   createProviderAttemptLog,
   createProviderRetryLog,
+  createProviderTelemetryEntry,
   runProviderWithRetry,
   shouldRetryProviderAttempt,
 } from "../ai/retry";
@@ -55,5 +56,39 @@ describe("provider retry policy", () => {
   it("formats attempt SSE log messages", () => {
     expect(createProviderAttemptLog("codex", 1)).toBe("AI provider attempt 1/3 시작 (codex)");
     expect(createProviderRetryLog("claude", 2)).toBe("AI provider attempt 2/3 실패, 같은 provider(claude)로 재시도합니다.");
+  });
+
+  it("normalizes provider telemetry entries without storing payloads", () => {
+    expect(createProviderTelemetryEntry({
+      stageKey: "review.reviewer",
+      workflowStageKey: "review.reviewer",
+      requestedProvider: "deepseek-v4",
+      resolvedProvider: "deepseek-v4",
+      attempt: 2,
+      status: "failed",
+      elapsedMs: 10.4,
+      retry: true,
+      errorSummary: "x".repeat(400),
+      fallbackFrom: "deepseek-v4",
+      fallbackTo: "claude",
+      validationOk: false,
+      failureKind: "validation",
+      downstreamCorrection: true,
+    })).toEqual({
+      stageKey: "review.reviewer",
+      workflowStageKey: "review.reviewer",
+      requestedProvider: "deepseek-v4",
+      resolvedProvider: "deepseek-v4",
+      attempt: 2,
+      status: "failed",
+      elapsedMs: 10,
+      retry: true,
+      errorSummary: "x".repeat(300),
+      fallbackFrom: "deepseek-v4",
+      fallbackTo: "claude",
+      validationOk: false,
+      failureKind: "validation",
+      downstreamCorrection: true,
+    });
   });
 });

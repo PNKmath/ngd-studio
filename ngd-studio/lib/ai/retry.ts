@@ -1,3 +1,5 @@
+import type { AIProviderId, AIStageKey, ResolvedAIProviderId } from "./types";
+
 export const MAX_PROVIDER_ATTEMPTS = 3;
 
 export interface ProviderAttemptState {
@@ -15,6 +17,24 @@ export interface ProviderRetryResult<T> {
   value?: T;
   error?: unknown;
   aborted?: boolean;
+}
+
+export interface ProviderTelemetryEntry {
+  stageKey?: AIStageKey;
+  workflowStageKey?: string;
+  requestedProvider: AIProviderId;
+  resolvedProvider: ResolvedAIProviderId;
+  attempt: number;
+  status: "success" | "failed" | "cancelled";
+  elapsedMs: number;
+  retry: boolean;
+  errorSummary?: string;
+  externalCostUsd?: number;
+  fallbackFrom?: ResolvedAIProviderId;
+  fallbackTo?: ResolvedAIProviderId;
+  validationOk?: boolean;
+  failureKind?: "provider" | "validation" | "fallback" | "downstream" | "unknown";
+  downstreamCorrection?: boolean;
 }
 
 export function shouldRetryProviderAttempt({
@@ -36,6 +56,14 @@ export function createProviderAttemptLog(provider: string, attempt: number, maxA
 
 export function createProviderRetryLog(provider: string, attempt: number, maxAttempts = MAX_PROVIDER_ATTEMPTS): string {
   return `AI provider attempt ${attempt}/${maxAttempts} 실패, 같은 provider(${provider})로 재시도합니다.`;
+}
+
+export function createProviderTelemetryEntry(entry: ProviderTelemetryEntry): ProviderTelemetryEntry {
+  return {
+    ...entry,
+    elapsedMs: Math.max(0, Math.round(entry.elapsedMs)),
+    errorSummary: entry.errorSummary?.slice(0, 300),
+  };
 }
 
 export async function runProviderWithRetry<T>(
