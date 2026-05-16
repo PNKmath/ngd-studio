@@ -13,7 +13,7 @@ created: 2026-05-16
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-regression-baseline.md](./phase-01-regression-baseline.md) | 6 | 6 | 100% | completed | pending |
+| 1 | [phase-01-regression-baseline.md](./phase-01-regression-baseline.md) | 6 | 6 | 100% | completed | 1895bd2 |
 | 2 | [phase-02-provider-contract-claude.md](./phase-02-provider-contract-claude.md) | 6 | 0 | 0% | pending | - |
 | 3 | [phase-03-sse-provider-selection.md](./phase-03-sse-provider-selection.md) | 6 | 0 | 0% | pending | - |
 | 4 | [phase-04-codex-cli-provider.md](./phase-04-codex-cli-provider.md) | 7 | 0 | 0% | pending | - |

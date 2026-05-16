@@ -77,4 +77,4 @@ pnpm test
 - pass — runtime behavior is unchanged; added tests exercise existing exported helpers and prompt builders.
 
 #### Commit
-- pending — commit will be recorded in `checklist.md` after local commit creation.
+- 1895bd2 — `test(ai): lock Claude provider baseline`
