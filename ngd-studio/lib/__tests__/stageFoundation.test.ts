@@ -3,6 +3,7 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createStageCache } from "../../server/stages/cache";
+import { runStageCommand, stageCommandToError } from "../../server/stages/commands";
 import { errorEvent, fileEvent, logEvent, progressEvent, resultEvent, stageEvent } from "../../server/stages/events";
 import { FileBackedJobStore } from "../../server/stages/jobStore";
 import { createStageAttemptTelemetryEntry, toProviderTelemetryEntry } from "../../server/stages/telemetry";
@@ -97,6 +98,54 @@ describe("stage foundation helpers", () => {
       status: "failed",
       validationOk: false,
       failureKind: "validation",
+    });
+  });
+
+  it("runs deterministic stage commands with typed stdout and timing", async () => {
+    const result = await runStageCommand({
+      command: process.execPath,
+      args: ["-e", "process.stdout.write('ok')"],
+    });
+
+    expect(result).toMatchObject({
+      status: "success",
+      stdout: "ok",
+      stderr: "",
+      exitCode: 0,
+    });
+    expect(result.elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(stageCommandToError(result)).toBeUndefined();
+  });
+
+  it("converts non-zero stage commands into StageError-compatible data", async () => {
+    const result = await runStageCommand({
+      command: process.execPath,
+      args: ["-e", "process.stderr.write('bad'); process.exit(7)"],
+    });
+
+    expect(result).toMatchObject({
+      status: "non_zero_exit",
+      stderr: "bad",
+      exitCode: 7,
+    });
+    expect(stageCommandToError(result)).toMatchObject({
+      code: "stage_command_failed",
+      retryable: false,
+      details: { exitCode: 7 },
+    });
+  });
+
+  it("marks timed out stage commands as retryable", async () => {
+    const result = await runStageCommand({
+      command: process.execPath,
+      args: ["-e", "setTimeout(() => {}, 1000)"],
+      timeoutMs: 20,
+    });
+
+    expect(result.status).toBe("timeout");
+    expect(stageCommandToError(result)).toMatchObject({
+      code: "stage_command_timeout",
+      retryable: true,
     });
   });
 });
