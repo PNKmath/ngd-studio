@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   claudeCliProvider,
   codexCliProvider,
+  deepseekV4Provider,
   getProviderAdapter,
   listProviderAdapters,
   normalizeProviderId,
@@ -35,11 +36,13 @@ describe("AI provider registry", () => {
     expect(getProviderAdapter("codex")).toBe(codexCliProvider);
   });
 
-  it("does not register external API providers until their phases implement them", () => {
-    expect(() => getProviderAdapter("deepseek-v4")).toThrow("AI provider is not registered yet: deepseek-v4");
+  it("registers DeepSeek V4 without changing auto fallback", () => {
+    expect(resolveProviderId("deepseek-v4")).toBe("deepseek-v4");
+    expect(getProviderAdapter("deepseek-v4")).toBe(deepseekV4Provider);
+    expect(resolveProviderId("auto")).toBe("claude");
   });
 
   it("lists only currently usable provider adapters", () => {
-    expect(listProviderAdapters().map((provider) => provider.id)).toEqual(["claude", "codex"]);
+    expect(listProviderAdapters().map((provider) => provider.id)).toEqual(["claude", "codex", "deepseek-v4"]);
   });
 });

@@ -10,6 +10,7 @@ export type {
 export {
   claudeCliProvider,
   codexCliProvider,
+  deepseekV4Provider,
   getProviderAdapter,
   listProviderAdapters,
   normalizeProviderId,

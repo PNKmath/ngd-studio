@@ -1,5 +1,6 @@
 import { claudeCliProvider } from "./providers/claudeCli";
 import { codexCliProvider } from "./providers/codexCli";
+import { deepseekV4Provider } from "./providers/deepseekV4";
 import type {
   AIProviderAdapter,
   AIProviderId,
@@ -11,6 +12,7 @@ import type {
 const providers = new Map<ResolvedAIProviderId, AIProviderAdapter>([
   [claudeCliProvider.id, claudeCliProvider],
   [codexCliProvider.id, codexCliProvider],
+  [deepseekV4Provider.id, deepseekV4Provider],
 ]);
 
 const providerIds = new Set<AIProviderId>(["auto", "claude", "codex", "deepseek-v4"]);
@@ -52,4 +54,4 @@ export function runAIProvider(prompt: string, options?: ProviderSelectionRunOpti
   };
 }
 
-export { claudeCliProvider, codexCliProvider };
+export { claudeCliProvider, codexCliProvider, deepseekV4Provider };
