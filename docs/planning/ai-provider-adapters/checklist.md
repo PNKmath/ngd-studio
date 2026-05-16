@@ -59,18 +59,18 @@ Phase 7 (문서/후속 로드맵, 독립)
 ## 검증 체크리스트
 
 ### 공통 검증
-- [ ] `cd ngd-studio && pnpm test` 통과
-- [ ] `cd ngd-studio && npx vitest run lib/__tests__/claude.test.ts --reporter=basic` 통과
-- [ ] `cd ngd-studio && npx vitest run lib/__tests__/prompts.test.ts --reporter=basic` 통과
-- [ ] `cd ngd-studio && npx vitest run lib/__tests__/provider*.test.ts --reporter=basic` 통과
-- [ ] `cd ngd-studio && npx tsc --noEmit` 통과
-- [ ] Claude provider 미지정 요청이 기존과 동일하게 실행됨
+- [x] `cd ngd-studio && pnpm test` 통과
+- [x] `cd ngd-studio && npx vitest run lib/__tests__/claude.test.ts --reporter=basic` 통과
+- [x] `cd ngd-studio && npx vitest run lib/__tests__/prompts.test.ts --reporter=basic` 통과
+- [x] `cd ngd-studio && npx vitest run lib/__tests__/provider*.test.ts --reporter=basic` 통과
+- [x] `cd ngd-studio && npx tsc --noEmit` 통과
+- [x] Claude provider 미지정 요청이 기존과 동일하게 실행됨
 
 ### 보존 항목
-- [ ] `.claude/skills/ngd-exam-create/` workflow와 agent 파일 이름 유지
-- [ ] Claude CLI stream-json 기반 stage/file/question 이벤트 의미 유지
-- [ ] `mode: create | resume | crop | review` API 의미 유지
-- [ ] DeepSeek V4 구현은 외부 API 전송 정책 확정 전 시작하지 않음
+- [x] `.claude/skills/ngd-exam-create/` workflow와 agent 파일 이름 유지
+- [x] Claude CLI stream-json 기반 stage/file/question 이벤트 의미 유지
+- [x] `mode: create | resume | crop | review` API 의미 유지
+- [x] DeepSeek V4 구현은 외부 API 전송 정책 확정 전 시작하지 않음
 
 ## 관련 문서
 - [README](./README.md)
