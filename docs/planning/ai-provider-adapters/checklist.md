@@ -19,8 +19,8 @@ created: 2026-05-16
 | 4 | [phase-04-codex-cli-provider.md](./phase-04-codex-cli-provider.md) | 7 | 7 | 100% | completed | 036ae69 |
 | 5 | [phase-05-settings-engine-selection.md](./phase-05-settings-engine-selection.md) | 7 | 7 | 100% | completed | bd6fa6a |
 | 6 | [phase-06-provider-retry-policy.md](./phase-06-provider-retry-policy.md) | 6 | 6 | 100% | completed | 4014954 |
-| 7 | [phase-07-follow-up-roadmap.md](./phase-07-follow-up-roadmap.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **43** | **38** | **88%** | | |
+| 7 | [phase-07-follow-up-roadmap.md](./phase-07-follow-up-roadmap.md) | 5 | 5 | 100% | completed | pending |
+| **Total** | | **43** | **43** | **100%** | | |
 
 ## Phase 의존성
 

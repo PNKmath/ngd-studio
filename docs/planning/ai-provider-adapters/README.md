@@ -15,3 +15,4 @@ Follow-up work is explicitly recorded but not implemented in this first target:
 - Automatic recommendation and stage-level provider selection.
 - External API data-transfer policy before any DeepSeek implementation.
 
+See [roadmap.md](./roadmap.md) for the staged DeepSeek V4, external API policy, and stage-level provider selection plan.
