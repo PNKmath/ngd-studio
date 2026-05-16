@@ -15,7 +15,9 @@ import {
   normalizeProviderId,
   resolveProviderId,
   type AIProviderId,
+  type AIStageKey,
 } from "../lib/ai";
+import { normalizeStageOverrides, type StageOverrideMap } from "../lib/ai/settings";
 import type { ProviderTelemetryEntry } from "../lib/ai/retry";
 import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
 import { createJobStore } from "./stages/jobStore";
@@ -126,6 +128,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number };
     jobId: string;
     provider?: AIProviderId;
+    stageOverrides?: Partial<Record<AIStageKey, AIProviderId>>;
   };
   try {
     body = JSON.parse(rawBody);
@@ -138,8 +141,14 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   const { mode, files, meta, jobId } = body;
   let requestedProvider: AIProviderId;
   let resolvedProvider: Exclude<AIProviderId, "auto">;
+  let stageOverrides: StageOverrideMap;
+  let primaryStageKey: AIStageKey | undefined;
   try {
     requestedProvider = normalizeProviderId(body.provider);
+    stageOverrides = normalizeStageOverrides(body.stageOverrides);
+    primaryStageKey = inferPrimaryStageKey(body.mode, body.meta?.resumeFrom);
+    const stageRequestedProvider = primaryStageKey ? stageOverrides[primaryStageKey] : undefined;
+    requestedProvider = normalizeProviderId(stageRequestedProvider ?? requestedProvider);
     resolvedProvider = resolveProviderId(requestedProvider);
   } catch (err) {
     res.writeHead(400, { "Content-Type": "application/json" });
@@ -233,6 +242,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     mode,
     requestedProvider,
     provider: resolvedProvider,
+    stageOverrides,
     status: "running",
     inputFiles: [resolvedFiles.pdf, resolvedFiles.hwpx],
     stages: [],
@@ -281,6 +291,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       baseDir: BASE_DIR,
       mode,
       jobId,
+      stageKey: primaryStageKey,
       send,
       isResponseDestroyed: () => res.destroyed,
       isClientDisconnected: () => clientDisconnected,
@@ -354,3 +365,14 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 server.listen(PORT, () => {
   console.log(`SSE server listening on http://localhost:${PORT}`);
 });
+
+function inferPrimaryStageKey(mode: string, resumeFrom?: string): AIStageKey | undefined {
+  if (mode === "review") return "review.reviewer";
+  if (mode === "create") return "create.extractor";
+  if (mode === "resume") {
+    if (resumeFrom === "verifier") return "create.verifier";
+    if (resumeFrom === "solver") return "create.solver";
+    return "create.extractor";
+  }
+  return undefined;
+}

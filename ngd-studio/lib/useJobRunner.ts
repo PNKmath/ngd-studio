@@ -4,7 +4,7 @@ import { useCallback, useRef } from "react";
 import { useJobStore, type JobState } from "./store";
 import type { SSEEvent } from "./claude";
 import type { AIProviderId } from "./ai";
-import { readDefaultProvider } from "./ai/settings";
+import { readAISettings } from "./ai/settings";
 import { parseReviewReport } from "./reviewParser";
 
 // SSE server runs on a separate port to avoid Next.js response buffering
@@ -67,13 +67,21 @@ export function useJobRunner() {
         message: "작업을 시작합니다...",
         level: "info",
       });
-      const selectedProvider = provider ?? readDefaultProvider();
+      const aiSettings = readAISettings();
+      const selectedProvider = provider ?? aiSettings.defaultProvider;
 
       try {
         const res = await fetch(`${SSE_BASE}/api/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode, files, meta, jobId, provider: selectedProvider }),
+          body: JSON.stringify({
+            mode,
+            files,
+            meta,
+            jobId,
+            provider: selectedProvider,
+            stageOverrides: aiSettings.stageOverrides,
+          }),
           signal: abortController.signal,
         });
 

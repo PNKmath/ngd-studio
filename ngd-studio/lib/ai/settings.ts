@@ -1,14 +1,24 @@
-import type { AIProviderId } from "./types";
+import type { AIProviderId, AIStageKey } from "./types";
 
 export type SelectableProviderId = Extract<AIProviderId, "auto" | "claude" | "codex">;
+export type StageProviderId = AIProviderId;
+export type StageOverrideMap = Partial<Record<AIStageKey, StageProviderId>>;
 
 export const AI_SETTINGS_STORAGE_KEY = "ngd-studio.ai-settings";
+export const AI_STAGE_KEYS: AIStageKey[] = [
+  "create.extractor",
+  "create.solver",
+  "create.verifier",
+  "review.reviewer",
+];
 export const DEFAULT_AI_SETTINGS: AISettings = {
   defaultProvider: "auto",
+  stageOverrides: {},
 };
 
 export interface AISettings {
   defaultProvider: SelectableProviderId;
+  stageOverrides: StageOverrideMap;
 }
 
 interface StorageLike {
@@ -17,9 +27,31 @@ interface StorageLike {
 }
 
 const selectableProviders = new Set<SelectableProviderId>(["auto", "claude", "codex"]);
+const stageProviders = new Set<StageProviderId>(["auto", "claude", "codex", "deepseek-v4"]);
+const stageKeys = new Set<AIStageKey>(AI_STAGE_KEYS);
 
 export function isSelectableProviderId(value: unknown): value is SelectableProviderId {
   return typeof value === "string" && selectableProviders.has(value as SelectableProviderId);
+}
+
+export function isStageProviderId(value: unknown): value is StageProviderId {
+  return typeof value === "string" && stageProviders.has(value as StageProviderId);
+}
+
+export function isAIStageKey(value: unknown): value is AIStageKey {
+  return typeof value === "string" && stageKeys.has(value as AIStageKey);
+}
+
+export function normalizeStageOverrides(value: unknown): StageOverrideMap {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  const normalized: StageOverrideMap = {};
+  for (const [stageKey, provider] of Object.entries(value)) {
+    if (isAIStageKey(stageKey) && isStageProviderId(provider)) {
+      normalized[stageKey] = provider;
+    }
+  }
+  return normalized;
 }
 
 export function readAISettings(storage = getBrowserStorage()): AISettings {
@@ -33,6 +65,7 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
       defaultProvider: isSelectableProviderId(parsed.defaultProvider)
         ? parsed.defaultProvider
         : DEFAULT_AI_SETTINGS.defaultProvider,
+      stageOverrides: normalizeStageOverrides(parsed.stageOverrides),
     };
   } catch {
     return DEFAULT_AI_SETTINGS;
@@ -44,6 +77,7 @@ export function writeAISettings(settings: AISettings, storage = getBrowserStorag
     defaultProvider: isSelectableProviderId(settings.defaultProvider)
       ? settings.defaultProvider
       : DEFAULT_AI_SETTINGS.defaultProvider,
+    stageOverrides: normalizeStageOverrides(settings.stageOverrides),
   };
 
   storage?.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
@@ -52,6 +86,10 @@ export function writeAISettings(settings: AISettings, storage = getBrowserStorag
 
 export function readDefaultProvider(storage = getBrowserStorage()): SelectableProviderId {
   return readAISettings(storage).defaultProvider;
+}
+
+export function readStageOverrides(storage = getBrowserStorage()): StageOverrideMap {
+  return readAISettings(storage).stageOverrides;
 }
 
 function getBrowserStorage(): StorageLike | undefined {

@@ -6,6 +6,7 @@ export type {
   ProviderRunResult,
   ProviderSelectionRunOptions,
   ResolvedAIProviderId,
+  AIStageKey,
 } from "./types";
 export {
   claudeCliProvider,
@@ -21,6 +22,14 @@ export {
   MAX_PROVIDER_ATTEMPTS,
   createProviderAttemptLog,
   createProviderRetryLog,
+  createProviderTelemetryEntry,
   runProviderWithRetry,
   shouldRetryProviderAttempt,
 } from "./retry";
+export type { ProviderTelemetryEntry } from "./retry";
+export {
+  recommendStageProvider,
+  summarizeTelemetry,
+  type StageRecommendationOptions,
+  type StageRecommendationResult,
+} from "./recommendation";

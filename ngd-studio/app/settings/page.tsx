@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Cpu, Settings2 } from "lucide-react";
+import { Check, Cpu, Settings2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  AI_STAGE_KEYS,
   DEFAULT_AI_SETTINGS,
   readAISettings,
   writeAISettings,
+  type AISettings,
   type SelectableProviderId,
+  type StageProviderId,
 } from "@/lib/ai/settings";
+import { recommendStageProvider } from "@/lib/ai/recommendation";
 import { cn } from "@/lib/utils";
 
 const providerOptions: {
@@ -37,17 +41,49 @@ const providerOptions: {
   },
 ];
 
+const stageLabels: Record<(typeof AI_STAGE_KEYS)[number], string> = {
+  "create.extractor": "제작 추출",
+  "create.solver": "제작 풀이",
+  "create.verifier": "제작 검증",
+  "review.reviewer": "오검 리뷰",
+};
+
+const stageProviderOptions: {
+  id: StageProviderId;
+  label: string;
+}[] = [
+  { id: "auto", label: "자동" },
+  { id: "claude", label: "Claude" },
+  { id: "codex", label: "Codex" },
+  { id: "deepseek-v4", label: "DeepSeek" },
+];
+
 export default function SettingsPage() {
-  const [defaultProvider, setDefaultProvider] = useState<SelectableProviderId>(
-    DEFAULT_AI_SETTINGS.defaultProvider
-  );
+  const [settings, setSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
 
   useEffect(() => {
-    setDefaultProvider(readAISettings().defaultProvider);
+    setSettings(readAISettings());
   }, []);
 
   const selectProvider = (provider: SelectableProviderId) => {
-    setDefaultProvider(writeAISettings({ defaultProvider: provider }).defaultProvider);
+    setSettings(writeAISettings({ ...settings, defaultProvider: provider }));
+  };
+
+  const selectStageProvider = (
+    stageKey: (typeof AI_STAGE_KEYS)[number],
+    provider: StageProviderId
+  ) => {
+    setSettings(writeAISettings({
+      ...settings,
+      stageOverrides: {
+        ...settings.stageOverrides,
+        [stageKey]: provider,
+      },
+    }));
+  };
+
+  const resetSettings = () => {
+    setSettings(writeAISettings(DEFAULT_AI_SETTINGS));
   };
 
   return (
@@ -74,7 +110,7 @@ export default function SettingsPage() {
 
           <div className="grid gap-2 p-4 md:grid-cols-3">
             {providerOptions.map((option) => {
-              const selected = option.id === defaultProvider;
+              const selected = option.id === settings.defaultProvider;
 
               return (
                 <button
@@ -115,17 +151,84 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <section className="space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Workflow className="size-4" />
+          Stage override
+        </div>
+
+        <div className="rounded-lg border bg-card">
+          <div className="border-b px-4 py-4">
+            <h2 className="text-base font-medium">단계별 실행 엔진</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              외부 API provider는 여기에서 선택한 단계에만 적용됩니다.
+            </p>
+          </div>
+
+          <div className="divide-y">
+            {AI_STAGE_KEYS.map((stageKey) => {
+              const selected = settings.stageOverrides[stageKey] ?? "auto";
+              const recommendation = recommendStageProvider({
+                stageKey,
+                stageOverrides: settings.stageOverrides,
+                telemetry: [],
+              });
+
+              return (
+                <div
+                  key={stageKey}
+                  className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(140px,1fr)_minmax(0,2fr)] md:items-center"
+                >
+                  <div>
+                    <div className="text-sm font-medium">{stageLabels[stageKey]}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {stageKey} · 추천 {recommendation.provider}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {stageProviderOptions.map((option) => {
+                      const active = option.id === selected;
+
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => selectStageProvider(stageKey, option.id)}
+                          className={cn(
+                            "flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm transition-colors",
+                            active
+                              ? "border-primary bg-primary/5 text-foreground"
+                              : "border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/40"
+                          )}
+                        >
+                          <Check
+                            className={cn("size-3.5", active ? "text-primary" : "text-transparent")}
+                            aria-hidden="true"
+                          />
+                          <span>{option.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
       <section className="rounded-lg border bg-card px-4 py-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-medium">현재 선택</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              다음 작업부터 `{defaultProvider}` provider가 요청 본문에 포함됩니다.
+              다음 작업부터 `{settings.defaultProvider}` provider와 stage override가 요청 본문에 포함됩니다.
             </p>
           </div>
           <Button
             variant="secondary"
-            onClick={() => selectProvider(DEFAULT_AI_SETTINGS.defaultProvider)}
+            onClick={resetSettings}
           >
             자동으로 되돌리기
           </Button>
