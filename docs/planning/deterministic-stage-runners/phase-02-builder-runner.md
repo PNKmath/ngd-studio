@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: Deterministic builder runner
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - ngd-studio/server/stages/builder.ts
@@ -30,12 +30,12 @@ executor: sonnet
 
 ## 체크리스트
 
-- [ ] builder `StageRunner` 또는 동등한 runner 추가
-- [ ] `build_hwpx.py` 실행 결과에서 output HWPX path 확인
-- [ ] namespace fix / validation command hook 추가
-- [ ] `build_status.json` write helper 사용
-- [ ] 실패 원인을 typed error 또는 status로 반환
-- [ ] focused test 또는 TypeScript 검증 통과
+- [x] builder `StageRunner` 또는 동등한 runner 추가
+- [x] `build_hwpx.py` 실행 결과에서 output HWPX path 확인
+- [x] namespace fix / validation command hook 추가
+- [x] `build_status.json` write helper 사용
+- [x] 실패 원인을 typed error 또는 status로 반환
+- [x] focused test 또는 TypeScript 검증 통과
 
 ## 영향 범위
 
@@ -46,3 +46,23 @@ executor: sonnet
 ```bash
 pnpm exec tsc --noEmit
 ```
+
+## 실행 결과
+
+### 2026-05-16
+
+STATUS: completed
+PHASE: 2
+SUMMARY: `server/stages/builder.ts`에 deterministic builder `StageRunner`를 추가했습니다. `build_hwpx.py -> fix_namespaces.py -> validate.py --fix` 순서를 실행하고, stdout에서 HWPX 경로를 추출해 `build_status.json`과 `StageResult`에 반영합니다.
+CHECKLIST: 6/6
+VERIFICATION: pass
+NEXT: Phase 3 진행 가능. Phase 4도 Phase 1 의존성이 충족되어 진행 가능.
+COMMIT: pending
+
+#### Scope Audit (orchestrator)
+
+pass — 2 files in scope
+
+#### Verification Re-run (orchestrator)
+
+exit 0 — `pnpm exec tsc --noEmit` 통과

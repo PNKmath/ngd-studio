@@ -1,7 +1,8 @@
-import { mkdtemp, rm } from "fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it } from "vitest";
+import { runBuilderStage, resolveBuilderScripts } from "../../server/stages/builder";
 import { createStageCache } from "../../server/stages/cache";
 import { runStageCommand, stageCommandToError } from "../../server/stages/commands";
 import { errorEvent, fileEvent, logEvent, progressEvent, resultEvent, stageEvent } from "../../server/stages/events";
@@ -146,6 +147,66 @@ describe("stage foundation helpers", () => {
     expect(stageCommandToError(result)).toMatchObject({
       code: "stage_command_timeout",
       retryable: true,
+    });
+  });
+
+  it("runs the deterministic builder command sequence and writes build status", async () => {
+    const baseDir = await makeTempDir();
+    const cache = createStageCache(baseDir);
+    const outputDir = path.join(baseDir, "outputs");
+    const hwpxPath = path.join(outputDir, "built.hwpx");
+    const calls: string[][] = [];
+
+    await cache.ensureCacheDir();
+    await writeFile(cache.paths.examData, JSON.stringify({ info: {}, problems: [] }), "utf8");
+
+    const result = await runBuilderStage({
+      baseDir,
+      cache,
+      outputDir,
+      commandRunner: async ({ args }) => {
+        calls.push(args);
+        if (args[0].endsWith("build_hwpx.py")) {
+          await writeFile(hwpxPath, "zip-like", "utf8");
+          return {
+            command: "python3",
+            args,
+            status: "success",
+            stdout: `HWPX written: ${hwpxPath}\n`,
+            stderr: "",
+            exitCode: 0,
+            signal: null,
+            elapsedMs: 1,
+          };
+        }
+        return {
+          command: "python3",
+          args,
+          status: "success",
+          stdout: "",
+          stderr: "",
+          exitCode: 0,
+          signal: null,
+          elapsedMs: 1,
+        };
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.output?.hwpxPath).toBe(hwpxPath);
+    expect(calls.map((args) => path.basename(args[0]))).toEqual([
+      "build_hwpx.py",
+      "fix_namespaces.py",
+      "validate.py",
+    ]);
+    await expect(readFile(cache.paths.buildStatus, "utf8")).resolves.toContain('"status": "completed"');
+  });
+
+  it("resolves builder scripts from the repository root", () => {
+    expect(resolveBuilderScripts("/repo")).toEqual({
+      buildHwpx: path.join("/repo", "build_hwpx.py"),
+      fixNamespaces: path.join("/repo", ".claude", "skills", "ngd-exam-create", "scripts", "fix_namespaces.py"),
+      validateHwpx: path.join("/repo", ".claude", "skills", "ngd-exam-create", "scripts", "validate.py"),
     });
   });
 });
