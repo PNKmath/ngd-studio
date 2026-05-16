@@ -3,12 +3,15 @@ import type { ClaudeEvent } from "../claude";
 
 export type AIProviderId = "auto" | "claude" | "codex" | "deepseek-v4";
 export type ResolvedAIProviderId = Exclude<AIProviderId, "auto">;
+// Provider/model-call stage keys. Broader workflow stages are defined in server/stages/types.ts.
+export type AIStageKey = "create.extractor" | "create.solver" | "create.verifier" | "review.reviewer";
 
 export interface ProviderRunOptions {
   cwd?: string;
   maxTurns?: number;
   mode?: "create" | "resume" | "crop" | "review" | string;
   jobId?: string;
+  stageKey?: AIStageKey;
 }
 
 export interface ProviderSelectionRunOptions extends ProviderRunOptions {
@@ -19,6 +22,7 @@ export interface ProviderRunMetadata {
   requestedProvider: AIProviderId;
   provider: ResolvedAIProviderId;
   label: string;
+  externalCostUsd?: number;
 }
 
 export interface ProviderRunResult {
