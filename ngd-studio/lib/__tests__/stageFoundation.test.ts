@@ -1,9 +1,11 @@
 import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
+import JSZip from "jszip";
 import { afterEach, describe, expect, it } from "vitest";
 import { runBuilderStage, resolveBuilderScripts } from "../../server/stages/builder";
 import { createStageCache } from "../../server/stages/cache";
+import { runCheckerStage, runDeterministicCheckerRules } from "../../server/stages/checker";
 import { runStageCommand, stageCommandToError } from "../../server/stages/commands";
 import { errorEvent, fileEvent, logEvent, progressEvent, resultEvent, stageEvent } from "../../server/stages/events";
 import { FileBackedJobStore } from "../../server/stages/jobStore";
@@ -208,5 +210,47 @@ describe("stage foundation helpers", () => {
       fixNamespaces: path.join("/repo", ".claude", "skills", "ngd-exam-create", "scripts", "fix_namespaces.py"),
       validateHwpx: path.join("/repo", ".claude", "skills", "ngd-exam-create", "scripts", "validate.py"),
     });
+  });
+
+  it("detects deterministic checker XML and vocabulary issues", () => {
+    const xml = [
+      "<hs:sec>",
+      "<hp:p><hp:run><hp:t>[난이도] 최상</hp:t></hp:run></hp:p>",
+      "<hp:p><hp:run><hp:t>raw &lt;hp:equation&gt;score&lt;/hp:equation&gt;</hp:t></hp:run></hp:p>",
+      "<hp:p><hp:run><hp:t>English</hp:t></hp:run></hp:p>",
+      "<hp:p><hp:run><hp:script>x=1=2</hp:script></hp:run></hp:p>",
+      "<hp:p><hp:run><hp:script>nCr</hp:script></hp:run></hp:p>",
+      "</hs:sec>",
+    ].join("");
+
+    const issues = runDeterministicCheckerRules(xml);
+
+    expect(issues.map((issue) => issue.ruleId)).toEqual(expect.arrayContaining([
+      "text.difficulty_vocabulary",
+      "text.raw_equation_xml",
+      "text.english_word",
+      "equation.run_on",
+      "equation.permutation_combination",
+    ]));
+    expect(issues.some((issue) => issue.fallbackRequired)).toBe(true);
+  });
+
+  it("reads section XML from HWPX and returns a JSON-serializable checker result", async () => {
+    const dir = await makeTempDir();
+    const hwpxPath = path.join(dir, "sample.hwpx");
+    const zip = new JSZip();
+    zip.file("Contents/section0.xml", "<hs:sec><hp:p><hp:run><hp:t>[난이도] 상</hp:t></hp:run></hp:p></hs:sec>");
+    await writeFile(hwpxPath, await zip.generateAsync({ type: "nodebuffer" }));
+
+    const result = await runCheckerStage({ hwpxPath });
+
+    expect(result.status).toBe("completed");
+    expect(result.output).toMatchObject({
+      ok: true,
+      issues: [],
+      checkedFiles: [`${hwpxPath}:Contents/section0.xml`],
+      fallbackRequired: false,
+    });
+    expect(() => JSON.stringify(result.output)).not.toThrow();
   });
 });
