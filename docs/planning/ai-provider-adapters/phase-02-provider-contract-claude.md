@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: Provider 계약 + Claude adapter
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - ngd-studio/lib/claude.ts
@@ -37,12 +37,12 @@ executor: sonnet
 
 ## 체크리스트
 
-- [ ] `lib/ai/types.ts`에 provider id/run 계약 정의
-- [ ] `lib/ai/providers/claudeCli.ts`에 기존 Claude spawn 구현 래핑
-- [ ] `lib/ai/registry.ts`에서 `claude`와 `auto` 기본 해석 제공
-- [ ] 기존 `runClaude()` import 경로 호환 또는 호출부 갱신
-- [ ] provider registry 단위 테스트 추가
-- [ ] Phase 1 baseline 테스트가 계속 통과함
+- [x] `lib/ai/types.ts`에 provider id/run 계약 정의
+- [x] `lib/ai/providers/claudeCli.ts`에 기존 Claude spawn 구현 래핑
+- [x] `lib/ai/registry.ts`에서 `claude`와 `auto` 기본 해석 제공
+- [x] 기존 `runClaude()` import 경로 호환 또는 호출부 갱신
+- [x] provider registry 단위 테스트 추가
+- [x] Phase 1 baseline 테스트가 계속 통과함
 
 ## 영향 범위
 
@@ -58,3 +58,24 @@ pnpm test
 
 ## 실행 결과
 
+### 2026-05-16 — Phase 2
+
+#### Summary
+- `lib/ai/types.ts`에 provider id, adapter, run options/result metadata 계약을 추가했다.
+- `lib/ai/providers/claudeCli.ts`에서 기존 `runClaude()`를 그대로 감싸는 Claude CLI adapter를 추가했다.
+- `lib/ai/registry.ts`/`index.ts`에서 `auto -> claude` 기본 해석, adapter 조회, provider 목록 export를 제공했다.
+- `lib/__tests__/providerRegistry.test.ts`로 registry 기본 동작과 아직 미구현 provider 거부 동작을 고정했다.
+
+#### Scope Audit (orchestrator)
+- pass — changed files are within Phase 2 scope: `ngd-studio/lib/ai/`, `ngd-studio/lib/__tests__/providerRegistry.test.ts`
+
+#### Verification Re-run (orchestrator)
+- pass — `npx vitest run lib/__tests__/claude.test.ts lib/__tests__/provider*.test.ts --reporter=basic` (24 tests)
+- pass — `pnpm test` (66 tests)
+- pass — `npx tsc --noEmit`
+
+#### Review (orchestrator)
+- pass — existing `runClaude()` import path remains compatible; new provider layer is additive.
+
+#### Commit
+- pending — commit will be recorded in `checklist.md` after local commit creation.
