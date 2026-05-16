@@ -78,4 +78,4 @@ pnpm test
 - pass — existing `runClaude()` import path remains compatible; new provider layer is additive.
 
 #### Commit
-- pending — commit will be recorded in `checklist.md` after local commit creation.
+- 5063158 — `feat(ai): add Claude provider registry`
