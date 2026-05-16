@@ -81,4 +81,4 @@ codex --version
 - pass — Codex is now selectable via registry while default `auto` remains Claude.
 
 #### Commit
-- pending — commit will be recorded in `checklist.md` after local commit creation.
+- 036ae69 — `feat(ai): add Codex CLI provider`
