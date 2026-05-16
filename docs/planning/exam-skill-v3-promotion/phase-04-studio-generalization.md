@@ -212,3 +212,6 @@ exit 0 — grep 0 matches / dir 3/3 pass / `npm run build` 20 routes (`/create` 
 
 #### Review (orchestrator)
 VERDICT: pass — V3 흐름 표준 create/resume 일반화 완전, scope 확장 4 component 모두 의도에 부합, 6 agent 실존, store API 식별자(v3Meta/setV3Meta) 보존.
+
+#### Commit
+198341b — `refactor(studio): Phase 4 — V3 흐름을 표준 create 모드로 일반화`
