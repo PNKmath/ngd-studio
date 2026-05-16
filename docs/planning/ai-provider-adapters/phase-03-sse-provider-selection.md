@@ -75,4 +75,4 @@ pnpm test
 - pass — provider field is additive; existing clients omit it and still resolve to Claude.
 
 #### Commit
-- pending — commit will be recorded in `checklist.md` after local commit creation.
+- dd5d53f — `feat(ai): accept provider selection in SSE runner`
