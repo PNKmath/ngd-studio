@@ -81,4 +81,4 @@ pnpm test
 - pass — settings are client-only and default to `auto`, preserving existing Claude flow.
 
 #### Commit
-- pending — commit will be recorded in `checklist.md` after local commit creation.
+- bd6fa6a — `feat(ai): add provider settings page`
