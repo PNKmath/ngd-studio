@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -10,6 +11,7 @@ const navItems = [
   { href: "/create-v4", label: "PDF 자동크롭", icon: "scissors" },
   { href: "/review", label: "오검", icon: "search" },
   { href: "/history", label: "히스토리", icon: "clock" },
+  { href: "/settings", label: "설정", icon: "settings" },
 ];
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -50,6 +52,7 @@ const iconMap: Record<string, React.ReactNode> = {
       <polyline points="12 6 12 12 16 14" />
     </svg>
   ),
+  settings: <Settings className="h-5 w-5" strokeWidth={1.8} />,
 };
 
 export function Sidebar() {

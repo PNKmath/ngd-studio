@@ -8,6 +8,7 @@ const pageTitles: Record<string, { title: string; breadcrumb?: string[] }> = {
   "/create-v4": { title: "PDF 자동크롭", breadcrumb: ["대시보드", "PDF 자동크롭"] },
   "/review": { title: "오검 (오류검수)", breadcrumb: ["대시보드", "오검"] },
   "/history": { title: "작업 히스토리", breadcrumb: ["대시보드", "히스토리"] },
+  "/settings": { title: "설정", breadcrumb: ["대시보드", "설정"] },
 };
 
 export function Header() {

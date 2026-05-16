@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: 설정 페이지 엔진 선택
-status: pending
+status: completed
 depends_on: [3, 4]
 scope:
   - ngd-studio/app/settings/
@@ -39,13 +39,13 @@ executor: sonnet
 
 ## 체크리스트
 
-- [ ] `app/settings/page.tsx` 신규 추가
-- [ ] `defaultProvider` localStorage read/write helper 추가
-- [ ] Sidebar 또는 Header navigation에 설정 페이지 링크 추가
-- [ ] `useJobRunner`가 설정된 provider를 `/api/run`에 포함
-- [ ] 기본값 `auto`에서 기존 Claude 흐름이 유지됨
-- [ ] 설정 UI가 `자동/Claude/Codex`만 노출하고 DeepSeek는 1차에서 숨김
-- [ ] 관련 테스트 또는 최소 typecheck 통과
+- [x] `app/settings/page.tsx` 신규 추가
+- [x] `defaultProvider` localStorage read/write helper 추가
+- [x] Sidebar 또는 Header navigation에 설정 페이지 링크 추가
+- [x] `useJobRunner`가 설정된 provider를 `/api/run`에 포함
+- [x] 기본값 `auto`에서 기존 Claude 흐름이 유지됨
+- [x] 설정 UI가 `자동/Claude/Codex`만 노출하고 DeepSeek는 1차에서 숨김
+- [x] 관련 테스트 또는 최소 typecheck 통과
 
 ## 영향 범위
 
@@ -61,3 +61,24 @@ pnpm test
 
 ## 실행 결과
 
+### 2026-05-16 — Phase 5
+
+#### Summary
+- `/settings` 페이지를 추가해 기본 실행 엔진을 `자동`, `Claude`, `Codex` 중 선택할 수 있게 했다.
+- `lib/ai/settings.ts`에 localStorage 기반 `defaultProvider` read/write helper를 추가하고 DeepSeek는 selectable provider에서 제외했다.
+- Sidebar/Header navigation에 설정 페이지를 연결했다.
+- `useJobRunner`가 명시 provider가 없으면 localStorage 기본 provider를 읽어 `/api/run` body에 포함하도록 했다.
+- `providerSettings.test.ts`로 기본값, invalid/hidden provider fallback, 저장 동작을 고정했다.
+
+#### Scope Audit (orchestrator)
+- pass — changed files are within Phase 5 scope: `ngd-studio/app/settings/`, `ngd-studio/components/layout/Sidebar.tsx`, `ngd-studio/components/layout/Header.tsx`, `ngd-studio/lib/useJobRunner.ts`, `ngd-studio/lib/ai/`, `ngd-studio/lib/__tests__/providerSettings.test.ts`
+
+#### Verification Re-run (orchestrator)
+- pass — `npx tsc --noEmit`
+- pass — `pnpm test` (81 tests)
+
+#### Review (orchestrator)
+- pass — settings are client-only and default to `auto`, preserving existing Claude flow.
+
+#### Commit
+- pending — commit will be recorded in `checklist.md` after local commit creation.
