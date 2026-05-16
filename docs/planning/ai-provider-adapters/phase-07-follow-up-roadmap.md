@@ -74,4 +74,4 @@ grep -n "DeepSeek V4\\|외부 API\\|단계별" docs/planning/ai-provider-adapter
 - pass — docs-only phase; no external API implementation or UI exposure was added.
 
 #### Commit
-- pending — commit will be recorded in `checklist.md` after local commit creation.
+- 96b08e6 — `docs(ai): add provider roadmap`
