@@ -21,6 +21,7 @@ import { normalizeStageOverrides, type StageOverrideMap } from "../lib/ai/settin
 import type { ProviderTelemetryEntry } from "../lib/ai/retry";
 import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
 import { runBuilderStage } from "./stages/builder";
+import { runCheckerStage, type CheckerStageOutput } from "./stages/checker";
 import { fileEvent, logEvent, progressEvent, resultEvent, stageEvent } from "./stages/events";
 import { createJobStore } from "./stages/jobStore";
 import { runLegacyPromptJob } from "./stages/jobRunner";
@@ -284,9 +285,11 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   let finalStatus: "done" | "failed" | "cancelled" = "done";
   let finalProviderMetadata = { requestedProvider, provider: resolvedProvider };
   let providerTelemetry: ProviderTelemetryEntry[] = [];
+  let checkerResult: CheckerStageOutput | undefined;
 
   try {
     const deterministicBuilder = mode === "resume" && (meta?.resumeFrom === "builder" || meta?.resumeFrom === "confirm");
+    const deterministicChecker = mode === "resume" && meta?.resumeFrom === "checker";
     if (deterministicBuilder) {
       send(stageEvent("builder", "running"));
       send(progressEvent("builder", 5));
@@ -305,6 +308,51 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       } else {
         send(stageEvent("builder", "failed", { summary: builderResult.error?.message }));
         send(logEvent("builder", "deterministic builder 실패로 legacy builder fallback을 실행합니다.", "warn"));
+        const legacyResult = await runLegacyPromptJob({
+          prompt,
+          requestedProvider,
+          resolvedProvider,
+          baseDir: BASE_DIR,
+          mode,
+          jobId,
+          stageKey: primaryStageKey,
+          send,
+          isResponseDestroyed: () => res.destroyed,
+          isClientDisconnected: () => clientDisconnected,
+          setActiveProviderProcess: (proc) => { activeProviderProcess = proc; },
+          activeProcesses,
+        });
+        outputFile = legacyResult.outputFile ?? "";
+        resultSummary = legacyResult.resultSummary ?? "";
+        finalStatus = legacyResult.status;
+        finalProviderMetadata = legacyResult.providerMetadata;
+        providerTelemetry = legacyResult.providerTelemetry;
+      }
+    } else if (deterministicChecker) {
+      send(stageEvent("checker", "running"));
+      send(progressEvent("checker", 5));
+      send(logEvent("checker", "deterministic checker runner를 실행합니다."));
+
+      const hwpxPath = resolvedFiles.hwpx
+        ? path.isAbsolute(resolvedFiles.hwpx) ? resolvedFiles.hwpx : path.join(BASE_DIR, resolvedFiles.hwpx)
+        : "";
+      const deterministicResult = await runCheckerStage({ hwpxPath });
+      checkerResult = deterministicResult.output;
+
+      if (deterministicResult.status === "completed" && deterministicResult.output) {
+        resultSummary = `deterministic checker 완료: ${deterministicResult.output.issues.length} issue(s)`;
+        finalStatus = "done";
+        send(progressEvent("checker", 100, { issueCount: deterministicResult.output.issues.length }));
+        send(stageEvent("checker", "done", { summary: resultSummary }));
+        send(resultEvent("success", resultSummary, outputFile || undefined));
+      } else {
+        const issueCount = deterministicResult.output?.issues.length ?? 0;
+        send(stageEvent("checker", "failed", { summary: deterministicResult.error?.message ?? `${issueCount} issue(s)` }));
+        send(logEvent(
+          "checker",
+          `deterministic checker가 ${issueCount}개 issue를 기록했습니다. legacy checker fallback을 실행합니다.`,
+          "warn"
+        ));
         const legacyResult = await runLegacyPromptJob({
           prompt,
           requestedProvider,
@@ -395,6 +443,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         requestedProvider: finalProviderMetadata.requestedProvider,
         provider: finalProviderMetadata.provider,
         providerTelemetry,
+        checkerResult,
         status: finalStatus,
         finishedAt: new Date().toISOString(),
         outputFile: outputFile || undefined,

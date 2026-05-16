@@ -57,7 +57,7 @@ SUMMARY: `resumeFrom === "builder"` 또는 기존 confirm-builder 경로에서 d
 CHECKLIST: 5/5
 VERIFICATION: pass
 NEXT: Phase 5 진행 가능
-COMMIT: pending
+COMMIT: f521c54
 
 #### Scope Audit (orchestrator)
 
