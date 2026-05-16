@@ -56,7 +56,7 @@ SUMMARY: `server/stages/checker.ts`에 deterministic checker `StageRunner`와 XM
 CHECKLIST: 6/6
 VERIFICATION: pass
 NEXT: Phase 5 진행 가능. Phase 3도 Phase 2 의존성이 충족되어 진행 가능.
-COMMIT: pending
+COMMIT: 0dccba8
 
 #### Scope Audit (orchestrator)
 

@@ -20,6 +20,8 @@ import {
 import { normalizeStageOverrides, type StageOverrideMap } from "../lib/ai/settings";
 import type { ProviderTelemetryEntry } from "../lib/ai/retry";
 import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
+import { runBuilderStage } from "./stages/builder";
+import { fileEvent, logEvent, progressEvent, resultEvent, stageEvent } from "./stages/events";
 import { createJobStore } from "./stages/jobStore";
 import { runLegacyPromptJob } from "./stages/jobRunner";
 
@@ -284,25 +286,66 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   let providerTelemetry: ProviderTelemetryEntry[] = [];
 
   try {
-    const legacyResult = await runLegacyPromptJob({
-      prompt,
-      requestedProvider,
-      resolvedProvider,
-      baseDir: BASE_DIR,
-      mode,
-      jobId,
-      stageKey: primaryStageKey,
-      send,
-      isResponseDestroyed: () => res.destroyed,
-      isClientDisconnected: () => clientDisconnected,
-      setActiveProviderProcess: (proc) => { activeProviderProcess = proc; },
-      activeProcesses,
-    });
-    outputFile = legacyResult.outputFile ?? "";
-    resultSummary = legacyResult.resultSummary ?? "";
-    finalStatus = legacyResult.status;
-    finalProviderMetadata = legacyResult.providerMetadata;
-    providerTelemetry = legacyResult.providerTelemetry;
+    const deterministicBuilder = mode === "resume" && (meta?.resumeFrom === "builder" || meta?.resumeFrom === "confirm");
+    if (deterministicBuilder) {
+      send(stageEvent("builder", "running"));
+      send(progressEvent("builder", 5));
+      send(logEvent("builder", "deterministic builder runner를 실행합니다."));
+
+      const builderResult = await runBuilderStage({ baseDir: BASE_DIR });
+      if (builderResult.status === "completed" && builderResult.output) {
+        const relativeOutput = path.relative(BASE_DIR, builderResult.output.hwpxPath);
+        outputFile = relativeOutput;
+        resultSummary = "deterministic builder runner 완료";
+        finalStatus = "done";
+        send(progressEvent("builder", 100));
+        send(stageEvent("builder", "done", { summary: resultSummary }));
+        send(fileEvent({ type: "hwpx", name: path.basename(relativeOutput), path: relativeOutput }));
+        send(resultEvent("success", resultSummary, relativeOutput));
+      } else {
+        send(stageEvent("builder", "failed", { summary: builderResult.error?.message }));
+        send(logEvent("builder", "deterministic builder 실패로 legacy builder fallback을 실행합니다.", "warn"));
+        const legacyResult = await runLegacyPromptJob({
+          prompt,
+          requestedProvider,
+          resolvedProvider,
+          baseDir: BASE_DIR,
+          mode,
+          jobId,
+          stageKey: primaryStageKey,
+          send,
+          isResponseDestroyed: () => res.destroyed,
+          isClientDisconnected: () => clientDisconnected,
+          setActiveProviderProcess: (proc) => { activeProviderProcess = proc; },
+          activeProcesses,
+        });
+        outputFile = legacyResult.outputFile ?? "";
+        resultSummary = legacyResult.resultSummary ?? "";
+        finalStatus = legacyResult.status;
+        finalProviderMetadata = legacyResult.providerMetadata;
+        providerTelemetry = legacyResult.providerTelemetry;
+      }
+    } else {
+      const legacyResult = await runLegacyPromptJob({
+        prompt,
+        requestedProvider,
+        resolvedProvider,
+        baseDir: BASE_DIR,
+        mode,
+        jobId,
+        stageKey: primaryStageKey,
+        send,
+        isResponseDestroyed: () => res.destroyed,
+        isClientDisconnected: () => clientDisconnected,
+        setActiveProviderProcess: (proc) => { activeProviderProcess = proc; },
+        activeProcesses,
+      });
+      outputFile = legacyResult.outputFile ?? "";
+      resultSummary = legacyResult.resultSummary ?? "";
+      finalStatus = legacyResult.status;
+      finalProviderMetadata = legacyResult.providerMetadata;
+      providerTelemetry = legacyResult.providerTelemetry;
+    }
   } catch (err) {
     send({
       event: "error",

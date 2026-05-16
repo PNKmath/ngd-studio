@@ -181,6 +181,17 @@ function handleSSEEvent(event: SSEEvent, store: JobState) {
           finishedAt: new Date().toISOString(),
           summary: (data.summary as string) ?? undefined,
         });
+      } else if (status === "failed") {
+        store.updateStage(name, {
+          status: "failed",
+          finishedAt: new Date().toISOString(),
+          summary: (data.summary as string) ?? undefined,
+        });
+      } else if (status === "skipped") {
+        store.updateStage(name, {
+          status: "pending",
+          summary: (data.summary as string) ?? undefined,
+        });
       }
       break;
     }

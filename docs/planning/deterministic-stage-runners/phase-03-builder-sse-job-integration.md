@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: Builder SSE/job 통합
-status: pending
+status: completed
 depends_on: [2]
 scope:
   - ngd-studio/server/stages/jobRunner.ts
@@ -31,11 +31,11 @@ Builder runner가 추가되어도 사용 경로에 연결되지 않으면 legacy
 
 ## 체크리스트
 
-- [ ] builder runner 호출 경로를 legacy wrapper 주변에 추가
-- [ ] builder stage SSE event가 기존 `useJobRunner` shape와 호환
-- [ ] job JSON에 builder result/outputFile/status 반영
-- [ ] builder 실패 시 legacy fallback이 제거되지 않음
-- [ ] provider/model stage 실행 semantics 변경 없음
+- [x] builder runner 호출 경로를 legacy wrapper 주변에 추가
+- [x] builder stage SSE event가 기존 `useJobRunner` shape와 호환
+- [x] job JSON에 builder result/outputFile/status 반영
+- [x] builder 실패 시 legacy fallback이 제거되지 않음
+- [x] provider/model stage 실행 semantics 변경 없음
 
 ## 영향 범위
 
@@ -46,3 +46,23 @@ Builder runner가 추가되어도 사용 경로에 연결되지 않으면 legacy
 ```bash
 pnpm test -- --run lib/__tests__/claude.test.ts lib/__tests__/store.test.ts
 ```
+
+## 실행 결과
+
+### 2026-05-16
+
+STATUS: completed
+PHASE: 3
+SUMMARY: `resumeFrom === "builder"` 또는 기존 confirm-builder 경로에서 deterministic builder runner를 먼저 실행하도록 SSE 서버에 opt-in 연결을 추가했습니다. 성공 시 builder stage/file/result 이벤트와 job output을 기록하고, 실패 시 legacy prompt workflow로 fallback합니다.
+CHECKLIST: 5/5
+VERIFICATION: pass
+NEXT: Phase 5 진행 가능
+COMMIT: pending
+
+#### Scope Audit (orchestrator)
+
+pass — 2 files in scope
+
+#### Verification Re-run (orchestrator)
+
+exit 0 — `pnpm test -- --run lib/__tests__/claude.test.ts lib/__tests__/store.test.ts` 통과
