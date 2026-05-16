@@ -11,6 +11,10 @@ export interface ProviderRunOptions {
   jobId?: string;
 }
 
+export interface ProviderSelectionRunOptions extends ProviderRunOptions {
+  provider?: AIProviderId;
+}
+
 export interface ProviderRunMetadata {
   requestedProvider: AIProviderId;
   provider: ResolvedAIProviderId;

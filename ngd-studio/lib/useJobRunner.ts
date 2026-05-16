@@ -3,6 +3,7 @@
 import { useCallback, useRef } from "react";
 import { useJobStore, type JobState } from "./store";
 import type { SSEEvent } from "./claude";
+import type { AIProviderId } from "./ai";
 import { parseReviewReport } from "./reviewParser";
 
 // SSE server runs on a separate port to avoid Next.js response buffering
@@ -30,7 +31,8 @@ export function useJobRunner() {
     async (
       mode: "create" | "resume" | "crop" | "review",
       files: { pdf: string; hwpx?: string; questionImages?: number[] },
-      meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number }
+      meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number },
+      provider?: AIProviderId
     ) => {
       const jobId = crypto.randomUUID();
       const abortController = new AbortController();
@@ -69,7 +71,7 @@ export function useJobRunner() {
         const res = await fetch(`${SSE_BASE}/api/run`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode, files, meta, jobId }),
+          body: JSON.stringify({ mode, files, meta, jobId, provider }),
           signal: abortController.signal,
         });
 

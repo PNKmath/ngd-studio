@@ -10,7 +10,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // Import from relative paths (tsx doesn't support @/ alias)
-import { runClaude, transformToSSE, toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
+import { transformToSSE, toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
+import { normalizeProviderId, resolveProviderId, runAIProvider, type AIProviderId } from "../lib/ai";
 import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
@@ -116,6 +117,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     files: { pdf: string; hwpx?: string; questionImages?: number[] };
     meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number };
     jobId: string;
+    provider?: AIProviderId;
   };
   try {
     body = JSON.parse(rawBody);
@@ -126,6 +128,16 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
 
   const { mode, files, meta, jobId } = body;
+  let requestedProvider: AIProviderId;
+  let resolvedProvider: Exclude<AIProviderId, "auto">;
+  try {
+    requestedProvider = normalizeProviderId(body.provider);
+    resolvedProvider = resolveProviderId(requestedProvider);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: err instanceof Error ? err.message : "Invalid AI provider" }));
+    return;
+  }
 
   if (!mode || !jobId) {
     res.writeHead(400, { "Content-Type": "application/json" });
@@ -212,6 +224,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   const jobData = {
     id: jobId,
     mode,
+    requestedProvider,
+    provider: resolvedProvider,
     status: "running",
     inputFiles: [resolvedFiles.pdf, resolvedFiles.hwpx],
     stages: [],
@@ -241,8 +255,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
   send({ event: "log", data: { stage: "system", message: "CLI 프로세스를 시작합니다...", timestamp: new Date().toISOString(), level: "info" } });
 
-  // Spawn Claude CLI
-  const { process: proc, events, exitCode } = runClaude(prompt, {
+  // Spawn selected AI provider. In the initial rollout, auto resolves to Claude.
+  const { process: proc, events, exitCode, metadata } = runAIProvider(prompt, {
+    provider: requestedProvider,
     cwd: BASE_DIR,
     maxTurns: mode === "crop" ? 30 : (mode === "create" || mode === "resume") ? 200 : 50,
   });
@@ -356,6 +371,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         path.join(DATA_DIR, `${jobId}.json`),
         JSON.stringify({
           ...jobData,
+          requestedProvider: metadata.requestedProvider,
+          provider: metadata.provider,
           status: finalStatus,
           finishedAt: new Date().toISOString(),
           outputFile: outputFile || undefined,

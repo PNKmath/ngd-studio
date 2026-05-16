@@ -3,6 +3,7 @@ import {
   claudeCliProvider,
   getProviderAdapter,
   listProviderAdapters,
+  normalizeProviderId,
   resolveProviderId,
 } from "../ai";
 
@@ -10,6 +11,17 @@ describe("AI provider registry", () => {
   it("resolves auto to Claude for the initial provider rollout", () => {
     expect(resolveProviderId()).toBe("claude");
     expect(resolveProviderId("auto")).toBe("claude");
+  });
+
+  it("normalizes missing provider requests to auto", () => {
+    expect(normalizeProviderId(undefined)).toBe("auto");
+    expect(normalizeProviderId(null)).toBe("auto");
+    expect(normalizeProviderId("")).toBe("auto");
+  });
+
+  it("rejects invalid provider request values", () => {
+    expect(() => normalizeProviderId("unknown-provider")).toThrow("Invalid AI provider: unknown-provider");
+    expect(() => normalizeProviderId(1)).toThrow("Invalid AI provider: 1");
   });
 
   it("returns the Claude CLI adapter for auto and claude", () => {

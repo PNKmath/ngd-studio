@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: SSE provider 선택 수용
-status: pending
+status: completed
 depends_on: [2]
 scope:
   - ngd-studio/server/sse.ts
@@ -33,12 +33,12 @@ SSE 서버는 현재 provider 개념 없이 무조건 Claude를 실행한다. pr
 
 ## 체크리스트
 
-- [ ] `/api/run` request body type에 `provider?: AIProviderId` 추가
-- [ ] provider 미지정 또는 `auto` 요청이 Claude provider로 해석됨
-- [ ] `server/sse.ts`가 registry를 통해 provider를 실행함
-- [ ] job JSON에 `requestedProvider`와 `provider` 기록
-- [ ] `useJobRunner.startJob()`이 optional provider를 전달할 수 있음
-- [ ] 기존 create/review/crop/resume 요청 테스트가 무회귀로 통과함
+- [x] `/api/run` request body type에 `provider?: AIProviderId` 추가
+- [x] provider 미지정 또는 `auto` 요청이 Claude provider로 해석됨
+- [x] `server/sse.ts`가 registry를 통해 provider를 실행함
+- [x] job JSON에 `requestedProvider`와 `provider` 기록
+- [x] `useJobRunner.startJob()`이 optional provider를 전달할 수 있음
+- [x] 기존 create/review/crop/resume 요청 테스트가 무회귀로 통과함
 
 ## 영향 범위
 
@@ -54,3 +54,25 @@ pnpm test
 
 ## 실행 결과
 
+### 2026-05-16 — Phase 3
+
+#### Summary
+- `/api/run` body에 `provider?: AIProviderId`를 추가하고 미지정/빈 값은 `auto`, `auto`는 현재 `claude`로 해석하게 했다.
+- `server/sse.ts`가 `runAIProvider()` registry path를 통해 provider를 실행하도록 변경했다.
+- job JSON 초기/최종 저장 데이터에 `requestedProvider`와 resolved `provider`를 기록한다.
+- `useJobRunner.startJob()`에 optional provider 인자를 추가해 기존 호출은 그대로 유지하면서 provider 전달이 가능하게 했다.
+- registry 테스트에 provider normalization/invalid value 회귀 테스트를 추가했다.
+
+#### Scope Audit (orchestrator)
+- pass — changed files are within Phase 3 scope: `ngd-studio/server/sse.ts`, `ngd-studio/lib/useJobRunner.ts`, `ngd-studio/lib/ai/`, `ngd-studio/lib/__tests__/providerRegistry.test.ts`
+
+#### Verification Re-run (orchestrator)
+- pass — `npx vitest run lib/__tests__/provider*.test.ts lib/__tests__/store.test.ts --reporter=basic` (14 tests)
+- pass — `pnpm test` (68 tests)
+- pass — `npx tsc --noEmit`
+
+#### Review (orchestrator)
+- pass — provider field is additive; existing clients omit it and still resolve to Claude.
+
+#### Commit
+- pending — commit will be recorded in `checklist.md` after local commit creation.
