@@ -77,4 +77,4 @@ pnpm test
 - pass — retry stays on the selected provider; no automatic fallback is introduced.
 
 #### Commit
-- pending — commit will be recorded in `checklist.md` after local commit creation.
+- 4014954 — `feat(ai): retry provider runs`
