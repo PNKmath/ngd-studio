@@ -21,6 +21,23 @@ describe("Codex CLI provider", () => {
     ]);
   });
 
+  it("inserts a `--` separator before the prompt when images are attached", () => {
+    expect(buildCodexExecArgs("describe", "/repo", ["/tmp/q01.png"])).toEqual([
+      "exec",
+      "--json",
+      "--cd",
+      "/repo",
+      "--sandbox",
+      "danger-full-access",
+      "--ask-for-approval",
+      "never",
+      "--image",
+      "/tmp/q01.png",
+      "--",
+      buildCodexPrompt("describe"),
+    ]);
+  });
+
   it("adds workflow reuse guidance to the provider prompt", () => {
     const prompt = buildCodexPrompt("시험지를 제작해줘.");
     expect(prompt).toContain(".claude/skills");

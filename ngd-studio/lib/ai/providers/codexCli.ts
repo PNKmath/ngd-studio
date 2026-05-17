@@ -19,6 +19,11 @@ export function buildCodexExecArgs(prompt: string, cwd: string, imagePaths?: str
     imageArgs.push("--image", imgPath);
   }
 
+  // `--image <FILE>...` is variadic; without a `--` terminator clap would greedily
+  // consume the trailing prompt as another image path. Insert `--` whenever images
+  // are present so the prompt is unambiguously the positional argument.
+  const separator = imageArgs.length > 0 ? ["--"] : [];
+
   return [
     "exec",
     "--json",
@@ -29,6 +34,7 @@ export function buildCodexExecArgs(prompt: string, cwd: string, imagePaths?: str
     "--ask-for-approval",
     "never",
     ...imageArgs,
+    ...separator,
     buildCodexPrompt(prompt),
   ];
 }
