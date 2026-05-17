@@ -82,3 +82,32 @@ describe("setMode('review')", () => {
     expect(stages[0].status).toBe("pending");
   });
 });
+
+describe("updateStage progress", () => {
+  it("updates progress field for a running stage", () => {
+    useJobStore.getState().setMode("create");
+    useJobStore.getState().updateStage("extractor", { status: "running", progress: 40 });
+    const stages = useJobStore.getState().stages;
+    const extractor = stages.find((s) => s.name === "extractor");
+    expect(extractor?.status).toBe("running");
+    expect(extractor?.progress).toBe(40);
+  });
+
+  it("progress updated incrementally", () => {
+    useJobStore.getState().setMode("create");
+    useJobStore.getState().updateStage("solver", { status: "running", progress: 0 });
+    useJobStore.getState().updateStage("solver", { progress: 50 });
+    useJobStore.getState().updateStage("solver", { progress: 100 });
+    const stages = useJobStore.getState().stages;
+    const solver = stages.find((s) => s.name === "solver");
+    expect(solver?.progress).toBe(100);
+  });
+
+  it("other stages are not affected by progress update", () => {
+    useJobStore.getState().setMode("create");
+    useJobStore.getState().updateStage("extractor", { status: "running", progress: 75 });
+    const stages = useJobStore.getState().stages;
+    const solver = stages.find((s) => s.name === "solver");
+    expect(solver?.progress).toBeUndefined();
+  });
+});

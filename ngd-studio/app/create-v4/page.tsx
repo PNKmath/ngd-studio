@@ -61,16 +61,6 @@ function loadStoredMeta(): MetaValue {
   }
 }
 
-// 다음 재개 stage 추론: stages 배열에서 done이 아닌 첫 단계.
-function inferResumeStage(stages: { name: string; status: string }[]): string {
-  const order = ["extractor", "solver", "verifier", "figure", "builder", "checker"];
-  for (const name of order) {
-    const stage = stages.find((s) => s.name === name);
-    if (!stage) continue;
-    if (stage.status !== "done") return name;
-  }
-  return "checker";
-}
 
 export default function CreateV4Page() {
   const reset = useJobStore((s) => s.reset);
@@ -92,12 +82,11 @@ export default function CreateV4Page() {
   const hasJob = isRunning || isDone || isPaused;
 
   const resumeOrRetry = useCallback(async () => {
-    const next = inferResumeStage(stages);
     const base = v3Meta ?? {};
-    const jobMeta = { ...base, resumeFrom: next };
+    const jobMeta = { ...base, resumeFrom: "auto" };
     setV3Meta(jobMeta);
     await startJob("resume", { pdf: "" }, jobMeta);
-  }, [stages, v3Meta, startJob, setV3Meta]);
+  }, [v3Meta, startJob, setV3Meta]);
 
   const [autoSplitEnabled, setAutoSplitEnabled] = useState(false);
   const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
@@ -113,7 +102,6 @@ export default function CreateV4Page() {
   const deepSeekStages = AI_STAGE_KEYS.filter(
     (key) => aiSettings.stageOverrides[key] === "deepseek-v4"
   );
-  const deepSeekActive = deepSeekStages.length > 0;
   const deepSeekBlocksCreate = deepSeekStages.includes("create.extractor");
 
   function handleAutoSplitToggle(e: React.ChangeEvent<HTMLInputElement>) {
@@ -171,8 +159,7 @@ export default function CreateV4Page() {
 
   // 이전 작업 재개 상태
   const [existingImages, setExistingImages] = useState<{ count: number; hasClean: boolean } | null>(null);
-  const [resumeFrom, setResumeFrom] = useState("extractor");
-  const [showResumeForm, setShowResumeForm] = useState(false);
+  const [resumeFrom] = useState("auto");
 
   // figure 상태 + 폴링
   const [figureStatus, setFigureStatus] = useState<FigureStatus | null>(null);
@@ -463,41 +450,17 @@ export default function CreateV4Page() {
               <Card className="p-4 space-y-3 border-amber-500/40 bg-amber-500/5">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-medium text-amber-600 dark:text-amber-400">이전 작업 재개</h3>
-                  <button
-                    onClick={() => setShowResumeForm((v) => !v)}
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                  >
-                    {showResumeForm ? "접기" : "펼치기"}
-                  </button>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   저장된 이미지 {existingImages.count}개{existingImages.hasClean ? " (정리본 있음)" : ""}
                 </p>
-                {showResumeForm && (
-                  <div className="space-y-2">
-                    <div>
-                      <label className="text-xs text-muted-foreground">재개 시작 단계</label>
-                      <select
-                        value={resumeFrom}
-                        onChange={(e) => setResumeFrom(e.target.value)}
-                        className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm"
-                      >
-                        {existingImages.hasClean && <option value="extractor">문제 추출 (extractor)</option>}
-                        <option value="solver">해설 생성 (solver)</option>
-                        <option value="verifier">해설 검증 (verifier)</option>
-                        <option value="figure">그림 처리 (figure)</option>
-                        <option value="builder">HWPX 조립 (builder)</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
                 <Button
                   onClick={handleResume}
                   disabled={!canResume}
                   variant="outline"
                   className="w-full border-amber-500/60 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
                 >
-                  재개 ({resumeFrom}부터)
+                  이어서 재개
                 </Button>
               </Card>
             )}
@@ -568,7 +531,7 @@ export default function CreateV4Page() {
               <div className="grid grid-cols-2 gap-2">
                 <Button onClick={resumeOrRetry} className="flex flex-col h-auto py-2 leading-tight">
                   <span>재개</span>
-                  <span className="text-xs opacity-70">{inferResumeStage(stages)}부터</span>
+                  <span className="text-xs opacity-70">이어서</span>
                 </Button>
                 <Button onClick={reset} variant="outline">초기화</Button>
               </div>
@@ -578,7 +541,7 @@ export default function CreateV4Page() {
               <div className="grid grid-cols-2 gap-2">
                 <Button onClick={resumeOrRetry} variant="default" className="flex flex-col h-auto py-2 leading-tight">
                   <span>재시도</span>
-                  <span className="text-xs opacity-70">{inferResumeStage(stages)}부터</span>
+                  <span className="text-xs opacity-70">이어서</span>
                 </Button>
                 <Button onClick={reset} variant="outline">새 작업</Button>
               </div>

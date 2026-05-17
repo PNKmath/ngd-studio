@@ -67,7 +67,7 @@ export function useJobRunner() {
       // "confirm" triggers builder; use "builder" as the first visible stage
       const effectiveResumeFrom = rawResumeFrom === "confirm" ? "builder" : rawResumeFrom;
       const firstStage = mode === "crop" ? "cropper"
-        : mode === "create" ? "cleaned"
+        : mode === "create" ? "extractor"
         : mode === "resume" ? effectiveResumeFrom
         : "reviewer";
       store.updateStage(firstStage, {
@@ -258,11 +258,15 @@ function handleSSEEvent(event: SSEEvent, store: JobState) {
       break;
     }
     case "extraction_review": {
-      const items = data.items as { number: number; data: Record<string, unknown> }[] | undefined;
-      if (items) {
+      if (Array.isArray(data.items)) {
+        // legacy 일괄
+        const items = data.items as { number: number; data: Record<string, unknown> }[];
         for (const item of items) {
           store.updateQuestionResult(item.number, "extracted", item.data);
         }
+      } else if (typeof data.number === "number" && data.data) {
+        // incremental per-question
+        store.updateQuestionResult(data.number as number, "extracted", data.data as Record<string, unknown>);
       }
       store.setExtractionReviewActive(true);
       break;
