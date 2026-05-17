@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
-import type { CropBox, PdfRotation } from "@/lib/cropper/types";
+import type { CropBox, PdfFlip, PdfRotation } from "@/lib/cropper/types";
 import { autoNumber, normalizePdfRotation, normalizedBboxToCropBox } from "@/lib/cropper/coords";
 import { PdfPageCanvas } from "./PdfPageCanvas";
 
@@ -30,8 +30,13 @@ function legacyLsKey(pdfPath: string): string {
   return `pdf-cropper:${hashString(pdfPath)}`;
 }
 
-function lsKey(pdfPath: string, rotation: PdfRotation): string {
+/** rotation-only key (Phase 2 이전 저장 데이터 호환) */
+function rotationOnlyLsKey(pdfPath: string, rotation: PdfRotation): string {
   return `pdf-cropper:${hashString(pdfPath)}:rotation:${rotation}`;
+}
+
+function lsKey(pdfPath: string, rotation: PdfRotation, flip: PdfFlip): string {
+  return `pdf-cropper:${hashString(pdfPath)}:rotation:${rotation}:flip:${flip ? 1 : 0}`;
 }
 
 function debounce<T extends (...args: Parameters<T>) => void>(fn: T, ms: number): T {
@@ -51,11 +56,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-async function fetchPdfMeta(path: string, rotation: PdfRotation): Promise<PdfMeta> {
+async function fetchPdfMeta(path: string, rotation: PdfRotation, flip: PdfFlip): Promise<PdfMeta> {
   const metaRes = await fetch("/api/pdf-meta", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pdfPath: path, dpi: 200, rotation }),
+    body: JSON.stringify({ pdfPath: path, dpi: 200, rotation, flip }),
   });
   if (!metaRes.ok) {
     const errData = await metaRes.json().catch(() => ({}));
@@ -64,14 +69,33 @@ async function fetchPdfMeta(path: string, rotation: PdfRotation): Promise<PdfMet
   return metaRes.json();
 }
 
-function loadStoredBoxes(path: string, rotation: PdfRotation): CropBox[] {
-  const stored = localStorage.getItem(lsKey(path, rotation));
-  const legacyStored = rotation === 0 && !stored ? localStorage.getItem(legacyLsKey(path)) : null;
-  const raw = stored ?? legacyStored;
-  if (!raw) return [];
+function loadStoredBoxes(path: string, rotation: PdfRotation, flip: PdfFlip): CropBox[] {
+  // Primary key: rotation + flip
+  const stored = localStorage.getItem(lsKey(path, rotation, flip));
+  if (stored) {
+    const { boxes: storedBoxes } = JSON.parse(stored) as { boxes: CropBox[]; updatedAt: string };
+    return storedBoxes;
+  }
 
-  const { boxes: storedBoxes } = JSON.parse(raw) as { boxes: CropBox[]; updatedAt: string };
-  return storedBoxes;
+  // Fallback: rotation-only key (legacy from Phase 2 era) — only when flip=false
+  if (!flip) {
+    const rotOnlyStored = localStorage.getItem(rotationOnlyLsKey(path, rotation));
+    if (rotOnlyStored) {
+      const { boxes: storedBoxes } = JSON.parse(rotOnlyStored) as { boxes: CropBox[]; updatedAt: string };
+      return storedBoxes;
+    }
+  }
+
+  // Fallback: legacy key (rotation=0, flip=false)
+  if (rotation === 0 && !flip) {
+    const legacyStored = localStorage.getItem(legacyLsKey(path));
+    if (legacyStored) {
+      const { boxes: storedBoxes } = JSON.parse(legacyStored) as { boxes: CropBox[]; updatedAt: string };
+      return storedBoxes;
+    }
+  }
+
+  return [];
 }
 
 // ─── component ────────────────────────────────────────────────────────────────
@@ -98,6 +122,7 @@ export function CropperWorkspace({
   // Page state
   const [currentPage, setCurrentPage] = useState(0);
   const [rotation, setRotation] = useState<PdfRotation>(0);
+  const [flip, setFlip] = useState<PdfFlip>(false);
   // pageImages: Map<pageIndex, blobUrl>
   const [pageImages, setPageImages] = useState<Map<number, string>>(new Map());
   const [loadingPage, setLoadingPage] = useState(false);
@@ -115,11 +140,11 @@ export function CropperWorkspace({
   const [extracting, setExtracting] = useState(false);
 
   const saveToLS = useMemo(
-    () => debounce((path: string, rot: PdfRotation, bxs: CropBox[]) => {
+    () => debounce((path: string, rot: PdfRotation, fl: PdfFlip, bxs: CropBox[]) => {
       try {
         localStorage.setItem(
-          lsKey(path, rot),
-          JSON.stringify({ boxes: bxs, rotation: rot, updatedAt: new Date().toISOString() })
+          lsKey(path, rot, fl),
+          JSON.stringify({ boxes: bxs, rotation: rot, flip: fl, updatedAt: new Date().toISOString() })
         );
       } catch {
         // quota exceeded or unavailable — ignore
@@ -147,17 +172,19 @@ export function CropperWorkspace({
       if (!path) throw new Error("서버 경로 없음");
 
       const initialRotation: PdfRotation = 0;
-      const meta = await fetchPdfMeta(path, initialRotation);
+      const initialFlip: PdfFlip = false;
+      const meta = await fetchPdfMeta(path, initialRotation, initialFlip);
 
       setPdfPath(path);
       setPdfMeta(meta);
       setCurrentPage(0);
       setRotation(initialRotation);
+      setFlip(initialFlip);
       setPageImages(new Map());
       setSelectedBoxId(null);
 
       try {
-        setBoxes(loadStoredBoxes(path, initialRotation));
+        setBoxes(loadStoredBoxes(path, initialRotation, initialFlip));
       } catch {
         setBoxes([]);
       }
@@ -180,7 +207,7 @@ export function CropperWorkspace({
         const res = await fetch("/api/pdf-preview", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pdfPath: path, page: pageIndex, dpi: 200, rotation }),
+          body: JSON.stringify({ pdfPath: path, page: pageIndex, dpi: 200, rotation, flip }),
         });
         if (!res.ok) throw new Error("페이지 렌더 실패");
         const blob = await res.blob();
@@ -197,7 +224,7 @@ export function CropperWorkspace({
         setLoadingPage(false);
       }
     },
-    [rotation]
+    [rotation, flip]
   );
 
   // Fetch page when pdfPath/currentPage changes
@@ -241,7 +268,7 @@ export function CropperWorkspace({
       }
 
       const numbered = autoNumber(result);
-      if (pdfPath) saveToLS(pdfPath, rotation, numbered);
+      if (pdfPath) saveToLS(pdfPath, rotation, flip, numbered);
       return numbered;
     });
   }
@@ -250,7 +277,7 @@ export function CropperWorkspace({
     setBoxes((prev) => {
       const filtered = prev.filter((b) => b.id !== id);
       const numbered = autoNumber(filtered);
-      if (pdfPath) saveToLS(pdfPath, rotation, numbered);
+      if (pdfPath) saveToLS(pdfPath, rotation, flip, numbered);
       return numbered;
     });
     setSelectedBoxId((cur) => (cur === id ? null : cur));
@@ -266,7 +293,7 @@ export function CropperWorkspace({
       const adjusted = toIdx > fromIdx ? toIdx - 1 : toIdx;
       next.splice(adjusted, 0, moved);
       const numbered = autoNumber(next);
-      if (pdfPath) saveToLS(pdfPath, rotation, numbered);
+      if (pdfPath) saveToLS(pdfPath, rotation, flip, numbered);
       return numbered;
     });
   }
@@ -290,13 +317,37 @@ export function CropperWorkspace({
     setLoadingPage(true);
     setUploadError(null);
     try {
-      const meta = await fetchPdfMeta(pdfPath, nextRotation);
+      const meta = await fetchPdfMeta(pdfPath, nextRotation, flip);
       setRotation(nextRotation);
       setPdfMeta(meta);
       setPageImages(new Map());
       setSelectedBoxId(null);
       try {
-        setBoxes(loadStoredBoxes(pdfPath, nextRotation));
+        setBoxes(loadStoredBoxes(pdfPath, nextRotation, flip));
+      } catch {
+        setBoxes([]);
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "PDF 메타 조회 실패");
+    } finally {
+      setLoadingPage(false);
+    }
+  }
+
+  async function handleFlipToggle() {
+    if (!pdfPath) return;
+    const nextFlip: PdfFlip = !flip;
+
+    setLoadingPage(true);
+    setUploadError(null);
+    try {
+      const meta = await fetchPdfMeta(pdfPath, rotation, nextFlip);
+      setFlip(nextFlip);
+      setPdfMeta(meta);
+      setPageImages(new Map());
+      setSelectedBoxId(null);
+      try {
+        setBoxes(loadStoredBoxes(pdfPath, rotation, nextFlip));
       } catch {
         setBoxes([]);
       }
@@ -321,8 +372,11 @@ export function CropperWorkspace({
 
   function handleClearStorage() {
     if (!pdfPath) return;
-    localStorage.removeItem(lsKey(pdfPath, rotation));
-    if (rotation === 0) localStorage.removeItem(legacyLsKey(pdfPath));
+    localStorage.removeItem(lsKey(pdfPath, rotation, flip));
+    // Also clear rotation-only fallback key when flip=false
+    if (!flip) localStorage.removeItem(rotationOnlyLsKey(pdfPath, rotation));
+    // Also clear legacy key when rotation=0 and flip=false
+    if (rotation === 0 && !flip) localStorage.removeItem(legacyLsKey(pdfPath));
     setBoxes([]);
     setSelectedBoxId(null);
   }
@@ -387,7 +441,7 @@ export function CropperWorkspace({
       const numbered = autoNumber(result);
       setBoxes(numbered);
       setSelectedBoxId(null);
-      if (pdfPath) saveToLS(pdfPath, rotation, numbered);
+      if (pdfPath) saveToLS(pdfPath, rotation, flip, numbered);
     } catch (err) {
       setAutoCropError(err instanceof Error ? err.message : "자동 분할 실패");
     } finally {
@@ -438,11 +492,11 @@ export function CropperWorkspace({
    * kind별 1부터 zero-pad (총 kind별 count 기준).
    */
   function kindFilename(items: CropItem[]): Array<{ item: CropItem; fname: string }> {
-    const regularItems = items.filter((it) => (it.kind ?? "regular") !== "essay");
-    const essayItems   = items.filter((it) => it.kind === "essay");
+    const regularCount = items.filter((it) => (it.kind ?? "regular") !== "essay").length;
+    const essayCount   = items.filter((it) => it.kind === "essay").length;
 
-    const regularWidth = String(regularItems.length).length;
-    const essayWidth   = String(essayItems.length).length;
+    const regularWidth = String(regularCount).length;
+    const essayWidth   = String(essayCount).length;
 
     let rIdx = 0;
     let eIdx = 0;
@@ -554,6 +608,29 @@ export function CropperWorkspace({
             >
               ↻
             </button>
+          </div>
+        )}
+
+        {/* Flip */}
+        {pdfMeta && (
+          <div className="flex items-center gap-1 border-l pl-3">
+            <button
+              type="button"
+              onClick={() => void handleFlipToggle()}
+              className={`px-2 py-1 rounded border text-sm ${
+                flip
+                  ? "bg-primary text-primary-foreground hover:opacity-90"
+                  : "hover:bg-secondary"
+              }`}
+              aria-label="좌우 반전 토글"
+              aria-pressed={flip}
+              title={flip ? "좌우 반전 ON (클릭해서 해제)" : "좌우 반전 OFF (클릭해서 활성화)"}
+            >
+              ⇔
+            </button>
+            {flip && (
+              <span className="text-xs text-primary font-medium">반전</span>
+            )}
           </div>
         )}
 
@@ -720,7 +797,7 @@ export function CropperWorkspace({
                 onClick={() => {
                   setBoxes([]);
                   setSelectedBoxId(null);
-                  if (pdfPath) saveToLS(pdfPath, rotation, []);
+                  if (pdfPath) saveToLS(pdfPath, rotation, flip, []);
                 }}
                 disabled={boxes.length === 0}
                 className="w-full px-2 py-1 rounded border text-xs hover:bg-secondary disabled:opacity-40"
