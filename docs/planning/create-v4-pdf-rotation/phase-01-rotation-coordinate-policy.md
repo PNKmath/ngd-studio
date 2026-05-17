@@ -80,4 +80,4 @@ npx vitest run lib/cropper/__tests__/coords.test.ts --reporter=basic
 없음
 
 #### Commit
-5280e99
+b4c6cef

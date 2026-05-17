@@ -13,7 +13,7 @@ created: 2026-05-17
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-rotation-coordinate-policy.md](./phase-01-rotation-coordinate-policy.md) | 5 | 5 | 100% | completed | 5280e99 |
+| 1 | [phase-01-rotation-coordinate-policy.md](./phase-01-rotation-coordinate-policy.md) | 5 | 5 | 100% | completed | b4c6cef |
 | 2 | [phase-02-preview-meta-api-rotation.md](./phase-02-preview-meta-api-rotation.md) | 6 | 0 | 0% | pending | - |
 | 3 | [phase-03-cropper-rotation-ui.md](./phase-03-cropper-rotation-ui.md) | 6 | 0 | 0% | pending | - |
 | 4 | [phase-04-auto-crop-rotation.md](./phase-04-auto-crop-rotation.md) | 5 | 0 | 0% | pending | - |
