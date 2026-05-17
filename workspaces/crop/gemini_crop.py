@@ -19,14 +19,29 @@ import sys
 import os
 import io
 import re
+import math
 
 DPI = 200
 
-def pdf_page_to_pil(page, dpi=DPI):
+def normalize_rotation(rotation):
+    """외부 입력 회전값을 0/90/180/270으로 정규화."""
+    return (math.floor(rotation / 90 + 0.5) * 90) % 360
+
+
+def apply_rotation(img, rotation):
+    """PIL 이미지를 preview API와 같은 전체 페이지 회전 기준으로 변환."""
+    normalized = normalize_rotation(rotation)
+    if normalized == 0:
+        return img
+    return img.rotate(normalized, expand=True)
+
+
+def pdf_page_to_pil(page, dpi=DPI, rotation=0):
     """PyMuPDF 페이지를 PIL Image로 변환."""
     mat = fitz.Matrix(dpi / 72, dpi / 72)
     pix = page.get_pixmap(matrix=mat)
-    return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    return apply_rotation(img, rotation)
 
 
 def pil_to_bytes(img, fmt="PNG"):
@@ -172,10 +187,17 @@ def main():
         action="store_true",
         help="좌표 JSON만 stdout 출력. 디스크 쓰기 없음.",
     )
+    parser.add_argument(
+        "--rotation",
+        type=float,
+        default=0,
+        help="PDF 전체 페이지 회전값. 0/90/180/270으로 정규화됨.",
+    )
     args = parser.parse_args()
 
     pdf_path = args.pdf_path
     json_only = args.json_only
+    rotation = normalize_rotation(args.rotation)
 
     if not json_only and not args.output_dir:
         parser.error("--json-only 없이 실행하려면 output_dir 인수가 필요합니다.")
@@ -188,6 +210,7 @@ def main():
         os.makedirs(args.output_dir, exist_ok=True)
         print(f"=== Gemini 기반 PDF 자동 크롭 ===")
         print(f"PDF: {os.path.basename(pdf_path)}")
+        print(f"회전: {rotation}도")
 
     # Step 1: PDF → 페이지 이미지
     doc = fitz.open(pdf_path)
@@ -197,7 +220,7 @@ def main():
 
     page_pils = []
     for i in range(total_pages):
-        pil_img = pdf_page_to_pil(doc[i])
+        pil_img = pdf_page_to_pil(doc[i], rotation=rotation)
         page_pils.append(pil_img)
         if not json_only:
             print(f"  Page {i+1}: {pil_img.width}x{pil_img.height}px")
@@ -236,6 +259,7 @@ def main():
         output = {
             "pdf": os.path.basename(pdf_path),
             "totalPages": total_pages,
+            "rotation": rotation,
             "pages": pages_out,
         }
         print(json.dumps(output, ensure_ascii=False))
@@ -290,6 +314,7 @@ def main():
     crop_result = {
         "pdf": os.path.basename(pdf_path),
         "total_pages": total_pages,
+        "rotation": rotation,
         "problem_pages": problem_pages,
         "answer_pages": answer_pages,
         "questions": saved,

@@ -343,7 +343,7 @@ export function CropperWorkspace({
       const res = await fetch("/api/auto-crop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pdfPath }),
+        body: JSON.stringify({ pdfPath, rotation }),
       });
 
       if (!res.ok) {

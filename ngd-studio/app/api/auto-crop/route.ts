@@ -3,6 +3,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
 import { readRuntimeEnv } from "@/lib/server/runtimeEnv";
+import { normalizePdfRotation } from "@/lib/cropper/coords";
 
 export const maxDuration = 180;
 
@@ -12,7 +13,7 @@ const BASE_DIR = path.resolve(process.cwd(), "..");
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { pdfPath } = body;
+    const { pdfPath, rotation: rawRotation = 0 } = body;
 
     if (!pdfPath || typeof pdfPath !== "string") {
       return NextResponse.json(
@@ -21,6 +22,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const rotationValue = Number(rawRotation);
+    if (!Number.isFinite(rotationValue)) {
+      return NextResponse.json(
+        { error: "rotation must be a number" },
+        { status: 400 },
+      );
+    }
+    const rotation = normalizePdfRotation(rotationValue);
     const fullPath = path.join(BASE_DIR, pdfPath);
     const scriptPath = path.join(BASE_DIR, "workspaces", "crop", "gemini_crop.py");
 
@@ -28,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     const { stdout, stderr } = await execFileAsync(
       pythonCmd,
-      [scriptPath, fullPath, "--json-only"],
+      [scriptPath, fullPath, "--json-only", "--rotation", String(rotation)],
       {
         timeout: 180000,
         maxBuffer: 16 * 1024 * 1024,
