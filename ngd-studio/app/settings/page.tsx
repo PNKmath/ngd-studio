@@ -75,7 +75,7 @@ const apiKeyFields = [
   {
     key: "DEEPSEEK_MODEL",
     label: "DeepSeek Model",
-    placeholder: "deepseek-v4",
+    placeholder: "deepseek-v4-pro",
   },
 ] as const;
 

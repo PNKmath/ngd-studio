@@ -81,7 +81,7 @@ async function* runDeepSeek(prompt: string, options: ProviderRunOptions | undefi
 
   const apiKey = getRuntimeEnvValue("DEEPSEEK_API_KEY");
   const baseUrl = getRuntimeEnvValue("DEEPSEEK_API_BASE_URL") || "https://api.deepseek.com";
-  const model = getRuntimeEnvValue("DEEPSEEK_MODEL") || "deepseek-v4";
+  const model = getRuntimeEnvValue("DEEPSEEK_MODEL") || "deepseek-v4-pro";
   if (!apiKey) {
     yield resultEvent("error", "DEEPSEEK_API_KEY is not configured.");
     close(1);

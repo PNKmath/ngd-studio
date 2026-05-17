@@ -15,7 +15,7 @@ export type RuntimeEnvMap = Partial<Record<RuntimeEnvKey, string>>;
 
 const DEFAULT_RUNTIME_ENV: RuntimeEnvMap = {
   DEEPSEEK_API_BASE_URL: "https://api.deepseek.com",
-  DEEPSEEK_MODEL: "deepseek-v4",
+  DEEPSEEK_MODEL: "deepseek-v4-pro",
 };
 
 export function readRuntimeEnv(): RuntimeEnvMap {
@@ -67,6 +67,7 @@ function pickProcessEnv(): RuntimeEnvMap {
 }
 
 function readRuntimeEnvFile(): string {
+  if (process.env.NGD_STUDIO_DISABLE_RUNTIME_ENV === "1") return "";
   try {
     return readFileSync(RUNTIME_ENV_PATH, "utf8");
   } catch {

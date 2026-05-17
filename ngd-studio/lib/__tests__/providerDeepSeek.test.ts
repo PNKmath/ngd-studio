@@ -26,7 +26,9 @@ describe("DeepSeek V4 provider", () => {
 
   it("returns a clear error when env is missing", async () => {
     const previous = process.env.DEEPSEEK_API_KEY;
+    const previousDisableRuntimeEnv = process.env.NGD_STUDIO_DISABLE_RUNTIME_ENV;
     delete process.env.DEEPSEEK_API_KEY;
+    process.env.NGD_STUDIO_DISABLE_RUNTIME_ENV = "1";
     const result = deepseekV4Provider.run("check this", { stageKey: "review.reviewer" });
     const events = await collectEvents(result);
 
@@ -40,6 +42,11 @@ describe("DeepSeek V4 provider", () => {
       delete process.env.DEEPSEEK_API_KEY;
     } else {
       process.env.DEEPSEEK_API_KEY = previous;
+    }
+    if (previousDisableRuntimeEnv === undefined) {
+      delete process.env.NGD_STUDIO_DISABLE_RUNTIME_ENV;
+    } else {
+      process.env.NGD_STUDIO_DISABLE_RUNTIME_ENV = previousDisableRuntimeEnv;
     }
   });
 
