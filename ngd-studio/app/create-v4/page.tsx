@@ -566,14 +566,20 @@ export default function CreateV4Page() {
 
             {isPaused && (
               <div className="grid grid-cols-2 gap-2">
-                <Button onClick={resumeOrRetry}>재개 ({inferResumeStage(stages)}부터)</Button>
+                <Button onClick={resumeOrRetry} className="flex flex-col h-auto py-2 leading-tight">
+                  <span>재개</span>
+                  <span className="text-xs opacity-70">{inferResumeStage(stages)}부터</span>
+                </Button>
                 <Button onClick={reset} variant="outline">초기화</Button>
               </div>
             )}
 
             {isFailed && !isRunning && (
               <div className="grid grid-cols-2 gap-2">
-                <Button onClick={resumeOrRetry} variant="default">재시도 ({inferResumeStage(stages)}부터)</Button>
+                <Button onClick={resumeOrRetry} variant="default" className="flex flex-col h-auto py-2 leading-tight">
+                  <span>재시도</span>
+                  <span className="text-xs opacity-70">{inferResumeStage(stages)}부터</span>
+                </Button>
                 <Button onClick={reset} variant="outline">새 작업</Button>
               </div>
             )}
