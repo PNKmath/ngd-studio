@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: store/UI canonical name 정렬 + cleaned/review_extract 제거
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - ngd-studio/lib/store.ts
@@ -86,12 +86,12 @@ function inferResumeStage(stages: { name: string; status: string }[]): string {
 
 ## 체크리스트
 
-- [ ] `lib/store.ts`: `createStages` 6개로 축소 (cleaned/review_extract 제거)
-- [ ] `lib/store.ts`: `STAGE_ORDER`와 `buildResumeStages` 6개 기준 갱신
-- [ ] `app/create-v4/page.tsx`: `inferResumeStage`의 order 배열 6개로 축소
-- [ ] `components/log/LogStream.tsx`: `shortenStage` helper 제거, `[{log.stage}]` 직접 표시 (truncate는 유지)
-- [ ] `lib/__tests__/store.test.ts`: stage count/이름 변경에 맞춰 갱신, 회귀 없음
-- [ ] `cd ngd-studio && npx tsc --noEmit && npx vitest run lib/__tests__/store.test.ts --reporter=basic` pass
+- [x] `lib/store.ts`: `createStages` 6개로 축소 (cleaned/review_extract 제거)
+- [x] `lib/store.ts`: `STAGE_ORDER`와 `buildResumeStages` 6개 기준 갱신
+- [x] `app/create-v4/page.tsx`: `inferResumeStage`의 order 배열 6개로 축소
+- [x] `components/log/LogStream.tsx`: `shortenStage` helper 제거, `[{log.stage}]` 직접 표시 (truncate는 유지)
+- [x] `lib/__tests__/store.test.ts`: stage count/이름 변경에 맞춰 갱신, 회귀 없음
+- [x] `cd ngd-studio && npx tsc --noEmit && npx vitest run lib/__tests__/store.test.ts --reporter=basic` pass
 
 ## 영향 범위
 
@@ -107,3 +107,29 @@ cd ngd-studio
 npx tsc --noEmit
 npx vitest run lib/__tests__/store.test.ts --reporter=basic
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-17 23:47 KST) — completed
+**상태**: completed
+**소요 시간**: 약 5분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`createStages`에서 `cleaned`/`review_extract` 2개를 제거해 6개 canonical 배열로 축소했다. `STAGE_ORDER`를 `PIPELINE_STAGES` 참조로 교체하고 `buildResumeStages`의 기본 인덱스를 0으로 수정했다. `inferResumeStage`에서 더 이상 존재하지 않는 두 stage의 매핑 분기를 제거했고, `LogStream.tsx`에서 `shortenStage` helper를 삭제해 `log.stage`를 직접 표시한다. 테스트 8개 전부 pass.
+
+#### 변경 파일
+- `ngd-studio/lib/store.ts` (수정, +3/-9줄): pipelineStages import 추가, createStages 6개로 축소, STAGE_ORDER 타입 추가 및 초기값 변경, buildResumeStages resumeIdx default 0으로 변경
+- `ngd-studio/app/create-v4/page.tsx` (수정, +2/-7줄): inferResumeStage 6개 배열 + 매핑 분기 제거
+- `ngd-studio/components/log/LogStream.tsx` (수정, +1/-5줄): shortenStage 제거, log.stage 직접 표시
+- `ngd-studio/lib/__tests__/store.test.ts` (수정, +14/-17줄): 8개→6개 stage 기대값 갱신, cleaned/review_extract 관련 단언 제거
+
+#### 검증 결과
+- [x] tsc --noEmit: `npx tsc --noEmit` → 오류 없음 (no output)
+- [x] vitest store.test.ts: `8 tests passed` → pass
+
+#### 추가 발견사항
+없음
+
+#### 질문 / 결정 사항
+없음

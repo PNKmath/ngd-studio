@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { PIPELINE_STAGES, type PipelineStageName } from "@/lib/pipelineStages";
 import type { PipelineStage } from "@/components/pipeline/PipelineView";
 import type { LogEntry } from "@/components/log/LogStream";
 import type { ReviewItem } from "@/lib/reviewParser";
@@ -54,25 +55,23 @@ export interface JobState {
 }
 
 const createStages: PipelineStage[] = [
-  { name: "cleaned", label: "이미지 정리", status: "pending" },
   { name: "extractor", label: "문제 추출", status: "pending" },
-  { name: "review_extract", label: "추출 편집", status: "pending" },
-  { name: "solver", label: "해설 생성", status: "pending" },
-  { name: "verifier", label: "해설 검증", status: "pending" },
-  { name: "figure", label: "그림 처리", status: "pending" },
-  { name: "builder", label: "HWPX 조립", status: "pending" },
-  { name: "checker", label: "품질 검수", status: "pending" },
+  { name: "solver",    label: "해설 생성", status: "pending" },
+  { name: "verifier",  label: "해설 검증", status: "pending" },
+  { name: "figure",    label: "그림 처리", status: "pending" },
+  { name: "builder",   label: "HWPX 조립", status: "pending" },
+  { name: "checker",   label: "품질 검수", status: "pending" },
 ];
 
-const STAGE_ORDER = ["cleaned", "extractor", "review_extract", "solver", "verifier", "figure", "builder", "checker"];
+const STAGE_ORDER: PipelineStageName[] = [...PIPELINE_STAGES];
 
 function buildResumeStages(resumeFrom?: string): PipelineStage[] {
   // "confirm" means figure is done, proceed to builder
   const effectiveFrom = resumeFrom === "confirm" ? "builder" : resumeFrom;
-  const resumeIdx = effectiveFrom ? STAGE_ORDER.indexOf(effectiveFrom) : 1;
+  const resumeIdx = effectiveFrom ? STAGE_ORDER.indexOf(effectiveFrom as PipelineStageName) : 0;
   return createStages.map((s) => ({
     ...s,
-    status: (resumeIdx > 0 && STAGE_ORDER.indexOf(s.name) < resumeIdx) ? "done" as const : "pending" as const,
+    status: (resumeIdx > 0 && STAGE_ORDER.indexOf(s.name as PipelineStageName) < resumeIdx) ? "done" as const : "pending" as const,
   }));
 }
 

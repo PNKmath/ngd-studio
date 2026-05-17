@@ -62,17 +62,12 @@ function loadStoredMeta(): MetaValue {
 }
 
 // 다음 재개 stage 추론: stages 배열에서 done이 아닌 첫 단계.
-// "cleaned"→"extractor", "review_extract"→"solver"로 매핑 (사용자 편집 단계는 백엔드 resume 대상 아님).
 function inferResumeStage(stages: { name: string; status: string }[]): string {
-  const order = ["cleaned", "extractor", "review_extract", "solver", "verifier", "figure", "builder", "checker"];
+  const order = ["extractor", "solver", "verifier", "figure", "builder", "checker"];
   for (const name of order) {
     const stage = stages.find((s) => s.name === name);
     if (!stage) continue;
-    if (stage.status !== "done") {
-      if (name === "cleaned") return "extractor";
-      if (name === "review_extract") return "solver";
-      return name;
-    }
+    if (stage.status !== "done") return name;
   }
   return "checker";
 }

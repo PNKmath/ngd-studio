@@ -6,14 +6,12 @@ beforeEach(() => {
 });
 
 describe("setMode('create')", () => {
-  it("sets 8 stages in V3 (standard) order", () => {
+  it("sets 6 stages in canonical order", () => {
     useJobStore.getState().setMode("create");
     const stages = useJobStore.getState().stages;
-    expect(stages).toHaveLength(8);
+    expect(stages).toHaveLength(6);
     expect(stages.map((s) => s.name)).toEqual([
-      "cleaned",
       "extractor",
-      "review_extract",
       "solver",
       "verifier",
       "figure",
@@ -30,11 +28,10 @@ describe("setMode('create')", () => {
 });
 
 describe("setMode('resume')", () => {
-  it("resumeFrom='extractor': cleaned is done, extractor+ are pending", () => {
+  it("resumeFrom='extractor': all stages are pending (extractor is first)", () => {
     useJobStore.getState().setMode("resume", "extractor");
     const stages = useJobStore.getState().stages;
     const byName = Object.fromEntries(stages.map((s) => [s.name, s.status]));
-    expect(byName["cleaned"]).toBe("done");
     expect(byName["extractor"]).toBe("pending");
     expect(byName["solver"]).toBe("pending");
     expect(byName["builder"]).toBe("pending");
@@ -44,9 +41,7 @@ describe("setMode('resume')", () => {
     useJobStore.getState().setMode("resume", "builder");
     const stages = useJobStore.getState().stages;
     const byName = Object.fromEntries(stages.map((s) => [s.name, s.status]));
-    expect(byName["cleaned"]).toBe("done");
     expect(byName["extractor"]).toBe("done");
-    expect(byName["review_extract"]).toBe("done");
     expect(byName["solver"]).toBe("done");
     expect(byName["verifier"]).toBe("done");
     expect(byName["figure"]).toBe("done");
@@ -62,9 +57,9 @@ describe("setMode('resume')", () => {
     expect(byName["builder"]).toBe("pending");
   });
 
-  it("still returns 8 stages", () => {
+  it("still returns 6 stages", () => {
     useJobStore.getState().setMode("resume", "solver");
-    expect(useJobStore.getState().stages).toHaveLength(8);
+    expect(useJobStore.getState().stages).toHaveLength(6);
   });
 });
 
