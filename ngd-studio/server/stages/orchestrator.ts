@@ -503,6 +503,8 @@ export async function runStageOrchestrator(
     // processQuestion() handles per-question skip logic via disk-scan.
     const pipelineQuestions = (runExtractor || runSolver || runVerifier) ? questionImages : [];
 
+    const failedQuestionNumbers = new Set<number>();
+
     if (pipelineQuestions.length > 0) {
       if (checkAborted()) return cancelled(providerTelemetry);
 
@@ -537,7 +539,8 @@ export async function runStageOrchestrator(
 
       if (failedQuestions.length > 0) {
         const failedNums = failedQuestions.map((r) => `Q${r.number}(${r.failedAt ?? "?"})`).join(", ");
-        send(logEvent("system", `일부 문제 처리 실패: [${failedNums}] — 계속 진행합니다.`, "warn"));
+        send(logEvent("system", `일부 문제 처리 실패: [${failedNums}] — 성공한 문제만으로 exam_data.json을 조립합니다.`, "warn"));
+        for (const r of failedQuestions) failedQuestionNumbers.add(r.number);
       }
 
       // Emit batch extraction_review for backward-compatibility when extractor ran.
@@ -550,9 +553,18 @@ export async function runStageOrchestrator(
     // ── Build exam_data.json ───────────────────
     if (!checkAborted()) {
       await persistTelemetry(input, providerTelemetry, "running");
+      const successfulQuestionNumbers = questionNumbers.filter((n) => !failedQuestionNumbers.has(n));
+      if (successfulQuestionNumbers.length === 0) {
+        send(logEvent("system", "성공한 문제가 없어 exam_data.json을 생성할 수 없습니다.", "error"));
+        return failed(providerTelemetry, "모든 문제 처리 실패");
+      }
       try {
-        await buildExamDataJson({ cache, meta, questionNumbers });
-        send(logEvent("system", "exam_data.json 생성 완료"));
+        await buildExamDataJson({ cache, meta, questionNumbers: successfulQuestionNumbers });
+        const skippedCount = questionNumbers.length - successfulQuestionNumbers.length;
+        const summary = skippedCount > 0
+          ? `exam_data.json 생성 완료 (${successfulQuestionNumbers.length}/${questionNumbers.length}, ${skippedCount}개 누락)`
+          : "exam_data.json 생성 완료";
+        send(logEvent("system", summary));
       } catch (err) {
         send(logEvent("system", `exam_data.json 생성 실패: ${err instanceof Error ? err.message : String(err)}`, "error"));
         return failed(providerTelemetry, "exam_data.json 생성 실패");

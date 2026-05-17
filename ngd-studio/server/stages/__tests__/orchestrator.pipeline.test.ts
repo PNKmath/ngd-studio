@@ -439,10 +439,9 @@ describe("orchestrator per-question pipeline", () => {
       cache,
     });
 
-    // Pipeline processes Q1/Q3 but buildExamDataJson throws for missing Q2 data.
-    // The orchestrator always returns "failed" because exam_data.json can't be assembled
-    // for all 3 question numbers when Q2 never produced cache files.
-    expect(result.status).toBe("failed");
+    // Pipeline processes Q1/Q3; orchestrator filters Q2 from buildExamDataJson
+    // input so the surviving 2 questions form a usable exam_data.json (partial-skip).
+    expect(result.status).toBe("done");
 
     // ── Extractor stage should be "done" (2 of 3 succeeded) ──────────────
     const extractorStageEvents = events.filter(
