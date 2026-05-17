@@ -33,14 +33,29 @@ export async function POST(
 
     const job = JSON.parse(await readFile(jobFile, "utf-8"));
 
-    // Build followup prompt with context
-    const prompt = [
+    // Build followup prompt with context.
+    // resume/v3cache 흐름은 inputFiles가 비어 있을 수 있으므로 빈 경로는 노출하지 않고
+    // 작업 폴더 힌트로 대체한다. resume 명령류는 스킬을 명시 호출해 일반 응답 분기를 막는다.
+    const isResumeLike = /^\s*resume\b/.test(instruction.trim());
+    const nonEmptyInputs = (job.inputFiles ?? []).filter(
+      (f: unknown): f is string => typeof f === "string" && f.trim().length > 0
+    );
+
+    const promptLines: string[] = [
       `이전 작업(${job.mode === "create" ? "시험지 제작" : "오검"})의 결과를 수정해줘.`,
-      `입력 파일: ${job.inputFiles?.join(", ") ?? "알 수 없음"}`,
-      ``,
-      `추가 지시:`,
-      instruction,
-    ].join("\n");
+    ];
+    if (nonEmptyInputs.length > 0) {
+      promptLines.push(`입력 파일: ${nonEmptyInputs.join(", ")}`);
+    } else {
+      promptLines.push(
+        `작업 폴더: 현재 cwd의 \`inputs/시험지 제작/.v3cache/\` 캐시와 \`inputs/시험지 제작/question_images/\`를 사용해서 어떤 작업인지 자동 판별해.`
+      );
+    }
+    promptLines.push(``, `추가 지시:`, instruction);
+    if (isResumeLike) {
+      promptLines.push(``, `Skill 도구로 "ngd-exam-create" 스킬을 호출해서 진행해.`);
+    }
+    const prompt = promptLines.join("\n");
 
     // Update job status
     job.status = "running";
