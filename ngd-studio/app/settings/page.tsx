@@ -187,7 +187,7 @@ const apiKeyFields = [
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("engine");
-  const [settings, setSettings] = useState<AISettings>(() => readAISettings());
+  const [settings, setSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [envStatus, setEnvStatus] = useState<Record<string, EnvKeyStatus>>({});
   const [cliStatus, setCliStatus] = useState<StatusResponse>({});
@@ -227,6 +227,7 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
+    setSettings(readAISettings());
     void loadEnvSettings();
     void loadCliStatus();
   }, [loadEnvSettings, loadCliStatus]);
