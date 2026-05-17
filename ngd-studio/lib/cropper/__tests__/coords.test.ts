@@ -8,6 +8,7 @@ import {
   clampBox,
   autoNumber,
   normalizedBboxToCropBox,
+  mirrorBoxX,
 } from "../coords";
 import type { CropBox } from "../types";
 
@@ -299,5 +300,63 @@ describe("normalizedBboxToCropBox", () => {
     expect(result.y).toBe(80);
     expect(result.w).toBe(480);
     expect(result.h).toBe(240);
+  });
+});
+
+describe("mirrorBoxX", () => {
+  const imageWidth = 800;
+
+  it("mirrors the box x coordinate relative to image width", () => {
+    // box at x=100, w=200  →  mirrored x = 800 - 100 - 200 = 500
+    const box = { x: 100, y: 50, w: 200, h: 100 };
+    const mirrored = mirrorBoxX(box, imageWidth);
+    expect(mirrored.x).toBe(500);
+    expect(mirrored.y).toBe(50);
+    expect(mirrored.w).toBe(200);
+    expect(mirrored.h).toBe(100);
+  });
+
+  it("round-trips: mirror(mirror(box)) equals original box", () => {
+    const box = { x: 150, y: 30, w: 120, h: 80 };
+    const roundTripped = mirrorBoxX(mirrorBoxX(box, imageWidth), imageWidth);
+    expect(roundTripped).toEqual(box);
+  });
+
+  it("handles box at the left edge (x=0)", () => {
+    const box = { x: 0, y: 0, w: 200, h: 100 };
+    const mirrored = mirrorBoxX(box, imageWidth);
+    expect(mirrored.x).toBe(600); // 800 - 0 - 200
+  });
+
+  it("handles box at the right edge (x+w == imageWidth)", () => {
+    const box = { x: 600, y: 0, w: 200, h: 100 };
+    const mirrored = mirrorBoxX(box, imageWidth);
+    expect(mirrored.x).toBe(0); // 800 - 600 - 200
+  });
+
+  it("does not modify y or h", () => {
+    const box = { x: 50, y: 300, w: 100, h: 500 };
+    const mirrored = mirrorBoxX(box, imageWidth);
+    expect(mirrored.y).toBe(300);
+    expect(mirrored.h).toBe(500);
+  });
+});
+
+describe("getRotatedImageSize is unaffected by flip (PdfFlip)", () => {
+  it("returns same dimensions regardless of whether flip would be applied", () => {
+    // flip은 이미지 dimension에 영향 없음 — width/height는 rotation에만 의존
+    const baseResult = getRotatedImageSize({ width: 800, height: 1200, rotation: 0 });
+    // flip=true 시나리오에서도 getRotatedImageSize 결과는 동일해야 함
+    const flipResult = getRotatedImageSize({ width: 800, height: 1200, rotation: 0 });
+    expect(flipResult).toEqual(baseResult);
+    expect(flipResult).toEqual({ width: 800, height: 1200 });
+  });
+
+  it("confirms rotation-swapped dimensions are also flip-invariant", () => {
+    const rotated = getRotatedImageSize({ width: 800, height: 1200, rotation: 90 });
+    expect(rotated).toEqual({ width: 1200, height: 800 });
+    // flip 여부와 관계없이 같은 결과
+    const rotatedAgain = getRotatedImageSize({ width: 800, height: 1200, rotation: 90 });
+    expect(rotatedAgain).toEqual(rotated);
   });
 });

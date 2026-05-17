@@ -1,6 +1,13 @@
 /** 박스 좌표는 PDF 페이지가 렌더된 이미지의 픽셀 좌표계 (dpi=200 기준). */
 export type PdfRotation = 0 | 90 | 180 | 270;
 
+/**
+ * 렌더 이미지에 적용된 수평 반전 상태.
+ * true = 좌우 반전(horizontal flip) 적용.
+ * 추후 vertical flip 확장 시 { h: boolean; v: boolean } 로 변경 가능.
+ */
+export type PdfFlip = boolean;
+
 export interface CropBox {
   id: string;          // uuid (crypto.randomUUID())
   page: number;        // 0-indexed

@@ -92,6 +92,26 @@ export function autoNumber(boxes: CropBox[]): CropBox[] {
 }
 
 /**
+ * 박스의 x 좌표를 이미지 폭을 기준으로 수평 미러링한다.
+ *
+ * 합성 순서: rotation 먼저 → flip.
+ * `imageWidth`에는 `getRotatedImageSize` 결과의 width를 그대로 넘긴다.
+ *
+ * round-trip 보장: mirrorBoxX(mirrorBoxX(box, w), w) deepEquals box
+ */
+export function mirrorBoxX(
+  box: { x: number; y: number; w: number; h: number },
+  imageWidth: number
+): { x: number; y: number; w: number; h: number } {
+  return {
+    x: imageWidth - box.x - box.w,
+    y: box.y,
+    w: box.w,
+    h: box.h,
+  };
+}
+
+/**
  * Gemini Vision의 1000×1000 정규화 bbox를 이미지 픽셀 좌표계 CropBox로 변환.
  * bbox 형식: [y_min, x_min, y_max, x_max] (0-1000, Gemini native 좌표계).
  */
