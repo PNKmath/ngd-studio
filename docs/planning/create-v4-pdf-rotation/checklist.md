@@ -17,8 +17,8 @@ created: 2026-05-17
 | 2 | [phase-02-preview-meta-api-rotation.md](./phase-02-preview-meta-api-rotation.md) | 6 | 6 | 100% | completed | 2e0b15b |
 | 3 | [phase-03-cropper-rotation-ui.md](./phase-03-cropper-rotation-ui.md) | 6 | 6 | 100% | completed | e17fb94 |
 | 4 | [phase-04-auto-crop-rotation.md](./phase-04-auto-crop-rotation.md) | 5 | 5 | 100% | completed | 3feb073 |
-| 5 | [phase-05-extraction-e2e-verification.md](./phase-05-extraction-e2e-verification.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **27** | **22** | **81%** | | |
+| 5 | [phase-05-extraction-e2e-verification.md](./phase-05-extraction-e2e-verification.md) | 5 | 5 | 100% | completed | - |
+| **Total** | | **27** | **27** | **100%** | | |
 
 ## Phase 의존성
 
@@ -47,11 +47,13 @@ Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 5
 
 ### 공통 검증
 
-- [ ] `cd ngd-studio && pnpm test` 또는 관련 focused Vitest 통과
-- [ ] `cd ngd-studio && pnpm build` 통과
+- [x] `cd ngd-studio && pnpm test` 또는 관련 focused Vitest 통과
+- [x] `cd ngd-studio && pnpm build` 통과
 - [ ] `/create-v4`에서 180도 회전 후 수동 박스 추출 결과가 화면과 일치
 - [ ] `/create-v4`에서 회전 후 자동 분할 결과가 화면과 일치
 - [ ] `/pdf-cropper` ZIP 다운로드 회귀 없음
+
+수동 검증 항목 3건은 이 세션에서 실제 브라우저/PDF/Gemini 환경을 조작하지 않아 미확인 상태로 남긴다.
 
 ## 관련 문서
 

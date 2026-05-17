@@ -173,8 +173,8 @@ export function CropperWorkspace({
   }
 
   const fetchPage = useCallback(
-    async (pageIndex: number, path: string, meta: PdfMeta) => {
-      if (pageIndex < 0 || pageIndex >= meta.pages) return;
+    async (pageIndex: number, path: string, meta: PdfMeta): Promise<string | null> => {
+      if (pageIndex < 0 || pageIndex >= meta.pages) return null;
       setLoadingPage(true);
       try {
         const res = await fetch("/api/pdf-preview", {
@@ -190,8 +190,9 @@ export function CropperWorkspace({
           next.set(pageIndex, url);
           return next;
         });
+        return url;
       } catch {
-        // silently fail
+        return null;
       } finally {
         setLoadingPage(false);
       }
@@ -403,10 +404,12 @@ export function CropperWorkspace({
   }, [pdfPath, pdfMeta]);
 
   async function cropAllBoxesToBlobs(): Promise<CropItem[]> {
+    if (!pdfPath || !pdfMeta) return [];
+
     const items: CropItem[] = [];
     for (const box of boxes) {
-      const blobUrl = pageImages.get(box.page);
-      if (!blobUrl) continue; // page not loaded yet — skip
+      const blobUrl = pageImages.get(box.page) ?? await fetchPage(box.page, pdfPath, pdfMeta);
+      if (!blobUrl) continue;
 
       const img = await loadImage(blobUrl);
       const canvas = document.createElement("canvas");
