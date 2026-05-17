@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import { StageCard, type StageStatus } from "./StageCard";
 
 export interface PipelineStage {
@@ -28,11 +29,55 @@ const defaultReviewStages: PipelineStage[] = [
 interface PipelineViewProps {
   mode: "create" | "review";
   stages?: PipelineStage[];
+  /** "vertical" (기본) — timeline 형태 / "horizontal" — 가로 dot+label 형태 */
+  orientation?: "vertical" | "horizontal";
 }
 
-export function PipelineView({ mode, stages }: PipelineViewProps) {
+const statusDotColor: Record<StageStatus, string> = {
+  pending: "bg-muted-foreground/30",
+  running: "bg-[var(--color-status-info)] animate-pulse",
+  done: "bg-[var(--color-status-success)]",
+  failed: "bg-[var(--color-status-error)]",
+};
+
+function HorizontalStage({ stage, isLast }: { stage: PipelineStage; isLast: boolean }) {
+  return (
+    <div className="flex items-center gap-1 min-w-0">
+      <div className="flex flex-col items-center gap-1 shrink-0">
+        <span className={cn("w-3 h-3 rounded-full", statusDotColor[stage.status])} />
+        <span className={cn(
+          "text-[10px] whitespace-nowrap",
+          stage.status === "running" ? "text-foreground font-medium"
+            : stage.status === "done" ? "text-foreground"
+            : "text-muted-foreground"
+        )}>{stage.label}</span>
+        {stage.status === "running" && stage.progress != null && (
+          <span className="text-[9px] text-muted-foreground">{stage.progress}%</span>
+        )}
+      </div>
+      {!isLast && (
+        <div className={cn(
+          "h-px w-6 mb-4 shrink-0",
+          stage.status === "done" ? "bg-border" : "bg-border/40"
+        )} />
+      )}
+    </div>
+  );
+}
+
+export function PipelineView({ mode, stages, orientation = "vertical" }: PipelineViewProps) {
   const defaults = mode === "create" ? defaultCreateStages : defaultReviewStages;
   const displayStages = stages ?? defaults;
+
+  if (orientation === "horizontal") {
+    return (
+      <div className="flex items-start gap-0 overflow-x-auto py-1">
+        {displayStages.map((stage, i) => (
+          <HorizontalStage key={stage.name} stage={stage} isLast={i === displayStages.length - 1} />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">

@@ -9,7 +9,7 @@ import { useJobStore } from "@/lib/store";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PipelineView } from "@/components/pipeline/PipelineView";
-import { QuestionResultPanel } from "@/components/results/QuestionResultPanel";
+import { QuestionList, QuestionDetailView, QuestionPanelHeader } from "@/components/results/QuestionResultPanel";
 import { LogStream } from "@/components/log/LogStream";
 import { DownloadButton } from "@/components/shared/DownloadButton";
 import { FollowupChat } from "@/components/shared/FollowupChat";
@@ -483,88 +483,114 @@ export default function CreateV4Page() {
   // --- Running / Done 뷰 ---
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-72 shrink-0 border-r overflow-y-auto p-4 space-y-4">
-          {/* 시험 정보 요약 */}
-          {v3Meta && (
-            <Card className="p-4 space-y-2">
-              <h3 className="text-sm font-medium">시험 정보</h3>
-              <div className="text-xs space-y-1 text-muted-foreground">
-                {v3Meta.school && <div>{v3Meta.school}</div>}
-                <div>
-                  {v3Meta.grade && `${v3Meta.grade}학년 `}
-                  {v3Meta.semester} {v3Meta.examType}
-                </div>
-                {v3Meta.subject && <div>{v3Meta.subject}</div>}
-                {v3Meta.range && <div>{v3Meta.range}</div>}
-                {v3Meta.questionCount && <div>문제 {v3Meta.questionCount}개</div>}
+      {/* Top cards bar: 시험정보 / 상태제어 / Provider / 다운로드 */}
+      <div className="shrink-0 border-b p-3 grid grid-cols-1 md:grid-cols-4 gap-3">
+        {v3Meta && (
+          <Card className="p-3 space-y-1">
+            <h3 className="text-xs font-medium text-muted-foreground">시험 정보</h3>
+            <div className="text-xs space-y-0.5">
+              {v3Meta.school && <div className="font-medium">{v3Meta.school}</div>}
+              <div className="text-muted-foreground">
+                {v3Meta.grade && `${v3Meta.grade}학년 `}
+                {v3Meta.semester} {v3Meta.examType}
               </div>
-            </Card>
+              {v3Meta.subject && <div className="text-muted-foreground">{v3Meta.subject}</div>}
+              {v3Meta.range && <div className="text-muted-foreground truncate">{v3Meta.range}</div>}
+              {v3Meta.questionCount && <div className="text-muted-foreground">문제 {v3Meta.questionCount}개</div>}
+            </div>
+          </Card>
+        )}
+
+        <Card className="p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs">
+            <span className={`w-2 h-2 rounded-full ${
+              isRunning ? "bg-yellow-500 animate-pulse" :
+              isPaused ? "bg-blue-500" :
+              result?.status === "success" ? "bg-[var(--color-status-success)]" :
+              "bg-[var(--color-status-error)]"
+            }`} />
+            <span className="font-medium">
+              {isRunning ? "제작 진행 중..."
+                : isPaused ? "일시정지됨"
+                : result?.status === "success" ? "제작 완료"
+                : "제작 실패"}
+            </span>
+          </div>
+
+          {isRunning && (
+            <div className="grid grid-cols-2 gap-1.5">
+              <Button onClick={pauseJob} variant="outline" size="sm" className="h-7 text-xs">일시정지</Button>
+              <Button onClick={stopJob} variant="destructive" size="sm" className="h-7 text-xs">중단</Button>
+            </div>
           )}
 
-          {/* 상태 + 제어 */}
-          <Card className="p-4 space-y-3">
-            <h3 className="text-sm font-medium">상태 / 제어</h3>
-            <div className="flex items-center gap-2 text-sm">
-              <span className={`w-2 h-2 rounded-full ${
-                isRunning ? "bg-yellow-500 animate-pulse" :
-                isPaused ? "bg-blue-500" :
-                result?.status === "success" ? "bg-[var(--color-status-success)]" :
-                "bg-[var(--color-status-error)]"
-              }`} />
-              <span className="font-medium">
-                {isRunning ? "제작 진행 중..."
-                  : isPaused ? "일시정지됨"
-                  : result?.status === "success" ? "제작 완료"
-                  : "제작 실패"}
-              </span>
+          {isPaused && (
+            <div className="grid grid-cols-2 gap-1.5">
+              <Button onClick={resumeOrRetry} size="sm" className="h-auto py-1 leading-tight text-xs flex flex-col">
+                <span>재개</span>
+                <span className="text-[10px] opacity-70">이어서</span>
+              </Button>
+              <Button onClick={reset} variant="outline" size="sm" className="h-7 text-xs">초기화</Button>
             </div>
+          )}
 
-            {isRunning && (
-              <div className="grid grid-cols-2 gap-2">
-                <Button onClick={pauseJob} variant="outline">일시정지</Button>
-                <Button onClick={stopJob} variant="destructive">중단</Button>
-              </div>
-            )}
+          {isFailed && !isRunning && (
+            <div className="grid grid-cols-2 gap-1.5">
+              <Button onClick={resumeOrRetry} size="sm" className="h-auto py-1 leading-tight text-xs flex flex-col">
+                <span>재시도</span>
+                <span className="text-[10px] opacity-70">이어서</span>
+              </Button>
+              <Button onClick={reset} variant="outline" size="sm" className="h-7 text-xs">새 작업</Button>
+            </div>
+          )}
+        </Card>
 
-            {isPaused && (
-              <div className="grid grid-cols-2 gap-2">
-                <Button onClick={resumeOrRetry} className="flex flex-col h-auto py-2 leading-tight">
-                  <span>재개</span>
-                  <span className="text-xs opacity-70">이어서</span>
-                </Button>
-                <Button onClick={reset} variant="outline">초기화</Button>
-              </div>
-            )}
-
-            {isFailed && !isRunning && (
-              <div className="grid grid-cols-2 gap-2">
-                <Button onClick={resumeOrRetry} variant="default" className="flex flex-col h-auto py-2 leading-tight">
-                  <span>재시도</span>
-                  <span className="text-xs opacity-70">이어서</span>
-                </Button>
-                <Button onClick={reset} variant="outline">새 작업</Button>
-              </div>
-            )}
-
-            {isDone && jobId && (
-              <DownloadButton jobId={jobId} disabled={result?.status !== "success"} />
-            )}
-          </Card>
-
+        <Card className="p-3 flex items-center">
           <AIProviderBadge
             settings={aiSettings}
             deepSeekStages={deepSeekStages}
             deepSeekBlocksCreate={deepSeekBlocksCreate}
           />
+        </Card>
 
-          {/* 라이브 파이프라인 */}
-          <PipelineView mode="create" stages={stages.length > 0 ? stages : undefined} />
+        <Card className="p-3 flex items-center justify-center">
+          {isDone && jobId ? (
+            <DownloadButton jobId={jobId} disabled={result?.status !== "success"} />
+          ) : (
+            <span className="text-xs text-muted-foreground">완료 시 다운로드 가능</span>
+          )}
+        </Card>
+      </div>
+
+      {/* Middle row: master(번호) | detail(파이프라인 + 헤더 + 디테일) */}
+      <div className="flex flex-1 overflow-hidden">
+        <div className="w-40 shrink-0 border-r bg-muted/10 overflow-hidden">
+          <div className="px-3 py-2 border-b text-xs font-medium text-muted-foreground">
+            문제 목록
+          </div>
+          <div className="overflow-y-auto h-[calc(100%-2.25rem)]">
+            <QuestionList />
+          </div>
         </div>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* 파이프라인 (horizontal) */}
+          <div className="shrink-0 border-b px-4 py-2">
+            <PipelineView mode="create" stages={stages.length > 0 ? stages : undefined} orientation="horizontal" />
+          </div>
+          {/* 컨트롤 헤더 (추출편집/HWPX재조립/Figure confirm) */}
+          <div className="shrink-0 border-b px-4 py-2">
+            <QuestionPanelHeader />
+          </div>
+          {/* 문제 디테일 */}
+          <div className="flex-1 overflow-hidden">
+            <QuestionDetailView />
+          </div>
+        </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          <QuestionResultPanel />
-          <LogStream logs={logs} />
+      {/* Bottom: 로그 + Figure confirm + Build status + Followup */}
+      <div className="shrink-0 max-h-[40vh] overflow-y-auto border-t p-4 space-y-3 bg-muted/5">
+        <LogStream logs={logs} />
 
           {/* Figure confirm panel — figure_processor.py 백그라운드 완료 대기 */}
           {showFigureConfirm && (
@@ -656,7 +682,6 @@ export default function CreateV4Page() {
 
           {/* Followup chat */}
           {isDone && !showFigureConfirm && <FollowupChat disabled={isRunning} />}
-        </div>
       </div>
     </div>
   );

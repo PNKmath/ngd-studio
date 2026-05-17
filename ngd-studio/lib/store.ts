@@ -36,6 +36,8 @@ export interface JobState {
   questionResults: Record<number, QuestionResult>;
   v3Meta: V3Meta | null;
   extractionReviewActive: boolean;
+  /** master-detail UI에서 현재 선택된 문제 번호 */
+  selectedQuestionNumber: number | null;
 
   // Actions
   reset: () => void;
@@ -52,6 +54,7 @@ export interface JobState {
   updateQuestionResult: (number: number, phase: string, content: Record<string, unknown>) => void;
   setV3Meta: (meta: V3Meta) => void;
   setExtractionReviewActive: (active: boolean) => void;
+  setSelectedQuestionNumber: (n: number | null) => void;
 }
 
 const createStages: PipelineStage[] = [
@@ -96,6 +99,7 @@ export const useJobStore = create<JobState>((set) => ({
   questionResults: {},
   v3Meta: null,
   extractionReviewActive: false,
+  selectedQuestionNumber: null,
 
   reset: () =>
     set({
@@ -111,6 +115,7 @@ export const useJobStore = create<JobState>((set) => ({
       questionResults: {},
       v3Meta: null,
       extractionReviewActive: false,
+      selectedQuestionNumber: null,
     }),
 
   setJobId: (id) => set({ jobId: id }),
@@ -148,6 +153,7 @@ export const useJobStore = create<JobState>((set) => ({
 
   setV3Meta: (meta) => set({ v3Meta: meta }),
   setExtractionReviewActive: (active) => set({ extractionReviewActive: active }),
+  setSelectedQuestionNumber: (n) => set({ selectedQuestionNumber: n }),
 
   updateQuestionResult: (number, phase, content) =>
     set((state) => {

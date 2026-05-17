@@ -843,31 +843,88 @@ function QuestionDetail({ qr }: { qr: QuestionResult }) {
   );
 }
 
-export function QuestionResultPanel() {
+function useSortedEntries() {
   const questionResults = useJobStore((s) => s.questionResults);
-  const jobId = useJobStore((s) => s.jobId);
-  const status = useJobStore((s) => s.status);
-  const reviewActive = useJobStore((s) => s.extractionReviewActive);
-  const setReviewActive = useJobStore((s) => s.setExtractionReviewActive);
-  const store = useJobStore();
-  const entries = Object.values(questionResults).sort((a, b) => a.number - b.number);
-  const [globalLoading, setGlobalLoading] = useState<string | null>(null);
-  const [selectedNum, setSelectedNum] = useState<number | null>(null);
+  return Object.values(questionResults).sort((a, b) => a.number - b.number);
+}
+
+function useSelectedEntry() {
+  const entries = useSortedEntries();
+  const selectedNum = useJobStore((s) => s.selectedQuestionNumber);
+  const setSelectedNum = useJobStore((s) => s.setSelectedQuestionNumber);
 
   // Auto-select first entry when entries become available or current selection disappears.
   useEffect(() => {
     if (entries.length === 0) {
-      setSelectedNum(null);
+      if (selectedNum !== null) setSelectedNum(null);
       return;
     }
     if (selectedNum == null || !entries.find((q) => q.number === selectedNum)) {
       setSelectedNum(entries[0].number);
     }
-  }, [entries, selectedNum]);
+  }, [entries, selectedNum, setSelectedNum]);
+
+  return { entries, selected: entries.find((q) => q.number === selectedNum) ?? entries[0] ?? null };
+}
+
+/** 좌측 master: 문제 번호 리스트만. 페이지에서 단독 마운트 가능. */
+export function QuestionList() {
+  const entries = useSortedEntries();
+  const selectedNum = useJobStore((s) => s.selectedQuestionNumber);
+  const setSelectedNum = useJobStore((s) => s.setSelectedQuestionNumber);
+
+  // Auto-select first entry on mount/update.
+  useEffect(() => {
+    if (entries.length === 0) {
+      if (selectedNum !== null) setSelectedNum(null);
+      return;
+    }
+    if (selectedNum == null || !entries.find((q) => q.number === selectedNum)) {
+      setSelectedNum(entries[0].number);
+    }
+  }, [entries, selectedNum, setSelectedNum]);
+
+  if (entries.length === 0) {
+    return (
+      <div className="p-4 text-xs text-muted-foreground">아직 추출된 문제 없음</div>
+    );
+  }
+  return (
+    <div className="h-full overflow-y-auto">
+      {entries.map((qr) => (
+        <QuestionListItem
+          key={qr.number}
+          qr={qr}
+          selected={qr.number === selectedNum}
+          onSelect={() => setSelectedNum(qr.number)}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** 우측 detail: 현재 선택된 문제만. 페이지에서 단독 마운트 가능. */
+export function QuestionDetailView() {
+  const { selected } = useSelectedEntry();
+  if (!selected) {
+    return (
+      <div className="p-4 text-xs text-muted-foreground">왼쪽에서 문제를 선택하세요</div>
+    );
+  }
+  return <QuestionDetail qr={selected} />;
+}
+
+/** 상단 컨트롤 bar: 추출 편집 진행 / 추출 결과 검증 / Figure confirm / HWPX 재조립 버튼들. */
+export function QuestionPanelHeader() {
+  const entries = useSortedEntries();
+  const jobId = useJobStore((s) => s.jobId);
+  const status = useJobStore((s) => s.status);
+  const reviewActive = useJobStore((s) => s.extractionReviewActive);
+  const setReviewActive = useJobStore((s) => s.setExtractionReviewActive);
+  const store = useJobStore();
+  const [globalLoading, setGlobalLoading] = useState<string | null>(null);
 
   if (entries.length === 0) return null;
-  const selected = entries.find((q) => q.number === selectedNum) ?? entries[0];
-
   const doneCount = entries.filter((q) => q.verified || q.solved).length;
   const isDone = status === "done" || status === "failed";
 
@@ -875,14 +932,13 @@ export function QuestionResultPanel() {
     if (!jobId || status === "running") return;
     setGlobalLoading(from);
     const instruction = `resume --from=${from}`;
-    // 편집 모드 → solver 진행 시 모드 종료
     if (from === "solver") setReviewActive(false);
     await sendResumeAction(jobId, instruction, store);
     setGlobalLoading(null);
   };
 
   return (
-    <Card className="p-4 space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">
           문제별 결과 {reviewActive && <span className="text-blue-600 ml-2">(추출 편집 모드)</span>}
@@ -892,7 +948,6 @@ export function QuestionResultPanel() {
         </span>
       </div>
 
-      {/* Step 3.5: 추출 편집 진행 버튼 — Claude가 [EXTRACTION_REVIEW]를 출력했고 사용자 편집 대기 중일 때 */}
       {reviewActive && isDone && (
         <div className="space-y-2 pb-2 border-b">
           <div className="text-xs text-muted-foreground">
@@ -915,7 +970,6 @@ export function QuestionResultPanel() {
         </div>
       )}
 
-      {/* Resume용 버튼: 추출 결과 검증으로 돌아가기 (이미 완료된 작업) */}
       {!reviewActive && isDone && entries.some((q) => q.extracted && !q.solved) && (
         <div className="pb-2 border-b">
           <Button
@@ -930,7 +984,6 @@ export function QuestionResultPanel() {
         </div>
       )}
 
-      {/* Figure 이미지 뷰어 + Confirm 버튼 */}
       {!reviewActive && isDone && (
         <div className="space-y-2 pb-2 border-b">
           <FigureResultSection
@@ -963,20 +1016,23 @@ export function QuestionResultPanel() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
+export function QuestionResultPanel() {
+  const { entries } = useSelectedEntry();
+  if (entries.length === 0) return null;
+
+  return (
+    <Card className="p-4 space-y-3">
+      <QuestionPanelHeader />
       <div className="grid grid-cols-[140px_1fr] gap-0 border rounded-md overflow-hidden h-[640px]">
-        <div className="border-r bg-muted/20 overflow-y-auto">
-          {entries.map((qr) => (
-            <QuestionListItem
-              key={qr.number}
-              qr={qr}
-              selected={qr.number === selected.number}
-              onSelect={() => setSelectedNum(qr.number)}
-            />
-          ))}
+        <div className="border-r bg-muted/20">
+          <QuestionList />
         </div>
         <div className="overflow-hidden">
-          <QuestionDetail qr={selected} />
+          <QuestionDetailView />
         </div>
       </div>
     </Card>
