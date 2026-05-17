@@ -55,6 +55,10 @@ Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 5
 
 수동 검증 항목 3건은 이 세션에서 실제 브라우저/PDF/Gemini 환경을 조작하지 않아 미확인 상태로 남긴다.
 
+최종 자동 검증:
+- `pnpm test` → pass (14 files, 129 tests)
+- `pnpm build` → pass
+
 ## 관련 문서
 
 - [README](./README.md)
