@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: canonical pipeline stage namespace + 매핑 함수
-status: pending
+status: completed
 depends_on: []
 scope:
   - ngd-studio/lib/pipelineStages.ts
@@ -75,10 +75,10 @@ export function normalizePipelineStage(name: string): string {
 
 ## 체크리스트
 
-- [ ] `ngd-studio/lib/pipelineStages.ts` 신규 작성 — `PIPELINE_STAGES` 상수 + `PipelineStageName` 타입 + `aiStageToPipeline` + `normalizePipelineStage` export
-- [ ] 매핑 함수 4종(extractor/solver/verifier/review.reviewer) 모두 명시적 매핑 또는 null 반환
-- [ ] `normalizePipelineStage`가 "create.solver" → "solver" / "extractor" → "extractor" / "figure" → "figure" 모두 동작
-- [ ] `npx tsc --noEmit` 통과 (신규 모듈 import는 없으므로 컴파일만 확인)
+- [x] `ngd-studio/lib/pipelineStages.ts` 신규 작성 — `PIPELINE_STAGES` 상수 + `PipelineStageName` 타입 + `aiStageToPipeline` + `normalizePipelineStage` export
+- [x] 매핑 함수 4종(extractor/solver/verifier/review.reviewer) 모두 명시적 매핑 또는 null 반환
+- [x] `normalizePipelineStage`가 "create.solver" → "solver" / "extractor" → "extractor" / "figure" → "figure" 모두 동작
+- [x] `npx tsc --noEmit` 통과 (신규 모듈 import는 없으므로 컴파일만 확인)
 
 ## 영향 범위
 
@@ -91,3 +91,25 @@ export function normalizePipelineStage(name: string): string {
 cd ngd-studio
 npx tsc --noEmit
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-17 00:00 KST) — 완료
+**상태**: completed
+**소요 시간**: 약 3분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`ngd-studio/lib/pipelineStages.ts` 신규 모듈을 생성. `AIStageKey`("create.extractor" 등)와 pipeline UI에서 사용하는 bare name("extractor" 등) 간의 공식 분리 및 단방향 매핑 함수 2종(`aiStageToPipeline`, `normalizePipelineStage`)을 export. 기존 코드 변경 없이 신규 모듈만 추가.
+
+#### 변경 파일
+- `ngd-studio/lib/pipelineStages.ts` (신규, +43줄)
+
+#### 검증 결과
+- [x] `npx tsc --noEmit`: `cd ngd-studio && npx tsc --noEmit` → pass (출력 없음, 에러 없음)
+
+#### 추가 발견사항
+없음
+
+#### 질문 / 결정 사항
+없음
