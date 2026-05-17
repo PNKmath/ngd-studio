@@ -18,7 +18,7 @@ created: 2026-05-16
 | 3 | [phase-03-verifier-harness.md](./phase-03-verifier-harness.md) | 6 | 6 | 100% | completed | 65bde83 |
 | 4 | [phase-04-solver-harness.md](./phase-04-solver-harness.md) | 5 | 5 | 100% | completed | 84dcb1e |
 | 5 | [phase-05-deepseek-rollout-policy.md](./phase-05-deepseek-rollout-policy.md) | 6 | 6 | 100% | completed | ab0c2be |
-| 6 | [phase-06-tests-docs.md](./phase-06-tests-docs.md) | 5 | 5 | 100% | completed | pending |
+| 6 | [phase-06-tests-docs.md](./phase-06-tests-docs.md) | 5 | 5 | 100% | completed | 6837587 |
 | **Total** | | **34** | **34** | **100%** | | |
 
 ## Phase 의존성
