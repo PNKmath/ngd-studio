@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: followup route 라우팅 정리
-status: pending
+status: completed
 depends_on: [5]
 scope:
   - ngd-studio/app/api/run/[jobId]/followup/route.ts
@@ -56,10 +56,10 @@ function parseResumeArgs(instruction: string): { resumeFrom: string; targetQuest
 
 ## 체크리스트
 
-- [ ] `parseResumeArgs(instruction)` 헬퍼 — `--q`, `--from` 정규식 파싱
-- [ ] `shouldUseCodeOrchestrator`(Phase 6) 재사용 + resume 명령 조건 추가
-- [ ] orchestrator 분기에서 `runStageOrchestrator` 호출 + SSE stream 응답
-- [ ] legacy 경로(자유 instruction)는 기존 hotfix 그대로 유지
+- [x] `parseResumeArgs(instruction)` 헬퍼 — `--q`, `--from` 정규식 파싱
+- [x] `shouldUseCodeOrchestrator`(Phase 6) 재사용 + resume 명령 조건 추가
+- [x] orchestrator 분기에서 `runStageOrchestrator` 호출 + SSE stream 응답
+- [x] legacy 경로(자유 instruction)는 기존 hotfix 그대로 유지
 
 ## 영향 범위
 
@@ -76,3 +76,41 @@ npx tsc --noEmit
 # 2. orchestrator 분기 진입 + 5번 figure부터 재실행되는지 SSE event로 확인
 # 3. 자유 instruction("3번 해설 다듬어줘")는 기존대로 Claude CLI 호출
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-17 KST) — completed
+**상태**: completed
+**소요 시간**: 약 5분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`followup/route.ts`에 resume 명령 감지 + orchestrator 라우팅 분기를 추가했다. `parseResumeArgs` 헬퍼로 `--q`/`--from` 파싱, `shouldUseCodeOrchestrator` (Phase 6)와 `isResumeCommand`를 AND 조건으로 코드 orchestrator 경로를 활성화한다. 자유 instruction 경로(legacy Claude CLI + 기존 hotfix)는 변경 없이 보존됐다.
+
+#### 변경 파일
+- `ngd-studio/app/api/run/[jobId]/followup/route.ts` (전면 개정, +~190 / -~90줄)
+
+#### 검증 결과
+- [x] tsc: `npx tsc --noEmit` → pass (출력 없음)
+
+#### 추가 발견사항
+- orchestrator `isAborted` 콜백은 현재 SSE `cancel()` 훅과 직접 연결하기 어려운 구조(ReadableStream cancel → async orchestrator 전파 어려움). `cancelled` 지역 변수 패턴으로 구현하되, 실제 강제 취소는 SSE stream이 닫힐 때 orchestrator의 checkAborted()가 다음 stage 진입 시점에 감지한다. 완전한 즉시 취소는 향후 AbortController 연동으로 개선 가능.
+- `job.meta` 필드는 초기 jobData에 없음 — `?? {}` 가드로 빈 meta 처리.
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+pass — 1 file in scope (followup/route.ts).
+
+#### Verification Re-run (orchestrator)
+exit 0 — `npx tsc --noEmit` pass. (수동 SSE 시나리오는 dev 서버 필요로 보류.)
+
+#### Simplify (orchestrator)
+1 file, 5 edits, verify pass. readdir 동적 import → 정적 import, 미사용 cancelled 변수 + isAborted 클로저 제거, no-op cancel 간소화, 섹션 구분 주석 정리.
+
+#### Review (orchestrator)
+VERDICT: pass (0 issues). 4개 체크리스트 실코드 일치, hotfix 보존, 심볼 실존, tsc pass.
+
+#### Commit
+`{commit-hash}` — feat(followup): Phase 8 — followup route 라우팅 정리
