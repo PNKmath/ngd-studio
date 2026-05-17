@@ -28,6 +28,20 @@ export function useJobRunner() {
     });
   }, [store]);
 
+  const pauseJob = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    store.setStatus("paused");
+    store.addLog({
+      timestamp: new Date().toISOString(),
+      stage: "system",
+      message: "작업을 일시정지했습니다. 캐시된 결과는 보존되며 '재개' 버튼으로 이어 진행할 수 있습니다.",
+      level: "info",
+    });
+  }, [store]);
+
   const startJob = useCallback(
     async (
       mode: "create" | "resume" | "crop" | "review",
@@ -160,7 +174,7 @@ export function useJobRunner() {
     [store]
   );
 
-  return { startJob, stopJob };
+  return { startJob, stopJob, pauseJob };
 }
 
 function handleSSEEvent(event: SSEEvent, store: JobState) {

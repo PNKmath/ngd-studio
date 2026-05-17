@@ -61,8 +61,25 @@ function readInitialMeta() {
   }
 }
 
+// 다음 재개 stage 추론: stages 배열에서 done이 아닌 첫 단계.
+// "cleaned"→"extractor", "review_extract"→"solver"로 매핑 (사용자 편집 단계는 백엔드 resume 대상 아님).
+function inferResumeStage(stages: { name: string; status: string }[]): string {
+  const order = ["cleaned", "extractor", "review_extract", "solver", "verifier", "figure", "builder", "checker"];
+  for (const name of order) {
+    const stage = stages.find((s) => s.name === name);
+    if (!stage) continue;
+    if (stage.status !== "done") {
+      if (name === "cleaned") return "extractor";
+      if (name === "review_extract") return "solver";
+      return name;
+    }
+  }
+  return "checker";
+}
+
 export default function CreateV4Page() {
-  const { startJob, stopJob } = useJobRunner();
+  const reset = useJobStore((s) => s.reset);
+  const { startJob, stopJob, pauseJob } = useJobRunner();
 
   // Store subscriptions
   const status = useJobStore((s) => s.status);
@@ -75,8 +92,18 @@ export default function CreateV4Page() {
   const setV3Meta = useJobStore((s) => s.setV3Meta);
 
   const isRunning = status === "running";
+  const isPaused = status === "paused";
+  const isFailed = status === "failed";
   const isDone = status === "done" || status === "failed";
-  const hasJob = isRunning || isDone;
+  const hasJob = isRunning || isDone || isPaused;
+
+  const resumeOrRetry = useCallback(async () => {
+    const next = inferResumeStage(stages);
+    const base = v3Meta ?? {};
+    const jobMeta = { ...base, resumeFrom: next };
+    setV3Meta(jobMeta);
+    await startJob("resume", { pdf: "" }, jobMeta);
+  }, [stages, v3Meta, startJob, setV3Meta]);
 
   const [autoSplitEnabled, setAutoSplitEnabled] = useState(readInitialAutoSplitEnabled);
   const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
@@ -518,16 +545,37 @@ export default function CreateV4Page() {
             <div className="flex items-center gap-2 text-sm">
               <span className={`w-2 h-2 rounded-full ${
                 isRunning ? "bg-yellow-500 animate-pulse" :
+                isPaused ? "bg-blue-500" :
                 result?.status === "success" ? "bg-[var(--color-status-success)]" :
                 "bg-[var(--color-status-error)]"
               }`} />
               <span className="font-medium">
-                {isRunning ? "제작 진행 중..." : result?.status === "success" ? "제작 완료" : "제작 실패"}
+                {isRunning ? "제작 진행 중..."
+                  : isPaused ? "일시정지됨"
+                  : result?.status === "success" ? "제작 완료"
+                  : "제작 실패"}
               </span>
             </div>
 
             {isRunning && (
-              <Button onClick={stopJob} variant="destructive" className="w-full">중단</Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button onClick={pauseJob} variant="outline">일시정지</Button>
+                <Button onClick={stopJob} variant="destructive">중단</Button>
+              </div>
+            )}
+
+            {isPaused && (
+              <div className="grid grid-cols-2 gap-2">
+                <Button onClick={resumeOrRetry}>재개 ({inferResumeStage(stages)}부터)</Button>
+                <Button onClick={reset} variant="outline">초기화</Button>
+              </div>
+            )}
+
+            {isFailed && !isRunning && (
+              <div className="grid grid-cols-2 gap-2">
+                <Button onClick={resumeOrRetry} variant="default">재시도 ({inferResumeStage(stages)}부터)</Button>
+                <Button onClick={reset} variant="outline">새 작업</Button>
+              </div>
             )}
 
             {isDone && jobId && (

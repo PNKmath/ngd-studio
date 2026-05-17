@@ -25,7 +25,7 @@ export interface V3Meta {
 export interface JobState {
   jobId: string | null;
   mode: "create" | "resume" | "crop" | "review" | null;
-  status: "idle" | "uploading" | "running" | "done" | "failed";
+  status: "idle" | "uploading" | "running" | "paused" | "done" | "failed";
   stages: PipelineStage[];
   logs: LogEntry[];
   files: { name: string; size: number; path: string }[];
