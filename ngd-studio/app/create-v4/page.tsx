@@ -1,28 +1,49 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CropperWorkspace } from "@/components/cropper/CropperWorkspace";
 import { MetaForm, type MetaValue } from "@/components/upload/MetaForm";
+import { parseExamMetaFromFilename } from "@/lib/pdf/filenameMeta";
 import { useJobRunner } from "@/lib/useJobRunner";
 import { Card } from "@/components/ui/card";
 import { PipelineView } from "@/components/pipeline/PipelineView";
 
 const AUTO_SPLIT_LS_KEY = "cropper.auto-split-on-upload";
 const META_LS_KEY = "create-v4.meta-form";
+const DEFAULT_META: MetaValue = {
+  school: "",
+  grade: 2,
+  subject: "수학 I",
+  semester: "1학기",
+  examType: "중간",
+  range: "",
+};
+
+function readInitialAutoSplitEnabled() {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(AUTO_SPLIT_LS_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function readInitialMeta() {
+  if (typeof window === "undefined") return DEFAULT_META;
+  try {
+    const raw = sessionStorage.getItem(META_LS_KEY);
+    return raw ? { ...DEFAULT_META, ...JSON.parse(raw) } : DEFAULT_META;
+  } catch {
+    return DEFAULT_META;
+  }
+}
 
 export default function CreateV4Page() {
   const router = useRouter();
   const { startJob } = useJobRunner();
 
-  const [autoSplitEnabled, setAutoSplitEnabled] = useState(false);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(AUTO_SPLIT_LS_KEY);
-      if (stored === "true") setAutoSplitEnabled(true);
-    } catch {}
-  }, []);
+  const [autoSplitEnabled, setAutoSplitEnabled] = useState(readInitialAutoSplitEnabled);
 
   function handleAutoSplitToggle(e: React.ChangeEvent<HTMLInputElement>) {
     const next = e.target.checked;
@@ -32,21 +53,7 @@ export default function CreateV4Page() {
     } catch {}
   }
 
-  const [meta, setMeta] = useState<MetaValue>({
-    school: "",
-    grade: 2,
-    subject: "수학 I",
-    semester: "1학기",
-    examType: "중간",
-    range: "",
-  });
-
-  useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(META_LS_KEY);
-      if (raw) setMeta(JSON.parse(raw));
-    } catch {}
-  }, []);
+  const [meta, setMeta] = useState<MetaValue>(readInitialMeta);
 
   function handleMetaChange(next: MetaValue) {
     setMeta(next);
@@ -54,6 +61,23 @@ export default function CreateV4Page() {
       sessionStorage.setItem(META_LS_KEY, JSON.stringify(next));
     } catch {}
   }
+
+  const handlePdfSelected = useCallback((fileName: string) => {
+    const parsed = parseExamMetaFromFilename(fileName);
+    if (!parsed) return;
+
+    setMeta((current) => {
+      const next: MetaValue = {
+        ...current,
+        ...parsed,
+        range: parsed.range ?? current.range,
+      };
+      try {
+        sessionStorage.setItem(META_LS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -205,6 +229,7 @@ export default function CreateV4Page() {
           <CropperWorkspace
             onExtract={handleExtract}
             autoSplitOnUpload={autoSplitEnabled}
+            onPdfSelected={handlePdfSelected}
           />
         </div>
       </div>
