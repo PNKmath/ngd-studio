@@ -370,6 +370,8 @@ async function runExtractorStageGroup(opts: ExtractorGroupOptions): Promise<void
 
   const provider = getProviderForStage("create.extractor", stageOverrides);
   const imagesToProcess = questionImages.filter((q) => targetQuestions.includes(q.number));
+  send(logEvent("create.extractor",
+    `${provider.label} 으로 ${imagesToProcess.length}문제 추출 시작 (동시 ${EXTRACTOR_CONCURRENCY})`));
 
   let completed = 0;
   const failed: number[] = [];
@@ -379,13 +381,21 @@ async function runExtractorStageGroup(opts: ExtractorGroupOptions): Promise<void
     imagesToProcess,
     async (img) => {
       if (isAborted()) throw new Error("aborted");
-      return runExtractorStage({
+      send(logEvent("create.extractor", `Q${img.number} 추출 시작`));
+      const result = await runExtractorStage({
         questionNumber: img.number,
         imagePath: img.path,
         cache,
         provider,
         signal,
       });
+      if (result.status === "completed") {
+        send(logEvent("create.extractor", `Q${img.number} 추출 완료`));
+      } else {
+        send(logEvent("create.extractor",
+          `Q${img.number} 추출 실패: ${result.error?.message ?? "unknown"}`, "error"));
+      }
+      return result;
     }
   );
 

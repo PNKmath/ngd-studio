@@ -547,6 +547,7 @@ export default function CreateV4Page() {
 
           {/* 상태 + 제어 */}
           <Card className="p-4 space-y-3">
+            <h3 className="text-sm font-medium">상태 / 제어</h3>
             <div className="flex items-center gap-2 text-sm">
               <span className={`w-2 h-2 rounded-full ${
                 isRunning ? "bg-yellow-500 animate-pulse" :
