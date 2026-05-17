@@ -98,3 +98,6 @@ SIMPLIFIED: 1 (pdf-preview/route.ts: removed redundant `flip` alias, used `rawFl
 
 #### Review (orchestrator)
 VERDICT: pass — ISSUES: 0, 스펙 일치 / 회귀 없음
+
+#### Commit
+e21a691 — feat(api): Phase 2 — PDF preview/meta API flip support

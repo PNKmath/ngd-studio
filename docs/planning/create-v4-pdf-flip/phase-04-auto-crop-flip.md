@@ -96,3 +96,6 @@ SIMPLIFIED: 1 (gemini_crop.py: enumerate loop → extend), VERIFY: pass
 
 #### Review (orchestrator)
 VERDICT: pass — ISSUES: 0, 스펙 일치 / 5개 체크리스트 모두 구현 / 기본값 보존
+
+#### Commit
+74ed8ee — feat(crop): Phase 4 — 자동 분할 flip 전달

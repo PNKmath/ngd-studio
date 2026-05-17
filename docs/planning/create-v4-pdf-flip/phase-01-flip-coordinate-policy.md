@@ -87,3 +87,6 @@ SIMPLIFIED: 0, VERIFY: pass — 안전하게 적용할 패턴 없음
 
 #### Review (orchestrator)
 VERDICT: pass — ISSUES: 0, 스펙 일치 / 체크리스트 정합 / 회귀 없음
+
+#### Commit
+8cc2f99 — feat(cropper): Phase 1 — Flip 타입과 mirrorBoxX 좌표 helper 추가

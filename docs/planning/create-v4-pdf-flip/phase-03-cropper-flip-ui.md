@@ -119,3 +119,6 @@ SIMPLIFIED: 1 (kindFilename: array intermediates → count variables), VERIFY: p
 
 #### Review (orchestrator)
 VERDICT: pass — ISSUES: 0, 스펙 일치 / 3단계 fallback / saveToLS 호출 지점 일관
+
+#### Commit
+62579ea — feat(cropper): Phase 3 — flip UI와 저장 정합성
