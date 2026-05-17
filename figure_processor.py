@@ -9,11 +9,14 @@ from PIL import Image, ImageDraw, ImageFont
 from google import genai
 from google.genai import types
 
-EXAM_DATA_PATH = "inputs/시험지 제작/.v3cache/exam_data.json"
+# argv[1] = exam_data.json 경로 (orchestrator가 전달). 없으면 기본 경로.
+EXAM_DATA_PATH = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "inputs/시험지 제작/.v3cache/exam_data.json"
 QUESTION_IMAGES_DIR = "inputs/시험지 제작/question_images"
 CACHE_DIR = "inputs/시험지 제작/.v3cache"
 OUTPUT_DIR = "outputs/images"
 GEMINI_MODEL = "gemini-3.1-flash-image-preview"
+# --no-regen: Gemini 호출 없이 crop된 원본을 그대로 사용 (trim + watermark만 적용)
+NO_REGEN = "--no-regen" in sys.argv
 
 PROMPT_TEMPLATE = (
     "Redraw this math exam figure cleanly and precisely as a simple diagram on a white background. "
@@ -117,6 +120,15 @@ def process_figure(client, prob):
 
     cw, ch = cropped.size
     ar = aspect_ratio_str(cw, ch)
+    final_path = f"{OUTPUT_DIR}/prob{n}_final.png"
+
+    if NO_REGEN:
+        # Crop + 워터마크만, Gemini 호출 없음
+        print(f"  [Q{n}] crop만 적용 (--no-regen, crop={box})")
+        trim_and_watermark(ref_path, final_path)
+        print(f"  [Q{n}] 완료 → {final_path}")
+        return final_path
+
     print(f"  [Q{n}] Gemini 생성 중... (crop={box}, aspect={ar})")
 
     data = generate_with_gemini(client, ref_path, desc, ar)
@@ -128,19 +140,20 @@ def process_figure(client, prob):
     with open(gen_path, "wb") as f:
         f.write(data)
 
-    final_path = f"{OUTPUT_DIR}/prob{n}_final.png"
     trim_and_watermark(gen_path, final_path)
     print(f"  [Q{n}] 완료 → {final_path}")
     return final_path
 
 
 def main():
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if not api_key:
-        print("ERROR: GEMINI_API_KEY 환경변수 없음")
-        sys.exit(1)
-
-    client = genai.Client(api_key=api_key)
+    if NO_REGEN:
+        client = None  # Gemini 호출 안 함
+    else:
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            print("ERROR: GEMINI_API_KEY 환경변수 없음")
+            sys.exit(1)
+        client = genai.Client(api_key=api_key)
 
     with open(EXAM_DATA_PATH, encoding="utf-8") as f:
         exam_data = json.load(f)

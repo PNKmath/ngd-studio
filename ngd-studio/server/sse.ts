@@ -135,6 +135,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     jobId: string;
     provider?: AIProviderId;
     stageOverrides?: Partial<Record<AIStageKey, AIProviderId>>;
+    figureRegen?: boolean;
   };
   try {
     body = JSON.parse(rawBody);
@@ -317,6 +318,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         meta: meta ?? {},
         questionImages: questionImagePaths,
         stageOverrides,
+        figureRegen: body.figureRegen,
         baseDir: BASE_DIR,
         send,
         isAborted: () => clientDisconnected,

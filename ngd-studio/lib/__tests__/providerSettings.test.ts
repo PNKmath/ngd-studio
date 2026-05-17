@@ -51,9 +51,10 @@ describe("AI settings storage", () => {
 
   it("writes normalized settings", () => {
     const storage = createStorage();
-    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {} }, storage)).toEqual({
+    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true }, storage)).toEqual({
       defaultProvider: "claude-cli",
       stageOverrides: {},
+      figureRegen: true,
     });
     expect(readDefaultProvider(storage)).toBe("claude-cli");
   });
@@ -123,6 +124,7 @@ describe("AI settings storage", () => {
       stageOverrides: {
         "review.reviewer": "deepseek-v4",
       },
+      figureRegen: true,
     }, storage);
 
     expect(readAISettings(storage)).toEqual({
@@ -130,6 +132,7 @@ describe("AI settings storage", () => {
       stageOverrides: {
         "review.reviewer": "deepseek-v4",
       },
+      figureRegen: true,
     });
   });
 });

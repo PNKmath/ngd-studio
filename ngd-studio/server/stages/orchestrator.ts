@@ -37,6 +37,8 @@ export interface OrchestratorInput {
   meta: ExamMetaInput;
   questionImages: { number: number; path: string }[];
   stageOverrides: StageOverrideMap;
+  /** Gemini로 그림을 재생성할지. false면 crop+워터마크만 (figure_processor.py --no-regen). default true. */
+  figureRegen?: boolean;
   baseDir: string;
   send: (event: SSEEvent) => void;
   isAborted: () => boolean;
@@ -587,7 +589,7 @@ export async function runStageOrchestrator(
 
     // ── Stage 4: Figure ────────────────────────
     if (!checkAborted() && shouldRunStage(startStage, "figure")) {
-      const figureOk = await runFigureStage({ baseDir, cache, send });
+      const figureOk = await runFigureStage({ baseDir, cache, send, regenerate: input.figureRegen !== false });
       if (!figureOk && checkAborted()) return cancelled(providerTelemetry);
     }
 
@@ -704,22 +706,29 @@ interface FigureStageOptions {
   baseDir: string;
   cache: StageCache;
   send: (event: SSEEvent) => void;
+  /** false면 figure_processor.py에 --no-regen 전달 (Gemini 호출 없이 crop만). */
+  regenerate?: boolean;
 }
 
 async function runFigureStage(opts: FigureStageOptions): Promise<boolean> {
-  const { baseDir, cache, send } = opts;
+  const { baseDir, cache, send, regenerate = true } = opts;
 
   send(stageEvent("figure", "running"));
   send(progressEvent("figure", 5));
-  send(logEvent("figure", "figure_processor.py를 실행합니다."));
+  send(logEvent("figure", regenerate
+    ? "figure_processor.py를 실행합니다 (Gemini 재생성)."
+    : "figure_processor.py를 실행합니다 (crop만, Gemini 호출 없음)."));
 
   const python = process.platform === "win32" ? "python" : "python3";
   const scriptPath = path.join(baseDir, "figure_processor.py");
   const examDataPath = cache.paths.examData;
 
+  const args = [scriptPath, examDataPath];
+  if (!regenerate) args.push("--no-regen");
+
   const result = await runStageCommand({
     command: python,
-    args: [scriptPath, examDataPath],
+    args,
     cwd: baseDir,
     timeoutMs: 300_000, // 5 minutes for figure generation
   });

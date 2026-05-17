@@ -95,6 +95,7 @@ export function useJobRunner() {
             jobId,
             provider: selectedProvider,
             stageOverrides: aiSettings.stageOverrides,
+            figureRegen: aiSettings.figureRegen,
           }),
           signal: abortController.signal,
         });

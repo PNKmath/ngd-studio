@@ -525,6 +525,44 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          {/* ── 그림 처리 ─────────────────────────────────────────── */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Sparkles className="size-4" />
+              그림 처리
+            </div>
+
+            <div className="rounded-lg border bg-card px-4 py-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <h2 className="text-base font-medium">Gemini로 그림 재생성</h2>
+                  <p className="text-sm text-muted-foreground">
+                    켜져 있으면 has_figure 문제의 그림을 PDF에서 crop → Gemini(nano-banana)로 깔끔하게 재생성 → 트리밍 + NGD 워터마크.
+                    끄면 crop 결과를 그대로 워터마크만 붙여 사용합니다 (Gemini API 호출 없음, 속도↑·비용↓, 손글씨/스캔 그대로).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={settings.figureRegen}
+                  onClick={() => setSettings(writeAISettings({ ...settings, figureRegen: !settings.figureRegen }))}
+                  className={cn(
+                    "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+                    settings.figureRegen ? "bg-primary" : "bg-muted",
+                  )}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "pointer-events-none inline-block size-5 transform rounded-full bg-background shadow ring-0 transition-transform",
+                      settings.figureRegen ? "translate-x-5" : "translate-x-0",
+                    )}
+                  />
+                </button>
+              </div>
+            </div>
+          </section>
+
           {/* ── 현재 선택 요약 ─────────────────────────────────────────── */}
           <section className="rounded-lg border bg-card px-4 py-4">
             <div className="flex items-center justify-between gap-4">

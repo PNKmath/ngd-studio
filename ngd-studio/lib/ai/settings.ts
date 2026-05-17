@@ -24,11 +24,14 @@ export const DEEPSEEK_MODEL_STAGE_KEYS: AIStageKey[] = [
 export const DEFAULT_AI_SETTINGS: AISettings = {
   defaultProvider: "auto",
   stageOverrides: {},
+  figureRegen: true,
 };
 
 export interface AISettings {
   defaultProvider: SelectableProviderId;
   stageOverrides: StageOverrideMap;
+  /** Gemini(nano-banana)로 그림을 재생성할지 여부. false면 crop+워터마크만. */
+  figureRegen: boolean;
 }
 
 interface StorageLike {
@@ -139,6 +142,7 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
     return {
       defaultProvider: normalizeSelectableProviderId(parsed.defaultProvider),
       stageOverrides: normalizeStageOverrides(parsed.stageOverrides),
+      figureRegen: parsed.figureRegen !== false,
     };
   } catch {
     return DEFAULT_AI_SETTINGS;
@@ -149,6 +153,7 @@ export function writeAISettings(settings: AISettings, storage = getBrowserStorag
   const normalized: AISettings = {
     defaultProvider: normalizeSelectableProviderId(settings.defaultProvider),
     stageOverrides: normalizeStageOverrides(settings.stageOverrides),
+    figureRegen: settings.figureRegen !== false,
   };
 
   storage?.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
