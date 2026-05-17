@@ -16,7 +16,7 @@ created: 2026-05-17
 | 1 | [phase-01-rotation-coordinate-policy.md](./phase-01-rotation-coordinate-policy.md) | 5 | 5 | 100% | completed | b4c6cef |
 | 2 | [phase-02-preview-meta-api-rotation.md](./phase-02-preview-meta-api-rotation.md) | 6 | 6 | 100% | completed | 2e0b15b |
 | 3 | [phase-03-cropper-rotation-ui.md](./phase-03-cropper-rotation-ui.md) | 6 | 6 | 100% | completed | e17fb94 |
-| 4 | [phase-04-auto-crop-rotation.md](./phase-04-auto-crop-rotation.md) | 5 | 5 | 100% | completed | - |
+| 4 | [phase-04-auto-crop-rotation.md](./phase-04-auto-crop-rotation.md) | 5 | 5 | 100% | completed | 3feb073 |
 | 5 | [phase-05-extraction-e2e-verification.md](./phase-05-extraction-e2e-verification.md) | 5 | 0 | 0% | pending | - |
 | **Total** | | **27** | **22** | **81%** | | |
 
