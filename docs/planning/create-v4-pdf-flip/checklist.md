@@ -17,8 +17,8 @@ created: 2026-05-17
 | 2 | [phase-02-preview-meta-api-flip.md](./phase-02-preview-meta-api-flip.md) | 6 | 6 | 100% | completed | e21a691 |
 | 3 | [phase-03-cropper-flip-ui.md](./phase-03-cropper-flip-ui.md) | 6 | 6 | 100% | completed | 62579ea |
 | 4 | [phase-04-auto-crop-flip.md](./phase-04-auto-crop-flip.md) | 5 | 5 | 100% | completed | 74ed8ee |
-| 5 | [phase-05-extraction-e2e-verification.md](./phase-05-extraction-e2e-verification.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **27** | **0** | **0%** | | |
+| 5 | [phase-05-extraction-e2e-verification.md](./phase-05-extraction-e2e-verification.md) | 5 | 5 | 100% | completed | e99b724 |
+| **Total** | | **27** | **27** | **100%** | | |
 
 ## Phase 의존성
 

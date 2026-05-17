@@ -109,3 +109,6 @@ skipped — verification phase, no production code changes
 
 #### Review (orchestrator)
 VERDICT: pass (reviewer's fix_required note about checklist.md 진행 상태 테이블 미갱신은 orchestrator Step 8 책임 — phase 파일 자체는 일관성 OK)
+
+#### Commit
+e99b724 — docs(crop): Phase 5 — extraction E2E verification
