@@ -215,8 +215,22 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     hwpx: toAbsWsl(resolvedFiles.hwpx),
   };
 
-  // 문제별 이미지 경로 생성
-  const questionImagePaths = (files?.questionImages ?? []).map((num: number) => {
+  // 문제별 이미지 경로 생성. resume 모드에서 클라이언트가 questionImages를 안 보낼 때
+  // (재개/재시도 버튼 등) question_images 디렉터리를 스캔해 보강한다.
+  let questionNums: number[] = files?.questionImages ?? [];
+  if (questionNums.length === 0 && (mode === "resume" || mode === "create")) {
+    const dir = path.join(BASE_DIR, "inputs", "시험지 제작", "question_images");
+    try {
+      const entries = await readdir(dir);
+      questionNums = entries
+        .map((f) => /^q(\d+)\.png$/.exec(f))
+        .filter((m): m is RegExpExecArray => m !== null)
+        .map((m) => parseInt(m[1], 10))
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => a - b);
+    } catch { /* dir missing → questionNums stays [] */ }
+  }
+  const questionImagePaths = questionNums.map((num: number) => {
     const padded = String(num).padStart(2, "0");
     return {
       number: num,

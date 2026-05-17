@@ -171,21 +171,12 @@ export async function runStageOrchestrator(
 
       if (checkAborted()) return cancelled(providerTelemetry);
 
-      // After extractor, pause for user review (only when we actually ran extractor).
-      // Emit extraction_review event and return "done" — the user will resume
-      // via a new request with resumeFrom=solver.
+      // 추출 결과를 UI에 알리되 흐름은 자동으로 다음 stage로 진행.
+      // (이전엔 사용자 검토를 위해 여기서 종료했지만 작업자 요청으로 auto-continue.)
       send({
         event: "extraction_review",
         data: { questionNumbers },
       });
-      send(resultEvent("success", "extraction_review_pending"));
-
-      await persistTelemetry(input, providerTelemetry, "running");
-      return {
-        status: "done",
-        resultSummary: "extraction_review_pending",
-        providerTelemetry,
-      };
     }
 
     // ── Stage 2: Solver ────────────────────────

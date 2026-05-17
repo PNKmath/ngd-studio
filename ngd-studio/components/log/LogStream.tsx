@@ -83,11 +83,12 @@ export function LogStream({ logs, className }: LogStreamProps) {
                 </span>
                 <span
                   className={cn(
-                    "shrink-0 w-16 text-right",
+                    "shrink-0 w-24 text-right truncate",
                     stageColorMap[log.stage] ?? "text-[#9C9590]"
                   )}
+                  title={`[${log.stage}]`}
                 >
-                  [{log.stage}]
+                  [{shortenStage(log.stage)}]
                 </span>
                 <span className={cn("text-[#E5E2DB]", levelStyles[log.level])}>
                   {log.message}
@@ -99,6 +100,10 @@ export function LogStream({ logs, className }: LogStreamProps) {
       )}
     </div>
   );
+}
+
+function shortenStage(stage: string): string {
+  return stage.includes(".") ? stage.split(".").pop()! : stage;
 }
 
 function formatTime(ts: string): string {
