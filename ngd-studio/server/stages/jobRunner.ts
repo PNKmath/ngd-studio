@@ -14,6 +14,7 @@ import {
   type ResolvedAIProviderId,
 } from "../../lib/ai";
 import type { ProviderTelemetryEntry } from "../../lib/ai/retry";
+import { readRuntimeEnv } from "../../lib/server/runtimeEnv";
 
 export interface LegacyPromptJobOptions {
   prompt: string;
@@ -80,6 +81,7 @@ export async function runLegacyPromptJob({
     const { process: proc, events, exitCode, metadata } = runAIProvider(prompt, {
       provider: requestedProvider,
       cwd: baseDir,
+      env: readRuntimeEnv(),
       maxTurns: mode === "crop" ? 30 : (mode === "create" || mode === "resume") ? 200 : 50,
       mode,
       jobId,

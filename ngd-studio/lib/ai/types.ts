@@ -9,6 +9,7 @@ export type AIStageKey = "create.extractor" | "create.solver" | "create.verifier
 
 export interface ProviderRunOptions {
   cwd?: string;
+  env?: Record<string, string | undefined>;
   maxTurns?: number;
   mode?: "create" | "resume" | "crop" | "review" | string;
   jobId?: string;

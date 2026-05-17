@@ -215,7 +215,7 @@ export function detectStageFromTool(toolName: string, input?: Record<string, unk
 
 export function runClaude(
   prompt: string,
-  options?: { maxTurns?: number; cwd?: string }
+  options?: { maxTurns?: number; cwd?: string; env?: Record<string, string | undefined> }
 ): { process: ChildProcess; events: AsyncIterable<ClaudeEvent>; exitCode: Promise<number> } {
   const claudeArgs = [
     "-p", prompt,
@@ -226,6 +226,7 @@ export function runClaude(
   ];
 
   const cwd = options?.cwd ?? process.cwd();
+  const env = options?.env ? { ...process.env, ...options.env } : process.env;
 
   // Windows: wsl 경유로 claude 실행, cwd를 WSL 경로로 변환
   // bash -lc (login shell) 필수 — non-login shell은 Windows PATH를 상속하여
@@ -233,12 +234,14 @@ export function runClaude(
   const proc = IS_WINDOWS
     ? spawn("wsl.exe", [
         "--", "bash", "-lc",
-        `cd ${shellEscape(toWslPath(cwd))} && claude ${claudeArgs.map(shellEscape).join(" ")}`,
+        `cd ${shellEscape(toWslPath(cwd))} && ${shellEnvPrefix(options?.env)}claude ${claudeArgs.map(shellEscape).join(" ")}`,
       ], {
+        env,
         stdio: ["ignore", "pipe", "pipe"],
       })
     : spawn("claude", claudeArgs, {
         cwd,
+        env,
         stdio: ["ignore", "pipe", "pipe"],
       });
 
@@ -253,6 +256,14 @@ export function runClaude(
 
   const events = parseStreamJson(proc, stderrChunks);
   return { process: proc, events, exitCode };
+}
+
+function shellEnvPrefix(env?: Record<string, string | undefined>): string {
+  if (!env) return "";
+  const entries = Object.entries(env)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${shellEscape(String(value))}`);
+  return entries.length > 0 ? `${entries.join(" ")} ` : "";
 }
 
 async function* parseStreamJson(proc: ChildProcess, stderrChunks: string[]): AsyncIterable<ClaudeEvent> {

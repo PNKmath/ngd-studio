@@ -155,6 +155,7 @@ export const codexCliProvider: AIProviderAdapter = {
     const cwd = options?.cwd ?? process.cwd();
     const proc = spawn("codex", buildCodexExecArgs(prompt, cwd), {
       cwd,
+      env: options?.env ? { ...process.env, ...options.env } : process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
 

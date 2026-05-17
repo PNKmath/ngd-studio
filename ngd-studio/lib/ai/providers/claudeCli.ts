@@ -7,6 +7,7 @@ export const claudeCliProvider: AIProviderAdapter = {
   run(prompt: string, options?: ProviderRunOptions): ProviderRunResult {
     const result = runClaude(prompt, {
       cwd: options?.cwd,
+      env: options?.env,
       maxTurns: options?.maxTurns,
     });
 
