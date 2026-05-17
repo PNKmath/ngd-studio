@@ -42,7 +42,7 @@ const DEFAULT_META: MetaValue = {
   range: "",
 };
 
-function readInitialAutoSplitEnabled() {
+function loadStoredAutoSplitEnabled(): boolean {
   if (typeof window === "undefined") return false;
   try {
     return localStorage.getItem(AUTO_SPLIT_LS_KEY) === "true";
@@ -51,7 +51,7 @@ function readInitialAutoSplitEnabled() {
   }
 }
 
-function readInitialMeta() {
+function loadStoredMeta(): MetaValue {
   if (typeof window === "undefined") return DEFAULT_META;
   try {
     const raw = sessionStorage.getItem(META_LS_KEY);
@@ -105,10 +105,11 @@ export default function CreateV4Page() {
     await startJob("resume", { pdf: "" }, jobMeta);
   }, [stages, v3Meta, startJob, setV3Meta]);
 
-  const [autoSplitEnabled, setAutoSplitEnabled] = useState(readInitialAutoSplitEnabled);
+  const [autoSplitEnabled, setAutoSplitEnabled] = useState(false);
   const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
 
   useEffect(() => {
+    setAutoSplitEnabled(loadStoredAutoSplitEnabled());
     setAiSettings(readAISettings());
     const onFocus = () => setAiSettings(readAISettings());
     window.addEventListener("focus", onFocus);
@@ -129,7 +130,11 @@ export default function CreateV4Page() {
     } catch {}
   }
 
-  const [meta, setMeta] = useState<MetaValue>(readInitialMeta);
+  const [meta, setMeta] = useState<MetaValue>(DEFAULT_META);
+
+  useEffect(() => {
+    setMeta(loadStoredMeta());
+  }, []);
 
   function handleMetaChange(next: MetaValue) {
     setMeta(next);
