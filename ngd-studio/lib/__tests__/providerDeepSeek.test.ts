@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildDeepSeekMessages, deepseekV4Provider, isDeepSeekStageAllowed } from "../ai/providers/deepseekV4";
+import { mkdtemp, readFile, rm } from "fs/promises";
+import os from "os";
+import path from "path";
+import { createStageCache } from "../../server/stages/cache";
+import { buildVerifierPrompt, runVerifierStage } from "../../server/stages/verifier";
 
 async function collectEvents(result: ReturnType<typeof deepseekV4Provider.run>) {
   const events = [];
@@ -56,5 +61,113 @@ describe("DeepSeek V4 provider", () => {
       expect.objectContaining({ role: "system", content: expect.stringContaining("create.extractor") }),
       { role: "user", content: "plain prompt" },
     ]);
+  });
+
+  it("builds a bounded verifier prompt for JSON-only model output", () => {
+    const prompt = buildVerifierPrompt({
+      extracted: { question: "1+1" },
+      solved: { answer: "2" },
+      guidelineContext: "Check answer consistency.",
+    });
+
+    expect(prompt).toContain("Return only JSON");
+    expect(prompt).toContain("\"status\":\"pass\"|\"fail\"");
+    expect(prompt).toContain("Do not edit files");
+    expect(prompt).toContain("Check answer consistency.");
+  });
+
+  it("validates verifier output and writes only the structured cache result", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "verifier-stage-"));
+    const cache = createStageCache(tempDir);
+
+    try {
+      const result = await runVerifierStage({
+        questionNumber: 3,
+        extracted: { question: "1+1" },
+        solved: { answer: "2" },
+        cache,
+        provider: {
+          id: "deepseek-v4",
+          label: "DeepSeek V4",
+          run() {
+            return {
+              process: {} as never,
+              events: (async function* () {
+                yield {
+                  type: "assistant" as const,
+                  message: {
+                    role: "assistant" as const,
+                    content: [{ type: "text" as const, text: "{\"status\":\"pass\",\"issues\":[],\"feedback\":\"ok\"}" }],
+                  },
+                };
+              })(),
+              exitCode: Promise.resolve(0),
+              metadata: {
+                requestedProvider: "deepseek-v4",
+                provider: "deepseek-v4",
+                label: "DeepSeek V4",
+              },
+            };
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        status: "completed",
+        output: { status: "pass", issues: [], feedback: "ok" },
+        validation: { ok: true },
+        provider: { modelStageKey: "create.verifier" },
+      });
+      await expect(readFile(cache.verifierResultPath(3), "utf8")).resolves.toBe(
+        `${JSON.stringify({ status: "pass", issues: [], feedback: "ok" }, null, 2)}\n`
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("marks invalid verifier output as retryable validation failure", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "verifier-stage-"));
+    const cache = createStageCache(tempDir);
+
+    try {
+      const result = await runVerifierStage({
+        questionNumber: 1,
+        extracted: {},
+        cache,
+        provider: {
+          id: "deepseek-v4",
+          label: "DeepSeek V4",
+          run() {
+            return {
+              process: {} as never,
+              events: (async function* () {
+                yield {
+                  type: "assistant" as const,
+                  message: {
+                    role: "assistant" as const,
+                    content: [{ type: "text" as const, text: "{\"status\":\"maybe\",\"issues\":[]}" }],
+                  },
+                };
+              })(),
+              exitCode: Promise.resolve(0),
+              metadata: {
+                requestedProvider: "deepseek-v4",
+                provider: "deepseek-v4",
+                label: "DeepSeek V4",
+              },
+            };
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        status: "failed",
+        validation: { ok: false, message: "verifier status must be pass or fail" },
+        error: { code: "verifier_validation_failed", retryable: true },
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 });

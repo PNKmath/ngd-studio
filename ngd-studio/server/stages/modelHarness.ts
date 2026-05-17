@@ -1,4 +1,5 @@
 import type { ProviderTelemetryEntry } from "@/lib/ai/retry";
+import type { ProviderRunResult } from "@/lib/ai/types";
 import type { StageError, ValidationResult } from "./types";
 
 export type ModelOutputValidator<T> = (value: unknown) => ModelOutputValidation<T>;
@@ -82,6 +83,23 @@ export function validationFailure(code: string, message: string, details?: Recor
       retryable: true,
       details,
     },
+  };
+}
+
+export async function collectProviderText(result: ProviderRunResult): Promise<{ text: string; exitCode: number }> {
+  const chunks: string[] = [];
+
+  for await (const event of result.events) {
+    if (event.type === "assistant" && event.message) {
+      for (const content of event.message.content) {
+        if (content.type === "text" && content.text) chunks.push(content.text);
+      }
+    }
+  }
+
+  return {
+    text: chunks.join("\n").trim(),
+    exitCode: await result.exitCode,
   };
 }
 
