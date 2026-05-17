@@ -17,7 +17,7 @@ created: 2026-05-17
 | 2 | [phase-02-preview-meta-api-rotation.md](./phase-02-preview-meta-api-rotation.md) | 6 | 6 | 100% | completed | 2e0b15b |
 | 3 | [phase-03-cropper-rotation-ui.md](./phase-03-cropper-rotation-ui.md) | 6 | 6 | 100% | completed | e17fb94 |
 | 4 | [phase-04-auto-crop-rotation.md](./phase-04-auto-crop-rotation.md) | 5 | 5 | 100% | completed | 3feb073 |
-| 5 | [phase-05-extraction-e2e-verification.md](./phase-05-extraction-e2e-verification.md) | 5 | 5 | 100% | completed | - |
+| 5 | [phase-05-extraction-e2e-verification.md](./phase-05-extraction-e2e-verification.md) | 5 | 5 | 100% | completed | e7a6f0d |
 | **Total** | | **27** | **27** | **100%** | | |
 
 ## Phase 의존성
