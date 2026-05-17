@@ -40,6 +40,10 @@ export interface OrchestratorInput {
   baseDir: string;
   send: (event: SSEEvent) => void;
   isAborted: () => boolean;
+  /** Optional external AbortSignal — when aborted, fires the internal controller immediately
+   *  (without waiting for the next stage-boundary `checkAborted()` poll). Required to kill
+   *  in-flight provider processes (codex/claude CLI) on client disconnect. */
+  externalSignal?: AbortSignal;
   /** Optional jobStore for live telemetry persistence */
   jobStore?: JobStore;
   jobId?: string;
@@ -120,6 +124,16 @@ export async function runStageOrchestrator(
   // AbortController used to propagate cancellation into provider SDK fetch calls.
   const controller = new AbortController();
   const { signal } = controller;
+
+  // Forward external aborts (e.g. SSE client disconnect) immediately — don't wait
+  // for the next stage-boundary `checkAborted()` poll.
+  if (input.externalSignal) {
+    if (input.externalSignal.aborted) {
+      controller.abort();
+    } else {
+      input.externalSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+  }
 
   /** Checks isAborted() and, if true, fires controller.abort() then returns true. */
   function checkAborted(): boolean {

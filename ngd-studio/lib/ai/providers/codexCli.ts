@@ -160,21 +160,49 @@ async function* parseCodexStream(proc: ChildProcess, stderrChunks: string[]): As
   }
 }
 
+/** Per-process timeout for codex CLI. Kills the process if it produces no output
+ *  for this many milliseconds. Env-tunable; default 180s. Set to 0 to disable. */
+const CODEX_IDLE_TIMEOUT_MS = parseInt(process.env.CODEX_IDLE_TIMEOUT_MS ?? "180000", 10);
+
 export const codexCliProvider: AIProviderAdapter = {
   id: "codex-cli",
   label: "Codex CLI",
   run(prompt: string, options?: ProviderRunOptions): ProviderRunResult {
     const cwd = options?.cwd ?? process.cwd();
-    const proc = spawn("codex", buildCodexExecArgs(prompt, cwd, options?.imagePaths), {
+    const args = buildCodexExecArgs(prompt, cwd, options?.imagePaths);
+    process.stderr.write(`[codex] spawn: codex ${args.slice(0, args.length - 1).join(" ")} <PROMPT len=${prompt.length}>\n`);
+    const proc = spawn("codex", args, {
       cwd,
       env: options?.env ? { ...process.env, ...options.env } : process.env,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
     const stderrChunks: string[] = [];
+    // Real-time stderr passthrough: helps diagnose hangs (auth prompts, model loading).
     proc.stderr?.on("data", (chunk: Buffer) => {
-      stderrChunks.push(chunk.toString());
+      const s = chunk.toString();
+      stderrChunks.push(s);
+      process.stderr.write(`[codex stderr pid=${proc.pid}] ${s}`);
     });
+    proc.stdout?.on("data", () => { /* idle-timer reset handled by activity below */ });
+
+    // Idle-timeout: if no stdout/stderr activity for N ms, kill the process.
+    let lastActivity = Date.now();
+    proc.stdout?.on("data", () => { lastActivity = Date.now(); });
+    proc.stderr?.on("data", () => { lastActivity = Date.now(); });
+    let timedOut = false;
+    const idleTimer = CODEX_IDLE_TIMEOUT_MS > 0
+      ? setInterval(() => {
+          if (Date.now() - lastActivity > CODEX_IDLE_TIMEOUT_MS) {
+            timedOut = true;
+            process.stderr.write(`[codex pid=${proc.pid}] idle timeout (${CODEX_IDLE_TIMEOUT_MS}ms) — killing\n`);
+            try { proc.kill("SIGTERM"); } catch { /* already dead */ }
+            setTimeout(() => { try { proc.kill("SIGKILL"); } catch { /* dead */ } }, 5000).unref();
+          }
+        }, 5000)
+      : null;
+    idleTimer?.unref();
+    proc.on("close", () => { if (idleTimer) clearInterval(idleTimer); });
 
     // signal: abort 시 프로세스 종료
     options?.signal?.addEventListener("abort", () => {
@@ -185,7 +213,12 @@ export const codexCliProvider: AIProviderAdapter = {
       process: proc,
       events: parseCodexStream(proc, stderrChunks),
       exitCode: new Promise<number>((resolve) => {
-        proc.on("close", (code) => resolve(code ?? 1));
+        proc.on("close", (code) => {
+          if (timedOut) {
+            stderrChunks.push(`\n[codex] killed by idle timeout (${CODEX_IDLE_TIMEOUT_MS}ms)`);
+          }
+          resolve(code ?? 1);
+        });
       }),
       metadata: {
         requestedProvider: "codex-cli",

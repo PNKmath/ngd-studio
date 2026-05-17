@@ -274,11 +274,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
   send({ event: "log", data: { stage: "system", message: "CLI 프로세스를 시작합니다...", timestamp: new Date().toISOString(), level: "info" } });
 
-  // Kill on client disconnect (중단 버튼 또는 브라우저 닫기)
+  // Kill on client disconnect (중단/일시정지 버튼 또는 브라우저 닫기)
   let clientDisconnected = false;
   let activeProviderProcess: ChildProcess | null = null;
+  const disconnectAbort = new AbortController();
   req.on("close", () => {
     clientDisconnected = true;
+    disconnectAbort.abort();
     try { activeProviderProcess?.kill("SIGTERM"); } catch { /* already dead */ }
   });
 
@@ -304,6 +306,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         baseDir: BASE_DIR,
         send,
         isAborted: () => clientDisconnected,
+        externalSignal: disconnectAbort.signal,
       });
       outputFile = orchResult.outputFile ?? "";
       resultSummary = orchResult.resultSummary ?? "";
