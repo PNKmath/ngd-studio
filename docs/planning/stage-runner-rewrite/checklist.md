@@ -22,7 +22,7 @@ created: 2026-05-17
 | 7 | [phase-07-settings-ui-matrix.md](./phase-07-settings-ui-matrix.md) | 9 | 9 | 100% | completed | `bf1e1f4` |
 | 8 | [phase-08-followup-route.md](./phase-08-followup-route.md) | 4 | 4 | 100% | completed | `98e5701` |
 | 9 | [phase-09-integration-tests.md](./phase-09-integration-tests.md) | 7 | 5 | 71% | completed | `ff450f3` |
-| 10 | [phase-10-docs-and-skill-deprecation.md](./phase-10-docs-and-skill-deprecation.md) | 4 | 4 | 100% | completed | `{commit-10}` |
+| 10 | [phase-10-docs-and-skill-deprecation.md](./phase-10-docs-and-skill-deprecation.md) | 4 | 4 | 100% | completed | `951f47b` |
 | **Total** | | **72** | **70** | **97%** | | |
 
 ## Phase 의존성
