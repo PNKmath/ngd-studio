@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Cpu, KeyRound, Settings2, Sparkles, Workflow } from "lucide-react";
+import { Check, Cpu, KeyRound, Loader2, PlugZap, Settings2, Sparkles, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AI_STAGE_KEYS,
@@ -56,6 +56,13 @@ interface EnvKeyStatus {
   value?: string;
 }
 
+type ApiTestProvider = "deepseek" | "gemini";
+
+interface ApiTestState {
+  status: "idle" | "running" | "success" | "error";
+  message?: string;
+}
+
 const apiKeyFields = [
   {
     key: "DEEPSEEK_API_KEY",
@@ -85,6 +92,10 @@ export default function SettingsPage() {
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [envStatus, setEnvStatus] = useState<Record<string, EnvKeyStatus>>({});
   const [envMessage, setEnvMessage] = useState("");
+  const [apiTests, setApiTests] = useState<Record<ApiTestProvider, ApiTestState>>({
+    deepseek: { status: "idle" },
+    gemini: { status: "idle" },
+  });
   const deepSeekEnabled = allModelStagesUseDeepSeek(settings.stageOverrides);
 
   useEffect(() => {
@@ -152,6 +163,29 @@ export default function SettingsPage() {
       DEEPSEEK_MODEL: data.keys?.DEEPSEEK_MODEL?.value ?? current.DEEPSEEK_MODEL ?? "",
     }));
     setEnvMessage("저장되었습니다.");
+  };
+
+  const testApiConnection = async (provider: ApiTestProvider) => {
+    setApiTests((current) => ({
+      ...current,
+      [provider]: { status: "running", message: "테스트 중..." },
+    }));
+
+    const response = await fetch("/api/env-settings/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, values: envValues }),
+    });
+    const data = await response.json().catch(() => undefined) as { ok?: boolean; message?: string; detail?: string } | undefined;
+    const message = [data?.message, data?.detail].filter(Boolean).join(" · ") || "테스트 실패";
+
+    setApiTests((current) => ({
+      ...current,
+      [provider]: {
+        status: response.ok && data?.ok ? "success" : "error",
+        message,
+      },
+    }));
   };
 
   return (
@@ -388,6 +422,49 @@ export default function SettingsPage() {
                   저장
                 </Button>
               </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-card">
+            <div className="border-b px-4 py-4">
+              <h2 className="text-base font-medium">연결 테스트</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                현재 입력값 또는 저장된 값을 사용해 provider 인증을 확인합니다.
+              </p>
+            </div>
+
+            <div className="grid gap-3 p-4 md:grid-cols-2">
+              {([
+                { provider: "deepseek", label: "DeepSeek" },
+                { provider: "gemini", label: "Nano Banana / Gemini" },
+              ] as const).map((item) => {
+                const state = apiTests[item.provider];
+                const running = state.status === "running";
+
+                return (
+                  <div key={item.provider} className="rounded-lg border px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium">{item.label}</div>
+                        <div className={cn(
+                          "mt-1 text-xs",
+                          state.status === "success" ? "text-primary" : state.status === "error" ? "text-destructive" : "text-muted-foreground"
+                        )}>
+                          {state.message ?? "아직 테스트하지 않음"}
+                        </div>
+                      </div>
+                      <Button
+                        variant="secondary"
+                        onClick={() => testApiConnection(item.provider)}
+                        disabled={running}
+                      >
+                        {running ? <Loader2 className="size-4 animate-spin" /> : <PlugZap className="size-4" />}
+                        테스트
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </section>
