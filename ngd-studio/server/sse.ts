@@ -25,6 +25,9 @@ import { runCheckerStage, type CheckerStageOutput } from "./stages/checker";
 import { fileEvent, logEvent, progressEvent, resultEvent, stageEvent } from "./stages/events";
 import { createJobStore } from "./stages/jobStore";
 import { runLegacyPromptJob } from "./stages/jobRunner";
+import { runStageOrchestrator } from "./stages/orchestrator";
+import { shouldUseCodeOrchestrator } from "./stages/branchHelper";
+export { shouldUseCodeOrchestrator } from "./stages/branchHelper";
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
 const __server_file = fileURLToPath(import.meta.url);
@@ -213,8 +216,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   };
 
   // 문제별 이미지 경로 생성
-  const questionImages = files?.questionImages ?? [];
-  const questionImagePaths = questionImages.map((num: number) => {
+  const questionImagePaths = (files?.questionImages ?? []).map((num: number) => {
     const padded = String(num).padStart(2, "0");
     return {
       number: num,
@@ -247,7 +249,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     provider: resolvedProvider,
     stageOverrides,
     status: "running",
-    inputFiles: [resolvedFiles.pdf, resolvedFiles.hwpx],
+    inputFiles: [resolvedFiles.pdf, resolvedFiles.hwpx].filter(Boolean),
     stages: [],
     logs: [],
     startedAt: new Date().toISOString(),
@@ -290,7 +292,24 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   try {
     const deterministicBuilder = mode === "resume" && (meta?.resumeFrom === "builder" || meta?.resumeFrom === "confirm");
     const deterministicChecker = mode === "resume" && meta?.resumeFrom === "checker";
-    if (deterministicBuilder) {
+    const useCodeOrchestrator = shouldUseCodeOrchestrator(mode, stageOverrides);
+
+    if (useCodeOrchestrator) {
+      const orchResult = await runStageOrchestrator({
+        mode: mode as "create" | "resume",
+        resumeFrom: meta?.resumeFrom,
+        meta: meta ?? {},
+        questionImages: questionImagePaths,
+        stageOverrides,
+        baseDir: BASE_DIR,
+        send,
+        isAborted: () => clientDisconnected,
+      });
+      outputFile = orchResult.outputFile ?? "";
+      resultSummary = orchResult.resultSummary ?? "";
+      finalStatus = orchResult.status;
+      providerTelemetry = orchResult.providerTelemetry;
+    } else if (deterministicBuilder) {
       send(stageEvent("builder", "running"));
       send(progressEvent("builder", 5));
       send(logEvent("builder", "deterministic builder runner를 실행합니다."));
@@ -468,3 +487,4 @@ function inferPrimaryStageKey(mode: string, resumeFrom?: string): AIStageKey | u
   }
   return undefined;
 }
+
