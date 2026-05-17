@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, Cpu, KeyRound, Loader2, PlugZap, Settings2, Sparkles, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -88,7 +88,7 @@ const apiKeyFields = [
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("engine");
-  const [settings, setSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
+  const [settings, setSettings] = useState<AISettings>(() => readAISettings());
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [envStatus, setEnvStatus] = useState<Record<string, EnvKeyStatus>>({});
   const [envMessage, setEnvMessage] = useState("");
@@ -98,12 +98,7 @@ export default function SettingsPage() {
   });
   const deepSeekEnabled = allModelStagesUseDeepSeek(settings.stageOverrides);
 
-  useEffect(() => {
-    setSettings(readAISettings());
-    void loadEnvSettings();
-  }, []);
-
-  const loadEnvSettings = async () => {
+  const loadEnvSettings = useCallback(async () => {
     const response = await fetch("/api/env-settings");
     if (!response.ok) return;
     const data = await response.json() as { keys?: Record<string, EnvKeyStatus> };
@@ -113,7 +108,11 @@ export default function SettingsPage() {
       DEEPSEEK_API_BASE_URL: data.keys?.DEEPSEEK_API_BASE_URL?.value ?? current.DEEPSEEK_API_BASE_URL ?? "",
       DEEPSEEK_MODEL: data.keys?.DEEPSEEK_MODEL?.value ?? current.DEEPSEEK_MODEL ?? "",
     }));
-  };
+  }, []);
+
+  useEffect(() => {
+    queueMicrotask(() => void loadEnvSettings());
+  }, [loadEnvSettings]);
 
   const selectProvider = (provider: SelectableProviderId) => {
     setSettings(writeAISettings({ ...settings, defaultProvider: provider }));

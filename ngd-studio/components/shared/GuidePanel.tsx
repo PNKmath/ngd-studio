@@ -303,7 +303,7 @@ export const createGuidePages: GuidePage[] = [
           <List items={[
             <>서체: <Code>나눔고딕 10</Code>, 수식크기 <Code>11</Code>, 수식서체 <Code>HYhwpEQ</Code></>,
             <>F6 스타일: <Code>바탕글</Code> 1개만 (다른 스타일 없어야 함)</>,
-            <><Code>styleIDRef="0"</Code> (바탕글) 하나만 사용</>,
+            <><Code>{"styleIDRef=\"0\""}</Code> (바탕글) 하나만 사용</>,
           ]} />
         </Section>
         <Section title="배점">
@@ -311,7 +311,7 @@ export const createGuidePages: GuidePage[] = [
             "문제 텍스트와 배점 사이는 한 칸 띄움",
             <>배점 숫자는 반드시 수식(<Code>{"<hp:equation>"}</Code>)으로 입력</>,
             <>형식: <Code>{"[수식(배점)점]"}</Code></>,
-            <>배점이 다음 줄로 넘어가면: 오른쪽 정렬 (<Code>paraPrIDRef="4"</Code>)</>,
+            <>배점이 다음 줄로 넘어가면: 오른쪽 정렬 (<Code>{"paraPrIDRef=\"4\""}</Code>)</>,
           ]} />
         </Section>
         <Section title="선지 간격">
@@ -421,7 +421,7 @@ export const createGuidePages: GuidePage[] = [
         </Section>
         <Section title="Case 1: 단서 조항이 한 줄">
           <List items={[
-            <>엔터 치고 오른쪽 정렬 (<Code>paraPrIDRef="4"</Code>)</>,
+            <>엔터 치고 오른쪽 정렬 (<Code>{"paraPrIDRef=\"4\""}</Code>)</>,
           ]} />
           <Example label="예시">
 {`좌표평면 위의 네 점 A(-2, -1), B(-3, a), C(b, c), D(2, 0)에 대하여
@@ -442,7 +442,7 @@ P(0≤Z≤3)=0.4987로 계산하다.) [4.3점]`}
         </Section>
         <Section title="배점만 남는 경우">
           <List items={[
-            <>단서 조항을 이어서 쓴 후에도 배점만 남으면: 배점만 따로 오른쪽 정렬 (<Code>paraPrIDRef="4"</Code>)</>,
+            <>단서 조항을 이어서 쓴 후에도 배점만 남으면: 배점만 따로 오른쪽 정렬 (<Code>{"paraPrIDRef=\"4\""}</Code>)</>,
           ]} />
         </Section>
       </>
@@ -484,7 +484,7 @@ P(0≤Z≤3)=0.4987로 계산하다.) [4.3점]`}
         <Section title="난이도">
           <List items={[
             <>4단계: <Code>하</Code> / <Code>중</Code> / <Code>상</Code> / <Code>킬</Code></>,
-            "\"최상\", \"최하\", \"보통\" 등 비표준 난이도 금지",
+            <>{`"최상", "최하", "보통" 등 비표준 난이도 금지`}</>,
           ]} />
         </Section>
       </>
@@ -497,8 +497,8 @@ P(0≤Z≤3)=0.4987로 계산하다.) [4.3점]`}
         <Section title="그림 배치">
           <List items={[
             "모든 생성 그림에 NGD 워터마크 필수 (오른쪽 하단, 작고 연한 회색)",
-            <>오른쪽 배치: 문제 첫 어절 뒤, <Code>textWrap="AROUND"</Code> + <Code>horzAlign="RIGHT"</Code> + <Code>vertAlign="TOP"</Code></>,
-            <>단독 배치 (중간/끝): <Code>treatAsChar="1"</Code> + <Code>paraPrIDRef="2"</Code> (가운데 정렬)</>,
+            <>오른쪽 배치: 문제 첫 어절 뒤, <Code>{"textWrap=\"AROUND\""}</Code> + <Code>{"horzAlign=\"RIGHT\""}</Code> + <Code>{"vertAlign=\"TOP\""}</Code></>,
+            <>단독 배치 (중간/끝): <Code>{"treatAsChar=\"1\""}</Code> + <Code>{"paraPrIDRef=\"2\""}</Code> (가운데 정렬)</>,
           ]} />
         </Section>
         <Section title="박스 종류 (5가지)">

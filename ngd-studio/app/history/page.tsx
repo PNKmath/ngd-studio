@@ -41,7 +41,7 @@ export default function HistoryPage() {
   }, []);
 
   useEffect(() => {
-    fetchJobs();
+    void Promise.resolve().then(fetchJobs);
   }, [fetchJobs]);
 
   const filtered = jobs.filter((j) => {

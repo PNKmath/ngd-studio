@@ -75,13 +75,15 @@ export default function CreatePage() {
   // store v3Meta → 폼 자동 복원 (새로고침 후 idle 복귀 케이스)
   useEffect(() => {
     if (!v3Meta || hasJob) return; // 진행 중이면 폼 안 보임 → 복원 의미 없음
-    setMeta({
-      school: v3Meta.school ?? "",
-      grade: v3Meta.grade ?? 2,
-      subject: v3Meta.subject ?? "수학 I",
-      semester: v3Meta.semester ?? "1학기",
-      examType: v3Meta.examType ?? "중간",
-      range: v3Meta.range ?? "",
+    queueMicrotask(() => {
+      setMeta({
+        school: v3Meta.school ?? "",
+        grade: v3Meta.grade ?? 2,
+        subject: v3Meta.subject ?? "수학 I",
+        semester: v3Meta.semester ?? "1학기",
+        examType: v3Meta.examType ?? "중간",
+        range: v3Meta.range ?? "",
+      });
     });
   }, [v3Meta, hasJob]);
 
@@ -173,7 +175,7 @@ export default function CreatePage() {
         clearInterval(figureIntervalRef.current);
         figureIntervalRef.current = null;
       }
-      setFigureStatus(null);
+      queueMicrotask(() => setFigureStatus(null));
       return;
     }
 
@@ -210,7 +212,7 @@ export default function CreatePage() {
         clearInterval(buildIntervalRef.current);
         buildIntervalRef.current = null;
       }
-      setBuildStatus(null);
+      queueMicrotask(() => setBuildStatus(null));
       return;
     }
 
@@ -415,6 +417,7 @@ export default function CreatePage() {
               {figureStatus.images.length > 0 ? (
                 <div className="grid grid-cols-4 gap-2">
                   {figureStatus.images.map((imgPath) => (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       key={imgPath}
                       src={`/api/file?path=${imgPath}`}

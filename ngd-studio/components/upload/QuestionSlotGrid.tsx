@@ -34,7 +34,6 @@ export function QuestionSlotGrid({
   const [expandedSlot, setExpandedSlot] = useState<number | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
-  const gridRef = useRef<HTMLDivElement>(null);
 
   // Update max questions
   const updateSlotCount = useCallback(
@@ -120,12 +119,9 @@ export function QuestionSlotGrid({
     []
   );
 
-  // Notify parent after slots state settles
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
   useEffect(() => {
-    onChangeRef.current?.(slots);
-  }, [slots]);
+    onChange?.(slots);
+  }, [slots, onChange]);
 
   // Clipboard paste handler
   const handlePaste = useCallback(
@@ -229,6 +225,7 @@ export function QuestionSlotGrid({
   }, []);
 
   const filledCount = slots.filter((s) => s.file !== null).length;
+  const expandedPreviewUrl = expandedSlot ? slots[expandedSlot - 1]?.previewUrl : null;
 
   return (
     <div className="space-y-3">
@@ -281,7 +278,7 @@ export function QuestionSlotGrid({
                 if (slot.file) clearSlot(i, e as unknown as React.MouseEvent);
               }
             }}
-            onClick={(e) => {
+            onClick={() => {
               setSelectedSlot(slot.number);
               if (slot.previewUrl) {
                 // Double-click to expand
@@ -386,10 +383,10 @@ export function QuestionSlotGrid({
               </button>
             </div>
             <div className="overflow-auto max-h-[calc(85vh-48px)] p-4">
-              {slots[expandedSlot - 1]?.previewUrl && (
+              {expandedPreviewUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={slots[expandedSlot - 1].previewUrl!}
+                  src={expandedPreviewUrl}
                   alt={`Q${expandedSlot} expanded`}
                   className="w-full object-contain"
                 />

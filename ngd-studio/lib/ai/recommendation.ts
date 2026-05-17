@@ -1,4 +1,4 @@
-import type { AIProviderId, AIStageKey, ResolvedAIProviderId } from "./types";
+import type { AIStageKey, ResolvedAIProviderId } from "./types";
 import type { ProviderTelemetryEntry } from "./retry";
 import type { StageOverrideMap } from "./settings";
 

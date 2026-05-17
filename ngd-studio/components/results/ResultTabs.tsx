@@ -17,7 +17,7 @@ export function ResultTabs() {
   const [showReport, setShowReport] = useState(false);
   useEffect(() => {
     if ((status === "done" || status === "failed") && result?.summary) {
-      setShowReport(true);
+      queueMicrotask(() => setShowReport(true));
     }
   }, [status, result?.summary]);
 
@@ -180,6 +180,7 @@ function ImageFileItem({ file }: { file: { name: string; path: string } }) {
             <polyline points="21 15 16 10 5 21" />
           </svg>
         ) : (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imgSrc}
             alt={file.name}

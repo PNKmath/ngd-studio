@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useJobStore, type QuestionResult } from "@/lib/store";
@@ -456,8 +456,9 @@ function FigureResultSection({
   onRetryFigure: (qNum: number) => void;
   onRetryAll: () => void;
 }) {
-  const figureProblems = entries.filter(
-    (q) => (q.extracted as Record<string, unknown> | undefined)?.has_figure
+  const figureProblems = useMemo(
+    () => entries.filter((q) => (q.extracted as Record<string, unknown> | undefined)?.has_figure),
+    [entries]
   );
 
   const [loadedSet, setLoadedSet] = useState<Set<number>>(new Set());
@@ -476,7 +477,7 @@ function FigureResultSection({
       });
     }, 3000);
     return () => clearInterval(timer);
-  }, [figureProblems.length, loadedSet]);
+  }, [figureProblems, loadedSet]);
 
   const handleRetry = (qNum: number) => {
     setLoadedSet((prev) => { const s = new Set(prev); s.delete(qNum); return s; });
@@ -572,7 +573,7 @@ function ActionButtons({ qNum }: { qNum: number }) {
     const instruction = `resume --q=${qNum} --from=${from}`;
     await sendResumeAction(jobId, instruction, store);
     setLoading(null);
-  }, [jobId, qNum, store]);
+  }, [jobId, loading, qNum, store]);
 
   const handleImageReplace = useCallback(async (file: File) => {
     if (!jobId || loading !== null) return;
