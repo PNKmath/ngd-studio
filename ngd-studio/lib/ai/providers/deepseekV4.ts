@@ -1,6 +1,7 @@
 import { EventEmitter } from "events";
 import type { ChildProcess } from "child_process";
 import type { ClaudeEvent } from "../../claude";
+import { getRuntimeEnvValue } from "../../server/runtimeEnv";
 import type { AIProviderAdapter, AIStageKey, ProviderRunOptions, ProviderRunResult } from "../types";
 
 export const DEEPSEEK_ALLOWED_STAGES: AIStageKey[] = [
@@ -78,9 +79,9 @@ async function* runDeepSeek(prompt: string, options: ProviderRunOptions | undefi
     return;
   }
 
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  const baseUrl = process.env.DEEPSEEK_API_BASE_URL || "https://api.deepseek.com";
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-v4";
+  const apiKey = getRuntimeEnvValue("DEEPSEEK_API_KEY");
+  const baseUrl = getRuntimeEnvValue("DEEPSEEK_API_BASE_URL") || "https://api.deepseek.com";
+  const model = getRuntimeEnvValue("DEEPSEEK_MODEL") || "deepseek-v4";
   if (!apiKey) {
     yield resultEvent("error", "DEEPSEEK_API_KEY is not configured.");
     close(1);

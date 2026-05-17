@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
+import { readRuntimeEnv } from "@/lib/server/runtimeEnv";
 
 export const maxDuration = 180;
 
@@ -28,7 +29,14 @@ export async function POST(req: NextRequest) {
     const { stdout, stderr } = await execFileAsync(
       pythonCmd,
       [scriptPath, fullPath, "--json-only"],
-      { timeout: 180000, maxBuffer: 16 * 1024 * 1024 },
+      {
+        timeout: 180000,
+        maxBuffer: 16 * 1024 * 1024,
+        env: {
+          ...process.env,
+          ...readRuntimeEnv(),
+        },
+      },
     );
 
     let parsed: unknown;

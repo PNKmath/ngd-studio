@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Cpu, Settings2, Sparkles, Workflow } from "lucide-react";
+import { Check, Cpu, KeyRound, Settings2, Sparkles, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AI_STAGE_KEYS,
@@ -49,13 +49,60 @@ const stageLabels: Record<(typeof AI_STAGE_KEYS)[number], string> = {
   "review.reviewer": "오검 리뷰",
 };
 
+type SettingsTab = "engine" | "keys";
+
+interface EnvKeyStatus {
+  configured: boolean;
+  value?: string;
+}
+
+const apiKeyFields = [
+  {
+    key: "DEEPSEEK_API_KEY",
+    label: "DeepSeek API Key",
+    placeholder: "sk-...",
+  },
+  {
+    key: "GEMINI_API_KEY",
+    label: "Nano Banana / Gemini API Key",
+    placeholder: "AIza...",
+  },
+  {
+    key: "DEEPSEEK_API_BASE_URL",
+    label: "DeepSeek API Base URL",
+    placeholder: "https://api.deepseek.com",
+  },
+  {
+    key: "DEEPSEEK_MODEL",
+    label: "DeepSeek Model",
+    placeholder: "deepseek-v4",
+  },
+] as const;
+
 export default function SettingsPage() {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("engine");
   const [settings, setSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
+  const [envValues, setEnvValues] = useState<Record<string, string>>({});
+  const [envStatus, setEnvStatus] = useState<Record<string, EnvKeyStatus>>({});
+  const [envMessage, setEnvMessage] = useState("");
   const deepSeekEnabled = allModelStagesUseDeepSeek(settings.stageOverrides);
 
   useEffect(() => {
     setSettings(readAISettings());
+    void loadEnvSettings();
   }, []);
+
+  const loadEnvSettings = async () => {
+    const response = await fetch("/api/env-settings");
+    if (!response.ok) return;
+    const data = await response.json() as { keys?: Record<string, EnvKeyStatus> };
+    setEnvStatus(data.keys ?? {});
+    setEnvValues((current) => ({
+      ...current,
+      DEEPSEEK_API_BASE_URL: data.keys?.DEEPSEEK_API_BASE_URL?.value ?? current.DEEPSEEK_API_BASE_URL ?? "",
+      DEEPSEEK_MODEL: data.keys?.DEEPSEEK_MODEL?.value ?? current.DEEPSEEK_MODEL ?? "",
+    }));
+  };
 
   const selectProvider = (provider: SelectableProviderId) => {
     setSettings(writeAISettings({ ...settings, defaultProvider: provider }));
@@ -79,9 +126,64 @@ export default function SettingsPage() {
     setSettings(writeAISettings(DEFAULT_AI_SETTINGS));
   };
 
+  const saveEnvSettings = async () => {
+    setEnvMessage("");
+    const values = Object.fromEntries(
+      Object.entries(envValues).filter(([key, value]) => !key.endsWith("_API_KEY") || value.trim())
+    );
+    const response = await fetch("/api/env-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ values }),
+    });
+
+    if (!response.ok) {
+      setEnvMessage("저장에 실패했습니다.");
+      return;
+    }
+
+    const data = await response.json() as { keys?: Record<string, EnvKeyStatus> };
+    setEnvStatus(data.keys ?? {});
+    setEnvValues((current) => ({
+      ...current,
+      DEEPSEEK_API_KEY: "",
+      GEMINI_API_KEY: "",
+      DEEPSEEK_API_BASE_URL: data.keys?.DEEPSEEK_API_BASE_URL?.value ?? current.DEEPSEEK_API_BASE_URL ?? "",
+      DEEPSEEK_MODEL: data.keys?.DEEPSEEK_MODEL?.value ?? current.DEEPSEEK_MODEL ?? "",
+    }));
+    setEnvMessage("저장되었습니다.");
+  };
+
   return (
     <div className="max-w-4xl space-y-6">
-      <section className="space-y-3">
+      <div className="flex w-fit rounded-lg border bg-card p-1">
+        {([
+          { id: "engine", label: "AI 엔진", icon: Cpu },
+          { id: "keys", label: "API 키", icon: KeyRound },
+        ] as const).map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex h-9 items-center gap-2 rounded-md px-3 text-sm transition-colors",
+                active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <Icon className="size-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === "engine" ? (
+        <>
+          <section className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Cpu className="size-4" />
           AI 엔진
@@ -228,6 +330,68 @@ export default function SettingsPage() {
           </Button>
         </div>
       </section>
+        </>
+      ) : (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <KeyRound className="size-4" />
+            API 키
+          </div>
+
+          <div className="rounded-lg border bg-card">
+            <div className="border-b px-4 py-4">
+              <h2 className="text-base font-medium">로컬 API 키</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                입력한 값은 이 앱의 `.env.local`에 저장되고 다음 실행부터 바로 사용됩니다.
+              </p>
+            </div>
+
+            <div className="grid gap-4 p-4">
+              {apiKeyFields.map((field) => {
+                const configured = Boolean(envStatus[field.key]?.configured);
+                const isSecret = field.key.endsWith("_API_KEY");
+
+                return (
+                  <label key={field.key} className="grid gap-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium">{field.label}</span>
+                      <span className={cn(
+                        "rounded-md px-2 py-1 text-xs",
+                        configured ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
+                        {configured ? "설정됨" : "미설정"}
+                      </span>
+                    </div>
+                    <input
+                      type={isSecret ? "password" : "text"}
+                      value={envValues[field.key] ?? ""}
+                      onChange={(event) => setEnvValues({
+                        ...envValues,
+                        [field.key]: event.target.value,
+                      })}
+                      placeholder={isSecret && configured ? "새 값 입력 시 교체" : field.placeholder}
+                      className="h-10 rounded-md border bg-background px-3 text-sm outline-none transition-colors focus:border-primary"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t px-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                빈 API key 입력란은 기존 값을 유지합니다.
+              </p>
+              <div className="flex items-center gap-3">
+                {envMessage ? <span className="text-sm text-muted-foreground">{envMessage}</span> : null}
+                <Button onClick={saveEnvSettings}>
+                  <KeyRound className="size-4" />
+                  저장
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
