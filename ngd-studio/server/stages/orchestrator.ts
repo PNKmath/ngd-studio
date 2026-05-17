@@ -461,6 +461,8 @@ async function runSolverStageGroup(opts: StageGroupOptions): Promise<void> {
   send(progressEvent("solver", 0));
 
   const provider = getProviderForStage("create.solver", stageOverrides);
+  send(logEvent("solver",
+    `${provider.label} 으로 ${questionNumbers.length}문제 풀이 시작 (동시 ${SOLVER_CONCURRENCY})`));
 
   let completed = 0;
   const failed: number[] = [];
@@ -470,8 +472,16 @@ async function runSolverStageGroup(opts: StageGroupOptions): Promise<void> {
     questionNumbers,
     async (n) => {
       if (isAborted()) throw new Error("aborted");
+      send(logEvent("solver", `Q${n} 풀이 시작`));
       const extracted = await readCacheJson(cache.extractorResultPath(n));
-      return runSolverStage({ questionNumber: n, extracted, cache, provider, signal });
+      const result = await runSolverStage({ questionNumber: n, extracted, cache, provider, signal });
+      if (result.status === "completed") {
+        send(logEvent("solver", `Q${n} 풀이 완료`));
+      } else {
+        send(logEvent("solver",
+          `Q${n} 풀이 실패: ${result.error?.message ?? "unknown"}`, "error"));
+      }
+      return result;
     }
   );
 
@@ -536,6 +546,8 @@ async function runVerifierStageGroup(opts: StageGroupOptions): Promise<void> {
 
   const solverProvider = getProviderForStage("create.solver", stageOverrides);
   const verifierProvider = getProviderForStage("create.verifier", stageOverrides);
+  send(logEvent("verifier",
+    `${verifierProvider.label} 으로 ${questionNumbers.length}문제 검증 시작 (동시 ${VERIFIER_CONCURRENCY})`));
 
   let completed = 0;
   const failed: number[] = [];
@@ -545,6 +557,7 @@ async function runVerifierStageGroup(opts: StageGroupOptions): Promise<void> {
     questionNumbers,
     async (n) => {
       if (isAborted()) throw new Error("aborted");
+      send(logEvent("verifier", `Q${n} 검증 시작`));
 
       const extracted = await readCacheJson(cache.extractorResultPath(n));
       let solved = await readCacheJson(cache.solverResultPath(n));
@@ -586,17 +599,23 @@ async function runVerifierStageGroup(opts: StageGroupOptions): Promise<void> {
         }
 
         if (verifierResult.status === "completed" && verifierResult.output?.status === "pass") {
+          send(logEvent("verifier", `Q${n} 검증 완료 (시도 ${attempt + 1}회)`));
           return verifierResult;
         }
 
         attempt++;
 
         // After last attempt, do not re-run solver — just return what we have.
-        if (attempt >= MAX_ATTEMPTS) break;
+        if (attempt >= MAX_ATTEMPTS) {
+          send(logEvent("verifier",
+            `Q${n} 검증 실패: ${MAX_ATTEMPTS}회 시도 후에도 pass 못함`, "warn"));
+          break;
+        }
         if (isAborted()) throw new Error("aborted");
 
         // Re-run solver with verifier feedback before the next verifier attempt.
         const feedback = verifierResult.output?.feedback;
+        send(logEvent("verifier", `Q${n} 검증 fail — 재풀이 (시도 ${attempt + 1}/${MAX_ATTEMPTS})`));
         const solverResult = await runSolverStage({
           questionNumber: n,
           extracted,
