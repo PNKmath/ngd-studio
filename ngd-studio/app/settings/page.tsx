@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Cpu, Settings2, Workflow } from "lucide-react";
+import { Check, Cpu, Settings2, Sparkles, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AI_STAGE_KEYS,
   DEFAULT_AI_SETTINGS,
+  allModelStagesUseDeepSeek,
+  createDeepSeekStageOverrides,
   readAISettings,
   writeAISettings,
   type AISettings,
   type SelectableProviderId,
-  type StageProviderId,
 } from "@/lib/ai/settings";
 import { recommendStageProvider } from "@/lib/ai/recommendation";
 import { cn } from "@/lib/utils";
@@ -48,18 +49,9 @@ const stageLabels: Record<(typeof AI_STAGE_KEYS)[number], string> = {
   "review.reviewer": "오검 리뷰",
 };
 
-const stageProviderOptions: {
-  id: StageProviderId;
-  label: string;
-}[] = [
-  { id: "auto", label: "자동" },
-  { id: "claude", label: "Claude" },
-  { id: "codex", label: "Codex" },
-  { id: "deepseek-v4", label: "DeepSeek" },
-];
-
 export default function SettingsPage() {
   const [settings, setSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
+  const deepSeekEnabled = allModelStagesUseDeepSeek(settings.stageOverrides);
 
   useEffect(() => {
     setSettings(readAISettings());
@@ -69,16 +61,17 @@ export default function SettingsPage() {
     setSettings(writeAISettings({ ...settings, defaultProvider: provider }));
   };
 
-  const selectStageProvider = (
-    stageKey: (typeof AI_STAGE_KEYS)[number],
-    provider: StageProviderId
-  ) => {
+  const enableDeepSeek = () => {
     setSettings(writeAISettings({
       ...settings,
-      stageOverrides: {
-        ...settings.stageOverrides,
-        [stageKey]: provider,
-      },
+      stageOverrides: createDeepSeekStageOverrides(),
+    }));
+  };
+
+  const disableDeepSeek = () => {
+    setSettings(writeAISettings({
+      ...settings,
+      stageOverrides: {},
     }));
   };
 
@@ -158,62 +151,63 @@ export default function SettingsPage() {
         </div>
 
         <div className="rounded-lg border bg-card">
-          <div className="border-b px-4 py-4">
-            <h2 className="text-base font-medium">단계별 실행 엔진</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              외부 API provider는 여기에서 선택한 단계에만 적용됩니다.
-            </p>
+          <div className="flex items-start justify-between gap-4 border-b px-4 py-4">
+            <div>
+              <h2 className="text-base font-medium">AI 단계 DeepSeek</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                제작 추출, 풀이, 검증, 오검 리뷰 단계에만 적용됩니다.
+              </p>
+            </div>
+            <Button
+              variant={deepSeekEnabled ? "secondary" : "default"}
+              onClick={deepSeekEnabled ? disableDeepSeek : enableDeepSeek}
+            >
+              <Sparkles className="size-4" />
+              {deepSeekEnabled ? "자동으로 전환" : "DeepSeek 사용"}
+            </Button>
           </div>
 
-          <div className="divide-y">
+          <div className="grid gap-2 p-4 md:grid-cols-2">
             {AI_STAGE_KEYS.map((stageKey) => {
-              const selected = settings.stageOverrides[stageKey] ?? "auto";
               const recommendation = recommendStageProvider({
                 stageKey,
                 stageOverrides: settings.stageOverrides,
                 telemetry: [],
               });
+              const active = settings.stageOverrides[stageKey] === "deepseek-v4";
 
               return (
                 <div
                   key={stageKey}
-                  className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(140px,1fr)_minmax(0,2fr)] md:items-center"
+                  className={cn(
+                    "flex min-h-20 items-center justify-between gap-3 rounded-lg border px-4 py-3",
+                    active ? "border-primary bg-primary/5" : "border-border bg-background"
+                  )}
                 >
                   <div>
                     <div className="text-sm font-medium">{stageLabels[stageKey]}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      {stageKey} · 추천 {recommendation.provider}
+                      {stageKey} · 실행 {recommendation.provider}
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {stageProviderOptions.map((option) => {
-                      const active = option.id === selected;
-
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => selectStageProvider(stageKey, option.id)}
-                          className={cn(
-                            "flex h-10 items-center justify-center gap-2 rounded-md border px-3 text-sm transition-colors",
-                            active
-                              ? "border-primary bg-primary/5 text-foreground"
-                              : "border-border text-muted-foreground hover:border-primary/40 hover:bg-muted/40"
-                          )}
-                        >
-                          <Check
-                            className={cn("size-3.5", active ? "text-primary" : "text-transparent")}
-                            aria-hidden="true"
-                          />
-                          <span>{option.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <span
+                    className={cn(
+                      "flex size-5 items-center justify-center rounded-full border",
+                      active
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-muted-foreground/30 text-transparent"
+                    )}
+                    aria-hidden="true"
+                  >
+                    <Check className="size-3.5" />
+                  </span>
                 </div>
               );
             })}
+          </div>
+
+          <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+            builder, checker, cropper는 로컬 deterministic runner가 처리합니다.
           </div>
         </div>
       </section>
@@ -223,7 +217,7 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-base font-medium">현재 선택</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              다음 작업부터 `{settings.defaultProvider}` provider와 stage override가 요청 본문에 포함됩니다.
+              다음 작업부터 `{settings.defaultProvider}` provider와 AI 단계 설정이 요청 본문에 포함됩니다.
             </p>
           </div>
           <Button

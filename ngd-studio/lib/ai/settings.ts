@@ -11,6 +11,7 @@ export const AI_STAGE_KEYS: AIStageKey[] = [
   "create.verifier",
   "review.reviewer",
 ];
+export const DEEPSEEK_MODEL_STAGE_KEYS: AIStageKey[] = AI_STAGE_KEYS;
 export const DEFAULT_AI_SETTINGS: AISettings = {
   defaultProvider: "auto",
   stageOverrides: {},
@@ -52,6 +53,16 @@ export function normalizeStageOverrides(value: unknown): StageOverrideMap {
     }
   }
   return normalized;
+}
+
+export function createDeepSeekStageOverrides(): StageOverrideMap {
+  return Object.fromEntries(
+    DEEPSEEK_MODEL_STAGE_KEYS.map((stageKey) => [stageKey, "deepseek-v4"])
+  ) as StageOverrideMap;
+}
+
+export function allModelStagesUseDeepSeek(stageOverrides: StageOverrideMap): boolean {
+  return DEEPSEEK_MODEL_STAGE_KEYS.every((stageKey) => stageOverrides[stageKey] === "deepseek-v4");
 }
 
 export function readAISettings(storage = getBrowserStorage()): AISettings {

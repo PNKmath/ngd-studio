@@ -3,6 +3,8 @@ import {
   AI_SETTINGS_STORAGE_KEY,
   DEFAULT_AI_SETTINGS,
   AI_STAGE_KEYS,
+  allModelStagesUseDeepSeek,
+  createDeepSeekStageOverrides,
   isAIStageKey,
   isSelectableProviderId,
   isStageProviderId,
@@ -70,6 +72,22 @@ describe("AI settings storage", () => {
       "create.extractor": "deepseek-v4",
       "create.verifier": "codex",
     });
+  });
+
+  it("creates DeepSeek overrides for all model-call stages only", () => {
+    expect(createDeepSeekStageOverrides()).toEqual({
+      "create.extractor": "deepseek-v4",
+      "create.solver": "deepseek-v4",
+      "create.verifier": "deepseek-v4",
+      "review.reviewer": "deepseek-v4",
+    });
+    expect(allModelStagesUseDeepSeek(createDeepSeekStageOverrides())).toBe(true);
+    expect(normalizeStageOverrides({
+      ...createDeepSeekStageOverrides(),
+      builder: "deepseek-v4",
+      checker: "deepseek-v4",
+      cropper: "deepseek-v4",
+    })).toEqual(createDeepSeekStageOverrides());
   });
 
   it("reads and writes stage overrides with the same payload", () => {
