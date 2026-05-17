@@ -63,7 +63,7 @@ const EXTRACTED_Q3 = {
 
 const SOLVED_OUTPUT = {
   answer: "①",
-  explanation: [{ kind: "text" as const, content: "정답 설명입니다." }],
+  explanation_parts: [{ t: "정답 설명입니다." }],
 };
 
 const VERIFIED_OUTPUT_PASS = {
@@ -367,9 +367,10 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
     expect(questionEvents.length).toBeGreaterThanOrEqual(6); // 3 solved + 3 verified
   }, 30_000);
 
-  it("full flow from extractor review: 3 questions → extraction_review pause, then resume from solver → done", async () => {
-    // Run extractor mock first — it pre-writes extracted files and pauses.
-    const { events: events1, send: send1 } = makeSseCollector();
+  it("full pipeline from create: extractor → solver → verifier → done (per-question, no pause)", async () => {
+    // Per-question pipeline: extractor runs, then immediately flows to solver+verifier.
+    // No extraction_review pause — auto-continue to solver.
+    const { events, send } = makeSseCollector();
     const questionNums = [1, 2, 3];
     const questionImages = questionNums.map((n) => ({
       number: n,
@@ -378,29 +379,8 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
 
     const { runStageOrchestrator } = await import("../orchestrator");
 
-    // Phase 1: extractor run → extraction_review pause.
-    const result1 = await runStageOrchestrator({
+    const result = await runStageOrchestrator({
       mode: "create",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
-      questionImages,
-      stageOverrides: { "create.extractor": "claude-sdk" },
-      baseDir,
-      send: send1,
-      isAborted: () => false,
-      cache,
-    });
-
-    // Extractor mock writes cache; orchestrator pauses with extraction_review.
-    expect(result1.status).toBe("done");
-    expect(result1.resultSummary).toBe("extraction_review_pending");
-    const reviewEvent = events1.find((e) => e.event === "extraction_review");
-    expect(reviewEvent).toBeDefined();
-
-    // Phase 2: resume from solver.
-    const { events: events2, send: send2 } = makeSseCollector();
-    const result2 = await runStageOrchestrator({
-      mode: "resume",
-      resumeFrom: "solver",
       meta: { school: "테스트고", grade: 2, subject: "수학" },
       questionImages,
       stageOverrides: {
@@ -409,15 +389,21 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
         "create.verifier": "deepseek-v4",
       },
       baseDir,
-      send: send2,
+      send,
       isAborted: () => false,
       cache,
     });
 
-    expect(result2.status).toBe("done");
-    expect(Array.isArray(result2.providerTelemetry)).toBe(true);
-    // At least solver + verifier telemetry entries.
-    expect(result2.providerTelemetry.length).toBeGreaterThanOrEqual(6);
+    // Full pipeline should complete to done.
+    expect(result.status).toBe("done");
+    expect(Array.isArray(result.providerTelemetry)).toBe(true);
+
+    // Per-question incremental extraction_review events should be emitted (one per question).
+    const reviewEvents = events.filter((e) => e.event === "extraction_review");
+    expect(reviewEvents.length).toBeGreaterThanOrEqual(3);
+
+    // At least extractor + solver + verifier telemetry (3+3+3 = 9).
+    expect(result.providerTelemetry.length).toBeGreaterThanOrEqual(9);
   }, 60_000);
 
   it("abort mid-run: returns cancelled status", async () => {

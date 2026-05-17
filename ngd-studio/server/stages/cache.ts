@@ -1,4 +1,4 @@
-import { mkdir } from "fs/promises";
+import { mkdir, access } from "fs/promises";
 import path from "path";
 
 export interface StageCachePaths {
@@ -9,6 +9,13 @@ export interface StageCachePaths {
   examData: string;
   figureStatus: string;
   buildStatus: string;
+}
+
+/** Per-question disk cache presence for resume/skip decisions. */
+export interface QuestionCacheState {
+  extracted: boolean;
+  solved: boolean;
+  verified: boolean;
 }
 
 export interface StageCache {
@@ -22,6 +29,10 @@ export interface StageCache {
   examDataPath(): string;
   ensureCacheDir(): Promise<void>;
   ensureQuestionImagesDir(): Promise<void>;
+  /** Scan disk presence of extracted/solved/verified cache files for a question. */
+  scanQuestionState(questionNumber: number): Promise<QuestionCacheState>;
+  /** Scan all questions and return a Map from question number to cache state. */
+  scanAll(numbers: number[]): Promise<Map<number, QuestionCacheState>>;
 }
 
 export function createStageCache(baseDir: string, examDir = path.join(baseDir, "inputs", "시험지 제작")): StageCache {
@@ -78,5 +89,30 @@ export class FileBackedStageCache implements StageCache {
 
   async ensureQuestionImagesDir(): Promise<void> {
     await mkdir(this.paths.questionImagesDir, { recursive: true });
+  }
+
+  async scanQuestionState(questionNumber: number): Promise<QuestionCacheState> {
+    const [extracted, solved, verified] = await Promise.all([
+      fileExists(this.extractorResultPath(questionNumber)),
+      fileExists(this.solverResultPath(questionNumber)),
+      fileExists(this.verifierResultPath(questionNumber)),
+    ]);
+    return { extracted, solved, verified };
+  }
+
+  async scanAll(numbers: number[]): Promise<Map<number, QuestionCacheState>> {
+    const entries = await Promise.all(
+      numbers.map(async (n) => [n, await this.scanQuestionState(n)] as const)
+    );
+    return new Map(entries);
+  }
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }

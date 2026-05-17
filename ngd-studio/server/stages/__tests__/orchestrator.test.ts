@@ -48,7 +48,7 @@ const VALID_EXTRACTOR_OUTPUT = {
 
 const VALID_SOLVER_OUTPUT = {
   answer: "①",
-  explanation: [{ kind: "text", content: "정답 설명" }],
+  explanation_parts: [{ t: "정답 설명" }],
 };
 
 const VALID_VERIFIER_OUTPUT_PASS = {
@@ -59,7 +59,7 @@ const VALID_VERIFIER_OUTPUT_PASS = {
 
 const VALID_VERIFIER_OUTPUT_FAIL = {
   status: "fail",
-  issues: [{ message: "answer may be wrong", severity: "error" }],
+  issues: [{ category: "math_accuracy", description: "answer may be wrong" }],
   feedback: "Check the calculation",
 };
 
@@ -239,13 +239,7 @@ describe("runStageOrchestrator", () => {
     const cache = await makeCache(baseDir);
     const { events, send } = makeSseCollector();
 
-    // Pre-write a fake extractor result so builder/checker steps can be skipped
-    // (we only run extractor in this test and expect pause).
-    const extractorProvider = makeMockProvider(VALID_EXTRACTOR_OUTPUT);
-
-    // We need to mock the module imports used by the orchestrator.
-    // Since we use actual stage functions, let's use a cache with pre-written files
-    // to skip heavier stages and just test the extractor+pause flow.
+    // Use a cache with pre-written files to skip heavier stages and test the extractor flow.
     await mkdir(cache.paths.cacheDir, { recursive: true });
 
     const result = await runStageOrchestrator({
@@ -470,31 +464,26 @@ describe("runStageOrchestrator", () => {
     expect(failures).toHaveLength(1);
   });
 
-  it("extraction_review event emitted but flow auto-continues to next stages", async () => {
+  it("resumeFrom=builder with pre-written cache: no extraction_review event (extractor skipped)", async () => {
+    // Per-question pipeline: if we resume from builder, extractor/solver/verifier are all skipped.
+    // extraction_review events are only emitted when extractor actually runs.
     const baseDir = await makeTempDir();
     const cache = await makeCache(baseDir);
     const { events, send } = makeSseCollector();
 
     await mkdir(cache.paths.cacheDir, { recursive: true });
-
-    // Pre-write extractor results so they look "completed" in cache.
-    // The orchestrator will still try to run extractor (since no resumeFrom),
-    // but since we don't have mock images, let's pre-create the extracted files
-    // and skip by setting resumeFrom=solver to test the review pause differently.
-    // Instead, let's test extraction_review event directly via a pre-populated cache approach.
-
-    // Use resumeFrom="extractor" explicitly to go through extractor stage,
-    // but pre-write cache so the stage sees "all done" and emits review event.
-    // Actually: determineStartStage with resumeFrom="extractor" always starts from extractor.
-    // The orchestrator runs extractor, then emits extraction_review.
-    // Since images don't exist, extractor will fail for all questions.
-    // But if all fail, orchestrator throws. Let's test with 0 questions instead.
+    await mkdir(path.join(baseDir, "outputs"), { recursive: true });
+    // Pre-write all per-question cache files so all AI stages are skipped.
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(VALID_EXTRACTOR_OUTPUT), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(VALID_SOLVER_OUTPUT), "utf8");
+    await writeFile(cache.verifierResultPath(1), JSON.stringify(VALID_VERIFIER_OUTPUT_PASS), "utf8");
+    await writeFile(cache.paths.examData, JSON.stringify({ info: {}, problems: [VALID_EXTRACTOR_OUTPUT] }), "utf8");
 
     const result = await runStageOrchestrator({
-      mode: "create",
-      resumeFrom: "extractor",
+      mode: "resume",
+      resumeFrom: "builder",
       meta: {},
-      questionImages: [],  // 0 questions
+      questionImages: [{ number: 1, path: "/fake/q01.png" }],
       stageOverrides: {},
       baseDir,
       send,
@@ -502,11 +491,9 @@ describe("runStageOrchestrator", () => {
       cache,
     });
 
-    // With 0 questions, extractor "completes" immediately, then orchestrator emits
-    // extraction_review (UI 알림용) and proceeds. Without pause it falls through to
-    // builder/checker, which can fail due to missing inputs — that's expected here.
-    const reviewEvent = events.find((e) => e.event === "extraction_review");
-    expect(reviewEvent).toBeDefined();
+    // No extraction_review event — extractor was skipped.
+    const reviewEvents = events.filter((e) => e.event === "extraction_review");
+    expect(reviewEvents).toHaveLength(0);
     expect(["done", "failed"]).toContain(result.status);
-  });
+  }, 10_000);
 });

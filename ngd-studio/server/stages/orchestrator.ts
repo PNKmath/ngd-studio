@@ -59,7 +59,7 @@ export interface OrchestratorResult {
 }
 
 // ──────────────────────────────────────────────
-// Concurrency helper
+// Concurrency helpers
 // ──────────────────────────────────────────────
 
 /**
@@ -94,6 +94,39 @@ export async function runWithConcurrency<T, R>(
 
   return results;
 }
+
+/**
+ * A promise-based semaphore that limits concurrent executions.
+ * acquire() waits until a slot is available, runs `fn`, then releases.
+ */
+export function semaphore(max: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+
+  return {
+    acquire: async <T>(fn: () => Promise<T>): Promise<T> => {
+      if (active >= max) {
+        await new Promise<void>((resolve) => queue.push(resolve));
+      }
+      active++;
+      try {
+        return await fn();
+      } finally {
+        active--;
+        const next = queue.shift();
+        next?.();
+      }
+    },
+  };
+}
+
+// ──────────────────────────────────────────────
+// Concurrency constants
+// ──────────────────────────────────────────────
+
+const EXTRACTOR_CONCURRENCY = 4;
+const SOLVER_CONCURRENCY = 6;
+const VERIFIER_CONCURRENCY = 6;
 
 // ──────────────────────────────────────────────
 // Provider selection helper
@@ -154,57 +187,364 @@ export async function runStageOrchestrator(
   let outputFile: string | undefined;
   let resultSummary: string | undefined;
 
-  try {
-    // ── Stage 1: Extractor ─────────────────────
-    if (!checkAborted() && shouldRunStage(startStage, "extractor")) {
-      await runExtractorStageGroup({
-        questionNumbers,
-        questionImages,
-        targetQuestions,
-        cache,
-        stageOverrides,
-        send,
-        isAborted,
-        signal,
-        providerTelemetry,
+  // Semaphores for per-question pipeline concurrency control.
+  const extractSem = semaphore(EXTRACTOR_CONCURRENCY);
+  const solveSem   = semaphore(SOLVER_CONCURRENCY);
+  const verifySem  = semaphore(VERIFIER_CONCURRENCY);
+
+  // Stage counters for atomic stage event emission.
+  // Each stage tracks how many questions entered and how many finished.
+  const stageCounter = {
+    extractor: { entered: 0, completed: 0, failed: 0, total: 0 },
+    solver:    { entered: 0, completed: 0, failed: 0, total: 0 },
+    verifier:  { entered: 0, completed: 0, failed: 0, total: 0 },
+  };
+
+  type PipelineStageName = "extractor" | "solver" | "verifier";
+
+  function onEnter(stage: PipelineStageName, n: number): void {
+    const c = stageCounter[stage];
+    c.entered++;
+    if (c.entered === 1) {
+      // First question entering this stage — emit "running".
+      send(stageEvent(stage, "running"));
+    }
+    send(logEvent(stage, `Q${n} ${stage === "extractor" ? "추출" : stage === "solver" ? "풀이" : "검증"} 시작`));
+  }
+
+  function onLeave(stage: PipelineStageName, n: number, status: "completed" | "failed"): void {
+    const c = stageCounter[stage];
+    if (status === "completed") {
+      c.completed++;
+    } else {
+      c.failed++;
+    }
+
+    const done = c.completed + c.failed;
+    const label = stage === "extractor" ? "추출" : stage === "solver" ? "풀이" : "검증";
+    const resultLabel = status === "completed" ? "완료" : "실패";
+    send(logEvent(stage, `Q${n} ${label} ${resultLabel}`));
+    send(progressEvent(stage, Math.round((done / c.total) * 100)));
+
+    if (done === c.total) {
+      // All questions have passed through this stage — emit summary stage event.
+      const summary = `완료: ${c.completed}/${c.total}${c.failed > 0 ? `, 실패: [확인 필요]` : ""}`;
+      if (c.completed === 0) {
+        send(stageEvent(stage, "failed", { summary }));
+      } else {
+        send(stageEvent(stage, "done", { summary }));
+      }
+    }
+  }
+
+  /** Per-question result: which stage it failed at (undefined = full success). */
+  interface QuestionPipelineResult {
+    number: number;
+    failedAt?: PipelineStageName;
+    error?: string;
+  }
+
+  /** Run a single question through extract→solve→verify, skipping stages that are
+   *  already cached (disk-scan resume). */
+  async function processQuestion(
+    img: { number: number; path: string }
+  ): Promise<QuestionPipelineResult> {
+    const n = img.number;
+
+    // ── Disk-scan: determine which stages are already done ──────────────────
+    const state = await cache.scanQuestionState(n);
+
+    // Skip extractor if: stage is not needed (startStage > extractor), disk cache exists,
+    // or user explicitly started from solver/verifier (extractor results must exist).
+    const skipExtractor =
+      !shouldRunStage(startStage, "extractor") ||
+      state.extracted ||
+      startStage === "solver" ||
+      startStage === "verifier";
+
+    // Skip solver if: stage not needed OR disk cache already has solver result.
+    const skipSolver =
+      !shouldRunStage(startStage, "solver") ||
+      state.solved;
+
+    // Skip verifier if: stage not needed OR disk cache already has verifier result.
+    const skipVerifier =
+      !shouldRunStage(startStage, "verifier") ||
+      state.verified;
+
+    // ── Stage: Extractor ────────────────────────────────────────────────────
+    let extractedOutput: unknown = null;
+
+    if (skipExtractor) {
+      extractedOutput = await readCacheJson(cache.extractorResultPath(n));
+    } else {
+      const result = await extractSem.acquire(async () => {
+        if (isAborted()) throw new Error("aborted");
+        onEnter("extractor", n);
+        const r = await runExtractorStage({
+          questionNumber: n,
+          imagePath: img.path,
+          cache,
+          provider: getProviderForStage("create.extractor", stageOverrides),
+          signal,
+        });
+        onLeave("extractor", n, r.status === "completed" ? "completed" : "failed");
+        return r;
       });
 
-      if (checkAborted()) return cancelled(providerTelemetry);
+      if (result.provider) {
+        providerTelemetry.push(
+          createProviderTelemetryEntry({
+            stageKey: "create.extractor",
+            workflowStageKey: "create.extractor",
+            requestedProvider: result.provider.requestedProvider ?? "auto",
+            resolvedProvider: result.provider.provider ?? "claude-cli",
+            attempt: 1,
+            status: result.status === "completed" ? "success" : "failed",
+            elapsedMs: computeElapsedMs(result.startedAt, result.completedAt),
+            retry: false,
+            errorSummary: result.error?.message,
+          })
+        );
+      }
 
-      // 추출 결과를 UI에 알리되 흐름은 자동으로 다음 stage로 진행.
-      // (이전엔 사용자 검토를 위해 여기서 종료했지만 작업자 요청으로 auto-continue.)
+      if (result.status !== "completed") {
+        send({
+          event: "question",
+          data: { number: n, stage: "extracted", status: "failed", error: result.error?.message },
+        });
+        return { number: n, failedAt: "extractor", error: result.error?.message };
+      }
+
       send({
-        event: "extraction_review",
-        data: { questionNumbers },
+        event: "question",
+        data: { number: n, stage: "extracted", status: "ok", data: result.output },
       });
+      // Incremental extraction_review (per-question).
+      send({ event: "extraction_review", data: { number: n, data: result.output } });
+      extractedOutput = result.output;
     }
 
-    // ── Stage 2: Solver ────────────────────────
-    if (!checkAborted() && shouldRunStage(startStage, "solver")) {
-      await runSolverStageGroup({
-        questionNumbers: startStage === "solver" ? targetQuestions : questionNumbers,
-        cache,
-        stageOverrides,
-        send,
-        isAborted,
-        signal,
-        providerTelemetry,
+    // ── Stage: Solver ───────────────────────────────────────────────────────
+    let solvedOutput: unknown = null;
+
+    if (skipSolver) {
+      solvedOutput = await readCacheJson(cache.solverResultPath(n));
+    } else {
+      const result = await solveSem.acquire(async () => {
+        if (isAborted()) throw new Error("aborted");
+        onEnter("solver", n);
+        const r = await runSolverStage({
+          questionNumber: n,
+          extracted: extractedOutput,
+          cache,
+          provider: getProviderForStage("create.solver", stageOverrides),
+          signal,
+        });
+        onLeave("solver", n, r.status === "completed" ? "completed" : "failed");
+        return r;
       });
-      if (checkAborted()) return cancelled(providerTelemetry);
+
+      if (result.provider) {
+        providerTelemetry.push(
+          createProviderTelemetryEntry({
+            stageKey: "create.solver",
+            workflowStageKey: "create.solver",
+            requestedProvider: result.provider.requestedProvider ?? "auto",
+            resolvedProvider: result.provider.provider ?? "claude-cli",
+            attempt: 1,
+            status: result.status === "completed" ? "success" : "failed",
+            elapsedMs: computeElapsedMs(result.startedAt, result.completedAt),
+            retry: false,
+            errorSummary: result.error?.message,
+          })
+        );
+      }
+
+      if (result.status !== "completed") {
+        send({
+          event: "question",
+          data: { number: n, stage: "solved", status: "failed", error: result.error?.message },
+        });
+        return { number: n, failedAt: "solver", error: result.error?.message };
+      }
+
+      send({
+        event: "question",
+        data: { number: n, stage: "solved", status: "ok", data: result.output },
+      });
+      solvedOutput = result.output;
     }
 
-    // ── Stage 3: Verifier (with feedback loop) ─
-    if (!checkAborted() && shouldRunStage(startStage, "verifier")) {
-      await runVerifierStageGroup({
-        questionNumbers: startStage === "verifier" ? targetQuestions : questionNumbers,
-        cache,
-        stageOverrides,
-        send,
-        isAborted,
-        signal,
-        providerTelemetry,
+    // ── Stage: Verifier (with feedback loop) ───────────────────────────────
+    if (!skipVerifier) {
+      if (isAborted()) throw new Error("aborted");
+
+      const verifierProvider = getProviderForStage("create.verifier", stageOverrides);
+      const solverProvider   = getProviderForStage("create.solver",   stageOverrides);
+
+      let solved = solvedOutput;
+      const MAX_ATTEMPTS = 3;
+      let attempt = 0;
+      let lastVerifierResult: Awaited<ReturnType<typeof runVerifierStage>> | undefined;
+
+      onEnter("verifier", n);
+
+      while (attempt < MAX_ATTEMPTS) {
+        if (isAborted()) throw new Error("aborted");
+
+        const verifierResult = await verifySem.acquire(async () =>
+          runVerifierStage({
+            questionNumber: n,
+            extracted: extractedOutput,
+            solved,
+            cache,
+            provider: verifierProvider,
+            signal,
+          })
+        );
+        lastVerifierResult = verifierResult;
+
+        if (verifierResult.provider) {
+          providerTelemetry.push(
+            createProviderTelemetryEntry({
+              stageKey: "create.verifier",
+              workflowStageKey: "create.verifier",
+              requestedProvider: verifierResult.provider.requestedProvider ?? "auto",
+              resolvedProvider: verifierResult.provider.provider ?? "claude-cli",
+              attempt: attempt + 1,
+              status: verifierResult.status === "completed" ? "success" : "failed",
+              elapsedMs: computeElapsedMs(verifierResult.startedAt, verifierResult.completedAt),
+              retry: attempt > 0,
+              errorSummary: verifierResult.error?.message,
+            })
+          );
+        }
+
+        if (verifierResult.status === "completed" && verifierResult.output?.status === "pass") {
+          onLeave("verifier", n, "completed");
+          send({
+            event: "question",
+            data: { number: n, stage: "verified", status: "ok", data: verifierResult.output },
+          });
+          return { number: n };
+        }
+
+        attempt++;
+
+        if (attempt >= MAX_ATTEMPTS) {
+          send(logEvent("verifier", `Q${n} 검증 실패: ${MAX_ATTEMPTS}회 시도 후에도 pass 못함`, "warn"));
+          break;
+        }
+        if (isAborted()) throw new Error("aborted");
+
+        // Re-run solver with verifier feedback.
+        const feedback = lastVerifierResult?.output?.feedback;
+        send(logEvent("verifier", `Q${n} 검증 fail — 재풀이 (시도 ${attempt + 1}/${MAX_ATTEMPTS})`));
+
+        const solverResult = await solveSem.acquire(async () =>
+          runSolverStage({
+            questionNumber: n,
+            extracted: extractedOutput,
+            guidelineContext: feedback ? `Verifier feedback: ${feedback}` : undefined,
+            cache,
+            provider: solverProvider,
+            signal,
+          })
+        );
+
+        if (solverResult.provider) {
+          providerTelemetry.push(
+            createProviderTelemetryEntry({
+              stageKey: "create.solver",
+              workflowStageKey: "create.solver",
+              requestedProvider: solverResult.provider.requestedProvider ?? "auto",
+              resolvedProvider: solverResult.provider.provider ?? "claude-cli",
+              attempt: attempt,
+              status: solverResult.status === "completed" ? "success" : "failed",
+              elapsedMs: computeElapsedMs(solverResult.startedAt, solverResult.completedAt),
+              retry: true,
+              downstreamCorrection: true,
+              errorSummary: solverResult.error?.message,
+            })
+          );
+        }
+
+        if (solverResult.status === "completed") {
+          solved = solverResult.output as unknown;
+        }
+      }
+
+      // All attempts exhausted — verifier ultimately failed.
+      onLeave("verifier", n, "failed");
+      send({
+        event: "question",
+        data: {
+          number: n,
+          stage: "verified",
+          status: "failed",
+          error: lastVerifierResult?.error?.message ?? "verifier max attempts exceeded",
+        },
       });
+      // Not a hard stop — partial result is still usable.
+      return { number: n };
+    }
+
+    return { number: n };
+  }
+
+  try {
+    // ── Per-question pipeline: extractor → solver → verifier ──────────────
+    const runExtractor = shouldRunStage(startStage, "extractor");
+    const runSolver    = shouldRunStage(startStage, "solver");
+    const runVerifier  = shouldRunStage(startStage, "verifier");
+
+    // All questions participate when any per-question stage is active;
+    // processQuestion() handles per-question skip logic via disk-scan.
+    const pipelineQuestions = (runExtractor || runSolver || runVerifier) ? questionImages : [];
+
+    if (pipelineQuestions.length > 0) {
       if (checkAborted()) return cancelled(providerTelemetry);
+
+      // Initialise stage totals so onLeave can emit summaries correctly.
+      // total = how many questions will actually visit each stage.
+      for (const img of pipelineQuestions) {
+        const state = await cache.scanQuestionState(img.number);
+        const forceExtracted = startStage === "solver" || startStage === "verifier";
+        if (runExtractor && !state.extracted && !forceExtracted) stageCounter.extractor.total++;
+        if (runSolver    && !state.solved)                        stageCounter.solver.total++;
+        if (runVerifier  && !state.verified)                      stageCounter.verifier.total++;
+      }
+
+      // If all questions already have cached results for a given stage, skip
+      // emitting running/done for that stage (nothing to do).
+      // Any stage with total=0 won't have onEnter called, so no stageEvent emitted —
+      // that's correct (stage was fully skipped by resume logic).
+
+      const pipelineResults = await Promise.all(pipelineQuestions.map(processQuestion));
+
+      if (checkAborted()) return cancelled(providerTelemetry);
+
+      // Aggregate pipeline result.
+      const failedQuestions = pipelineResults.filter((r) => r.failedAt !== undefined);
+      const successCount = pipelineResults.length - failedQuestions.length;
+
+      if (successCount === 0 && pipelineResults.length > 0 && runExtractor) {
+        // All questions failed in extractor — hard fail.
+        send(logEvent("system", "모든 문제 추출 실패 — 작업을 중단합니다.", "error"));
+        return failed(providerTelemetry, "extractor: 모든 문제 추출 실패");
+      }
+
+      if (failedQuestions.length > 0) {
+        const failedNums = failedQuestions.map((r) => `Q${r.number}(${r.failedAt ?? "?"})`).join(", ");
+        send(logEvent("system", `일부 문제 처리 실패: [${failedNums}] — 계속 진행합니다.`, "warn"));
+      }
+
+      // Emit batch extraction_review for backward-compatibility when extractor ran.
+      // (Per-question incremental events were already sent; this gives UI the full list.)
+      if (runExtractor && stageCounter.extractor.total > 0) {
+        send({ event: "extraction_review", data: { questionNumbers } });
+      }
     }
 
     // ── Build exam_data.json ───────────────────
@@ -328,365 +668,6 @@ export async function runStageOrchestrator(
     await persistTelemetry(input, providerTelemetry, "failed");
     return failed(providerTelemetry, message);
   }
-}
-
-// ──────────────────────────────────────────────
-// Stage group helpers
-// ──────────────────────────────────────────────
-
-interface StageGroupOptions {
-  questionNumbers: number[];
-  cache: StageCache;
-  stageOverrides: StageOverrideMap;
-  send: (event: SSEEvent) => void;
-  isAborted: () => boolean;
-  signal: AbortSignal;
-  providerTelemetry: ProviderTelemetryEntry[];
-}
-
-interface ExtractorGroupOptions extends StageGroupOptions {
-  questionImages: { number: number; path: string }[];
-  targetQuestions: number[];
-}
-
-const EXTRACTOR_CONCURRENCY = 4;
-const SOLVER_CONCURRENCY = 6;
-const VERIFIER_CONCURRENCY = 6;
-
-async function runExtractorStageGroup(opts: ExtractorGroupOptions): Promise<void> {
-  const { questionImages, targetQuestions, cache, stageOverrides, send, isAborted, signal, providerTelemetry } = opts;
-
-  send(stageEvent("extractor", "running"));
-  send(progressEvent("extractor", 0));
-
-  const provider = getProviderForStage("create.extractor", stageOverrides);
-  const imagesToProcess = questionImages.filter((q) => targetQuestions.includes(q.number));
-  send(logEvent("extractor",
-    `${provider.label} 으로 ${imagesToProcess.length}문제 추출 시작 (동시 ${EXTRACTOR_CONCURRENCY})`));
-
-  let completed = 0;
-  const failed: number[] = [];
-
-  const results = await runWithConcurrency(
-    EXTRACTOR_CONCURRENCY,
-    imagesToProcess,
-    async (img) => {
-      if (isAborted()) throw new Error("aborted");
-      send(logEvent("extractor", `Q${img.number} 추출 시작`));
-      const result = await runExtractorStage({
-        questionNumber: img.number,
-        imagePath: img.path,
-        cache,
-        provider,
-        signal,
-      });
-      if (result.status === "completed") {
-        send(logEvent("extractor", `Q${img.number} 추출 완료`));
-      } else {
-        send(logEvent("extractor",
-          `Q${img.number} 추출 실패: ${result.error?.message ?? "unknown"}`, "error"));
-      }
-      return result;
-    }
-  );
-
-  for (let i = 0; i < results.length; i++) {
-    const img = imagesToProcess[i];
-    const result = results[i];
-
-    if (!result || !img) continue;
-
-    if (result.ok) {
-      const stageResult = result.value;
-      if (stageResult.provider) {
-        providerTelemetry.push(
-          createProviderTelemetryEntry({
-            stageKey: "create.extractor",
-            workflowStageKey: "create.extractor",
-            requestedProvider: stageResult.provider.requestedProvider ?? "auto",
-            resolvedProvider: stageResult.provider.provider ?? "claude-cli",
-            attempt: 1,
-            status: stageResult.status === "completed" ? "success" : "failed",
-            elapsedMs: computeElapsedMs(stageResult.startedAt, stageResult.completedAt),
-            retry: false,
-            errorSummary: stageResult.error?.message,
-          })
-        );
-      }
-
-      if (stageResult.status === "completed" && stageResult.output) {
-        completed++;
-        send({
-          event: "question",
-          data: { number: img.number, stage: "extracted", status: "ok", data: stageResult.output },
-        });
-      } else {
-        failed.push(img.number);
-        send({
-          event: "question",
-          data: { number: img.number, stage: "extracted", status: "failed", error: stageResult.error?.message },
-        });
-      }
-    } else {
-      failed.push(img.number);
-      const errorMessage = result.error instanceof Error ? result.error.message : String(result.error);
-      send({
-        event: "question",
-        data: { number: img.number, stage: "extracted", status: "failed", error: errorMessage },
-      });
-    }
-
-    send(progressEvent("extractor", Math.round(((i + 1) / imagesToProcess.length) * 100)));
-  }
-
-  const summary = `완료: ${completed}/${imagesToProcess.length}${failed.length > 0 ? `, 실패: [${failed.join(", ")}]` : ""}`;
-
-  if (completed === 0 && imagesToProcess.length > 0) {
-    send(stageEvent("extractor", "failed", { summary }));
-    throw new Error(`extractor: 모든 문제 추출 실패. ${summary}`);
-  }
-
-  // Partial failure: emit warning but continue (UI will show individual failures).
-  if (failed.length > 0) {
-    send(logEvent("extractor", `일부 문제 추출 실패: [${failed.join(", ")}]`, "warn"));
-  }
-
-  send(stageEvent("extractor", "done", { summary }));
-}
-
-async function runSolverStageGroup(opts: StageGroupOptions): Promise<void> {
-  const { questionNumbers, cache, stageOverrides, send, isAborted, signal, providerTelemetry } = opts;
-
-  send(stageEvent("solver", "running"));
-  send(progressEvent("solver", 0));
-
-  const provider = getProviderForStage("create.solver", stageOverrides);
-  send(logEvent("solver",
-    `${provider.label} 으로 ${questionNumbers.length}문제 풀이 시작 (동시 ${SOLVER_CONCURRENCY})`));
-
-  let completed = 0;
-  const failed: number[] = [];
-
-  const results = await runWithConcurrency(
-    SOLVER_CONCURRENCY,
-    questionNumbers,
-    async (n) => {
-      if (isAborted()) throw new Error("aborted");
-      send(logEvent("solver", `Q${n} 풀이 시작`));
-      const extracted = await readCacheJson(cache.extractorResultPath(n));
-      const result = await runSolverStage({ questionNumber: n, extracted, cache, provider, signal });
-      if (result.status === "completed") {
-        send(logEvent("solver", `Q${n} 풀이 완료`));
-      } else {
-        send(logEvent("solver",
-          `Q${n} 풀이 실패: ${result.error?.message ?? "unknown"}`, "error"));
-      }
-      return result;
-    }
-  );
-
-  for (let i = 0; i < results.length; i++) {
-    const n = questionNumbers[i];
-    const result = results[i];
-
-    if (!result || n === undefined) continue;
-
-    if (result.ok) {
-      const stageResult = result.value;
-      if (stageResult.provider) {
-        providerTelemetry.push(
-          createProviderTelemetryEntry({
-            stageKey: "create.solver",
-            workflowStageKey: "create.solver",
-            requestedProvider: stageResult.provider.requestedProvider ?? "auto",
-            resolvedProvider: stageResult.provider.provider ?? "claude-cli",
-            attempt: 1,
-            status: stageResult.status === "completed" ? "success" : "failed",
-            elapsedMs: computeElapsedMs(stageResult.startedAt, stageResult.completedAt),
-            retry: false,
-            errorSummary: stageResult.error?.message,
-          })
-        );
-      }
-
-      if (stageResult.status === "completed") {
-        completed++;
-        send({
-          event: "question",
-          data: { number: n, stage: "solved", status: "ok", data: stageResult.output },
-        });
-      } else {
-        failed.push(n);
-        send({
-          event: "question",
-          data: { number: n, stage: "solved", status: "failed", error: stageResult.error?.message },
-        });
-      }
-    } else {
-      failed.push(n);
-      const errorMessage = result.error instanceof Error ? result.error.message : String(result.error);
-      send({
-        event: "question",
-        data: { number: n, stage: "solved", status: "failed", error: errorMessage },
-      });
-    }
-
-    send(progressEvent("solver", Math.round(((i + 1) / questionNumbers.length) * 100)));
-  }
-
-  const summary = `완료: ${completed}/${questionNumbers.length}${failed.length > 0 ? `, 실패: [${failed.join(", ")}]` : ""}`;
-  send(stageEvent("solver", completed > 0 ? "done" : "failed", { summary }));
-}
-
-async function runVerifierStageGroup(opts: StageGroupOptions): Promise<void> {
-  const { questionNumbers, cache, stageOverrides, send, isAborted, signal, providerTelemetry } = opts;
-
-  send(stageEvent("verifier", "running"));
-  send(progressEvent("verifier", 0));
-
-  const solverProvider = getProviderForStage("create.solver", stageOverrides);
-  const verifierProvider = getProviderForStage("create.verifier", stageOverrides);
-  send(logEvent("verifier",
-    `${verifierProvider.label} 으로 ${questionNumbers.length}문제 검증 시작 (동시 ${VERIFIER_CONCURRENCY})`));
-
-  let completed = 0;
-  const failed: number[] = [];
-
-  const results = await runWithConcurrency(
-    VERIFIER_CONCURRENCY,
-    questionNumbers,
-    async (n) => {
-      if (isAborted()) throw new Error("aborted");
-      send(logEvent("verifier", `Q${n} 검증 시작`));
-
-      const extracted = await readCacheJson(cache.extractorResultPath(n));
-      let solved = await readCacheJson(cache.solverResultPath(n));
-
-      let attempt = 0;
-      const MAX_ATTEMPTS = 3;
-      let lastVerifierResult: Awaited<ReturnType<typeof runVerifierStage>> | undefined;
-
-      // Feedback loop: verifier runs at most MAX_ATTEMPTS times.
-      // Pattern: verify → if fail → solve(feedback) → verify → if fail → solve → verify → done.
-      // verifier is called at the top of each iteration, so exactly MAX_ATTEMPTS calls max.
-      while (attempt < MAX_ATTEMPTS) {
-        if (isAborted()) throw new Error("aborted");
-
-        const verifierResult = await runVerifierStage({
-          questionNumber: n,
-          extracted,
-          solved,
-          cache,
-          provider: verifierProvider,
-          signal,
-        });
-        lastVerifierResult = verifierResult;
-
-        if (verifierResult.provider) {
-          providerTelemetry.push(
-            createProviderTelemetryEntry({
-              stageKey: "create.verifier",
-              workflowStageKey: "create.verifier",
-              requestedProvider: verifierResult.provider.requestedProvider ?? "auto",
-              resolvedProvider: verifierResult.provider.provider ?? "claude-cli",
-              attempt: attempt + 1,
-              status: verifierResult.status === "completed" ? "success" : "failed",
-              elapsedMs: computeElapsedMs(verifierResult.startedAt, verifierResult.completedAt),
-              retry: attempt > 0,
-              errorSummary: verifierResult.error?.message,
-            })
-          );
-        }
-
-        if (verifierResult.status === "completed" && verifierResult.output?.status === "pass") {
-          send(logEvent("verifier", `Q${n} 검증 완료 (시도 ${attempt + 1}회)`));
-          return verifierResult;
-        }
-
-        attempt++;
-
-        // After last attempt, do not re-run solver — just return what we have.
-        if (attempt >= MAX_ATTEMPTS) {
-          send(logEvent("verifier",
-            `Q${n} 검증 실패: ${MAX_ATTEMPTS}회 시도 후에도 pass 못함`, "warn"));
-          break;
-        }
-        if (isAborted()) throw new Error("aborted");
-
-        // Re-run solver with verifier feedback before the next verifier attempt.
-        const feedback = verifierResult.output?.feedback;
-        send(logEvent("verifier", `Q${n} 검증 fail — 재풀이 (시도 ${attempt + 1}/${MAX_ATTEMPTS})`));
-        const solverResult = await runSolverStage({
-          questionNumber: n,
-          extracted,
-          guidelineContext: feedback ? `Verifier feedback: ${feedback}` : undefined,
-          cache,
-          provider: solverProvider,
-          signal,
-        });
-
-        if (solverResult.provider) {
-          providerTelemetry.push(
-            createProviderTelemetryEntry({
-              stageKey: "create.solver",
-              workflowStageKey: "create.solver",
-              requestedProvider: solverResult.provider.requestedProvider ?? "auto",
-              resolvedProvider: solverResult.provider.provider ?? "claude-cli",
-              attempt: attempt,
-              status: solverResult.status === "completed" ? "success" : "failed",
-              elapsedMs: computeElapsedMs(solverResult.startedAt, solverResult.completedAt),
-              retry: true,
-              downstreamCorrection: true,
-              errorSummary: solverResult.error?.message,
-            })
-          );
-        }
-
-        if (solverResult.status === "completed") {
-          solved = solverResult.output as unknown;
-        }
-      }
-
-      // Return the last verifier result (status=fail after all attempts exhausted).
-      return lastVerifierResult!;
-    }
-  );
-
-  for (let i = 0; i < results.length; i++) {
-    const n = questionNumbers[i];
-    const result = results[i];
-
-    if (!result || n === undefined) continue;
-
-    if (result.ok) {
-      const stageResult = result.value;
-      if (stageResult.status === "completed") {
-        completed++;
-        send({
-          event: "question",
-          data: { number: n, stage: "verified", status: "ok", data: stageResult.output },
-        });
-      } else {
-        failed.push(n);
-        send({
-          event: "question",
-          data: { number: n, stage: "verified", status: "failed", error: stageResult.error?.message },
-        });
-      }
-    } else {
-      failed.push(n);
-      const errorMessage = result.error instanceof Error ? result.error.message : String(result.error);
-      send({
-        event: "question",
-        data: { number: n, stage: "verified", status: "failed", error: errorMessage },
-      });
-    }
-
-    send(progressEvent("verifier", Math.round(((i + 1) / questionNumbers.length) * 100)));
-  }
-
-  const summary = `완료: ${completed}/${questionNumbers.length}${failed.length > 0 ? `, 실패: [${failed.join(", ")}]` : ""}`;
-  send(stageEvent("verifier", completed > 0 ? "done" : "failed", { summary }));
 }
 
 // ──────────────────────────────────────────────
