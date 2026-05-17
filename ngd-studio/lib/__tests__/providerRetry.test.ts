@@ -7,6 +7,11 @@ import {
   runProviderWithRetry,
   shouldRetryProviderAttempt,
 } from "../ai/retry";
+import {
+  createValidationTelemetry,
+  parseModelJsonOutput,
+  validateModelOutput,
+} from "../../server/stages/modelHarness";
 
 describe("provider retry policy", () => {
   it("retries after one failure and returns the second successful result", async () => {
@@ -47,6 +52,7 @@ describe("provider retry policy", () => {
   it("retries only provider process failures and spawn errors before max attempts", () => {
     expect(shouldRetryProviderAttempt({ attempt: 1, exitCode: 1 })).toBe(true);
     expect(shouldRetryProviderAttempt({ attempt: 1, providerFailed: true })).toBe(true);
+    expect(shouldRetryProviderAttempt({ attempt: 1, validationFailed: true })).toBe(true);
     expect(shouldRetryProviderAttempt({ attempt: 1, spawnError: true })).toBe(true);
     expect(shouldRetryProviderAttempt({ attempt: 1, exitCode: 0, providerFailed: false })).toBe(false);
     expect(shouldRetryProviderAttempt({ attempt: 1, exitCode: 1, aborted: true })).toBe(false);
@@ -72,6 +78,7 @@ describe("provider retry policy", () => {
       fallbackFrom: "deepseek-v4",
       fallbackTo: "claude",
       validationOk: false,
+      validationFailureReason: "missing status",
       failureKind: "validation",
       downstreamCorrection: true,
     })).toEqual({
@@ -87,8 +94,69 @@ describe("provider retry policy", () => {
       fallbackFrom: "deepseek-v4",
       fallbackTo: "claude",
       validationOk: false,
+      validationFailureReason: "missing status",
       failureKind: "validation",
       downstreamCorrection: true,
+    });
+  });
+
+  it("extracts and validates structured model JSON without storing raw payloads", () => {
+    const parsed = parseModelJsonOutput("Verifier result:\n```json\n{\"status\":\"pass\",\"issues\":[]}\n```");
+
+    expect(parsed).toMatchObject({
+      ok: true,
+      value: { status: "pass", issues: [] },
+      source: "fenced",
+    });
+
+    const validation = validateModelOutput(parsed.ok ? parsed.value : undefined, (value) => {
+      if (
+        value &&
+        typeof value === "object" &&
+        "status" in value &&
+        ((value as { status: unknown }).status === "pass" || (value as { status: unknown }).status === "fail")
+      ) {
+        return { ok: true, output: value as { status: "pass" | "fail"; issues?: unknown[] } };
+      }
+      return { ok: false, message: "missing status" };
+    });
+
+    expect(validation).toEqual({
+      ok: true,
+      output: { status: "pass", issues: [] },
+    });
+
+    expect(parseModelJsonOutput("not json")).toMatchObject({
+      ok: false,
+      validation: { ok: false, message: "Model output did not contain valid JSON" },
+      error: { code: "model_json_parse_failed", retryable: true },
+    });
+  });
+
+  it("converts validation failures to retry telemetry without raw provider payloads", () => {
+    expect(createValidationTelemetry(
+      { ok: false, message: "missing feedback" },
+      {
+        stageKey: "create.verifier",
+        workflowStageKey: "create.verifier",
+        requestedProvider: "deepseek-v4",
+        resolvedProvider: "deepseek-v4",
+        attempt: 1,
+        elapsedMs: 1.2,
+        retry: true,
+      }
+    )).toEqual({
+      stageKey: "create.verifier",
+      workflowStageKey: "create.verifier",
+      requestedProvider: "deepseek-v4",
+      resolvedProvider: "deepseek-v4",
+      attempt: 1,
+      status: "failed",
+      elapsedMs: 1.2,
+      retry: true,
+      validationOk: false,
+      failureKind: "validation",
+      errorSummary: "missing feedback",
     });
   });
 });

@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: JSON harness / validation
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - ngd-studio/server/stages/modelHarness.ts
@@ -30,12 +30,12 @@ API model output은 JSON/text schema로 고정되어야 하고, 서버가 valida
 
 ## 체크리스트
 
-- [ ] JSON parse/extract helper 추가
-- [ ] validator function 기반 output validation contract 추가
-- [ ] validation failure telemetry 기록 필드 연결
-- [ ] retry/fallback decision에 validation failure reason 전달
-- [ ] provider raw payload를 job/cache에 저장하지 않음
-- [ ] focused test 또는 TypeScript 검증 통과
+- [x] JSON parse/extract helper 추가
+- [x] validator function 기반 output validation contract 추가
+- [x] validation failure telemetry 기록 필드 연결
+- [x] retry/fallback decision에 validation failure reason 전달
+- [x] provider raw payload를 job/cache에 저장하지 않음
+- [x] focused test 또는 TypeScript 검증 통과
 
 ## 영향 범위
 
@@ -46,3 +46,11 @@ model stage harness 내부 helper다. DeepSeek provider 호출 자체는 Phase 3
 ```bash
 pnpm test -- --run lib/__tests__/providerRetry.test.ts
 ```
+
+## 실행 결과
+
+### 2026-05-17 Phase 2
+
+- `server/stages/modelHarness.ts`에 raw/fenced/balanced JSON 추출과 validator callback 계약을 추가했다.
+- validation failure를 retry 대상과 provider telemetry에 전달하되 raw provider payload는 저장하지 않도록 했다.
+- 검증: `pnpm test -- --run lib/__tests__/providerRetry.test.ts`, `pnpm exec tsc --noEmit` 통과.

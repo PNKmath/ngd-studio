@@ -61,6 +61,7 @@ export function toProviderTelemetryEntry(
     fallbackFrom: entry.fallbackFrom,
     fallbackTo: entry.fallbackTo,
     validationOk: entry.validation?.ok,
+    validationFailureReason: entry.validation?.ok === false ? entry.validation.message : undefined,
     failureKind: entry.failureKind,
     downstreamCorrection: entry.downstreamCorrection,
   };

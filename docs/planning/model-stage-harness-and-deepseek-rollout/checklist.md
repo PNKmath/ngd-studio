@@ -13,13 +13,13 @@ created: 2026-05-16
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-model-stage-contract.md](./phase-01-model-stage-contract.md) | 6 | 6 | 100% | completed | pending |
-| 2 | [phase-02-json-harness-validation.md](./phase-02-json-harness-validation.md) | 6 | 0 | 0% | pending | - |
+| 1 | [phase-01-model-stage-contract.md](./phase-01-model-stage-contract.md) | 6 | 6 | 100% | completed | b2e35f0 |
+| 2 | [phase-02-json-harness-validation.md](./phase-02-json-harness-validation.md) | 6 | 6 | 100% | completed | pending |
 | 3 | [phase-03-verifier-harness.md](./phase-03-verifier-harness.md) | 6 | 0 | 0% | pending | - |
 | 4 | [phase-04-solver-harness.md](./phase-04-solver-harness.md) | 5 | 0 | 0% | pending | - |
 | 5 | [phase-05-deepseek-rollout-policy.md](./phase-05-deepseek-rollout-policy.md) | 6 | 0 | 0% | pending | - |
 | 6 | [phase-06-tests-docs.md](./phase-06-tests-docs.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **34** | **6** | **18%** | | |
+| **Total** | | **34** | **12** | **35%** | | |
 
 ## Phase 의존성
 

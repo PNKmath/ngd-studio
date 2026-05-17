@@ -7,6 +7,7 @@ export interface ProviderAttemptState {
   maxAttempts?: number;
   exitCode?: number;
   providerFailed?: boolean;
+  validationFailed?: boolean;
   aborted?: boolean;
   spawnError?: boolean;
 }
@@ -33,6 +34,7 @@ export interface ProviderTelemetryEntry {
   fallbackFrom?: ResolvedAIProviderId;
   fallbackTo?: ResolvedAIProviderId;
   validationOk?: boolean;
+  validationFailureReason?: string;
   failureKind?: "provider" | "validation" | "fallback" | "downstream" | "unknown";
   downstreamCorrection?: boolean;
 }
@@ -42,12 +44,13 @@ export function shouldRetryProviderAttempt({
   maxAttempts = MAX_PROVIDER_ATTEMPTS,
   exitCode = 0,
   providerFailed = false,
+  validationFailed = false,
   aborted = false,
   spawnError = false,
 }: ProviderAttemptState): boolean {
   if (aborted) return false;
   if (attempt >= maxAttempts) return false;
-  return spawnError || providerFailed || exitCode !== 0;
+  return spawnError || providerFailed || validationFailed || exitCode !== 0;
 }
 
 export function createProviderAttemptLog(provider: string, attempt: number, maxAttempts = MAX_PROVIDER_ATTEMPTS): string {
@@ -63,6 +66,7 @@ export function createProviderTelemetryEntry(entry: ProviderTelemetryEntry): Pro
     ...entry,
     elapsedMs: Math.max(0, Math.round(entry.elapsedMs)),
     errorSummary: entry.errorSummary?.slice(0, 300),
+    validationFailureReason: entry.validationFailureReason?.slice(0, 300),
   };
 }
 
