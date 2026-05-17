@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { CropperWorkspace } from "@/components/cropper/CropperWorkspace";
 import { MetaForm, type MetaValue } from "@/components/upload/MetaForm";
 import { useJobRunner } from "@/lib/useJobRunner";
+import { Card } from "@/components/ui/card";
+import { PipelineView } from "@/components/pipeline/PipelineView";
 
 const AUTO_SPLIT_LS_KEY = "cropper.auto-split-on-upload";
 const META_LS_KEY = "create-v4.meta-form";
@@ -182,20 +184,21 @@ export default function CreateV4Page() {
 
       <div className="flex flex-1 overflow-hidden">
         <div className="w-72 shrink-0 border-r overflow-y-auto p-4 space-y-4">
-          <div>
-            <h2 className="text-sm font-semibold mb-2">시험 정보</h2>
+          <Card className="p-4 space-y-3">
+            <h3 className="text-sm font-medium">시험 정보</h3>
             <MetaForm
               value={meta}
               onChange={handleMetaChange}
               disabled={submitting}
             />
-          </div>
+            {!isMetaComplete && (
+              <p className="text-xs text-muted-foreground">
+                필수 필드를 모두 채워주세요.
+              </p>
+            )}
+          </Card>
 
-          {!isMetaComplete && (
-            <p className="text-xs text-muted-foreground">
-              필수 필드를 모두 채워주세요.
-            </p>
-          )}
+          <PipelineView mode="create" />
         </div>
 
         <div className="flex-1 overflow-hidden">
