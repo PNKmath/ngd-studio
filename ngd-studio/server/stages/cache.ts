@@ -17,6 +17,8 @@ export interface StageCache {
   questionJsonPath(questionNumber: number): string;
   solverResultPath(questionNumber: number): string;
   verifierResultPath(questionNumber: number): string;
+  /** Returns the path to the combined exam_data.json output. */
+  examDataPath(): string;
   ensureCacheDir(): Promise<void>;
   ensureQuestionImagesDir(): Promise<void>;
 }
@@ -59,6 +61,10 @@ export class FileBackedStageCache implements StageCache {
   verifierResultPath(questionNumber: number): string {
     const padded = String(questionNumber).padStart(2, "0");
     return path.join(this.paths.cacheDir, `q${padded}_verified.json`);
+  }
+
+  examDataPath(): string {
+    return this.paths.examData;
   }
 
   async ensureCacheDir(): Promise<void> {
