@@ -247,18 +247,17 @@ describe("validateExtractorOutput", () => {
     expect((result as { ok: false; message: string }).message).toContain("answer");
   });
 
-  it("fails when question is missing or empty string", () => {
-    // missing question — omit from spread via override with undefined
+  it("passes when question is missing (parts 배열이 본문 — question은 optional)", () => {
     const withoutQuestion: Record<string, unknown> = { ...VALID_OUTPUT };
     delete withoutQuestion.question;
-    const missingResult = validateExtractorOutput(withoutQuestion);
-    expect(missingResult.ok).toBe(false);
-    expect((missingResult as { ok: false; message: string }).message).toContain("question");
+    const result = validateExtractorOutput(withoutQuestion);
+    expect(result.ok).toBe(true);
+  });
 
-    // empty / whitespace-only question
-    const emptyResult = validateExtractorOutput({ ...VALID_OUTPUT, question: "   " });
-    expect(emptyResult.ok).toBe(false);
-    expect((emptyResult as { ok: false; message: string }).message).toContain("question");
+  it("fails when question is present but empty/whitespace string", () => {
+    const result = validateExtractorOutput({ ...VALID_OUTPUT, question: "   " });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; message: string }).message).toContain("question");
   });
 
   it("fails when has_figure is not boolean", () => {

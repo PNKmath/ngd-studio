@@ -22,7 +22,7 @@ export interface ExtractorFigureInfo {
 }
 
 export interface ExtractorStageOutput {
-  question: string;
+  question?: string;
   choices?: string[];
   answer?: string | number;
   has_figure: boolean;
@@ -186,11 +186,12 @@ export function validateExtractorOutput(value: unknown): ModelOutputValidation<E
     }
   }
 
-  // question: non-empty string (required)
-  if (typeof candidate.question !== "string" || candidate.question.trim() === "") {
-    return { ok: false, message: "extractor question must be a non-empty string" };
+  // question: 프롬프트 스키마는 parts 배열만 정의하므로 question은 optional. 응답에 있으면 비어있지 않은 문자열인지만 검사.
+  if (candidate.question !== undefined && candidate.question !== null) {
+    if (typeof candidate.question !== "string" || candidate.question.trim() === "") {
+      return { ok: false, message: "extractor question must be a non-empty string when present" };
+    }
   }
-  const question = candidate.question;
 
   const figureInfo = candidate.has_figure
     ? (candidate.figure_info as ExtractorFigureInfo)
@@ -198,7 +199,6 @@ export function validateExtractorOutput(value: unknown): ModelOutputValidation<E
 
   const output: ExtractorStageOutput = {
     ...candidate,
-    question,
     has_figure: candidate.has_figure,
     figure_info: figureInfo,
   };
