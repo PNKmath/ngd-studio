@@ -37,8 +37,6 @@ const args = [
   process.cwd(),
   "--sandbox",
   "danger-full-access",
-  "--ask-for-approval",
-  "never",
   "--image",
   imagePath,
   "--",

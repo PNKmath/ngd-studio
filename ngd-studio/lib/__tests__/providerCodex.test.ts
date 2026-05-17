@@ -7,7 +7,7 @@ import {
 } from "../ai/providers/codexCli";
 
 describe("Codex CLI provider", () => {
-  it("builds codex exec args with the expected sandbox and approval policy", () => {
+  it("builds codex exec args with the expected sandbox policy", () => {
     expect(buildCodexExecArgs("do work", "/repo")).toEqual([
       "exec",
       "--json",
@@ -15,8 +15,6 @@ describe("Codex CLI provider", () => {
       "/repo",
       "--sandbox",
       "danger-full-access",
-      "--ask-for-approval",
-      "never",
       buildCodexPrompt("do work"),
     ]);
   });
@@ -29,8 +27,6 @@ describe("Codex CLI provider", () => {
       "/repo",
       "--sandbox",
       "danger-full-access",
-      "--ask-for-approval",
-      "never",
       "--image",
       "/tmp/q01.png",
       "--",

@@ -24,6 +24,8 @@ export function buildCodexExecArgs(prompt: string, cwd: string, imagePaths?: str
   // are present so the prompt is unambiguously the positional argument.
   const separator = imageArgs.length > 0 ? ["--"] : [];
 
+  // Codex 0.130+ removed `--ask-for-approval`; non-interactive `exec` no longer
+  // prompts for approvals (TTY-less). Sandbox alone suffices for our purposes.
   return [
     "exec",
     "--json",
@@ -31,8 +33,6 @@ export function buildCodexExecArgs(prompt: string, cwd: string, imagePaths?: str
     cwd,
     "--sandbox",
     "danger-full-access",
-    "--ask-for-approval",
-    "never",
     ...imageArgs,
     ...separator,
     buildCodexPrompt(prompt),
