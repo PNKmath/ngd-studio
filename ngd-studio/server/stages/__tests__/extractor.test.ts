@@ -310,4 +310,17 @@ describe("validateExtractorOutput", () => {
     expect(result.ok).toBe(false);
     expect((result as { ok: false; message: string }).message).toContain("Korean");
   });
+
+  it("passes when parts is missing (parts is optional)", () => {
+    const withoutParts: Record<string, unknown> = { ...VALID_OUTPUT };
+    delete withoutParts.parts;
+    const result = validateExtractorOutput(withoutParts);
+    expect(result.ok).toBe(true);
+  });
+
+  it("fails when parts is present but not an array", () => {
+    const result = validateExtractorOutput({ ...VALID_OUTPUT, parts: "not an array" });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; message: string }).message).toContain("parts");
+  });
 });

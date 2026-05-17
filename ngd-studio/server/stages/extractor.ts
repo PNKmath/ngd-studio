@@ -21,9 +21,13 @@ export interface ExtractorFigureInfo {
   crop_ratio?: [number, number, number, number];
 }
 
+export type ExtractorPartObject = { t: string } | { eq: string };
+export type ExtractorChoice = ExtractorPartObject[];
+
 export interface ExtractorStageOutput {
   question?: string;
-  choices?: string[];
+  parts?: ExtractorPartObject[];
+  choices?: ExtractorChoice[];
   answer?: string | number;
   has_figure: boolean;
   figure_info: ExtractorFigureInfo | null;
@@ -175,7 +179,14 @@ export function validateExtractorOutput(value: unknown): ModelOutputValidation<E
     }
   }
 
-  // choices: if present, must have 3-5 items
+  // parts: if present, must be a non-empty array
+  if (candidate.parts !== undefined) {
+    if (!Array.isArray(candidate.parts)) {
+      return { ok: false, message: "extractor parts must be an array when present" };
+    }
+  }
+
+  // choices: if present, must have 3-5 items (array of arrays)
   if (candidate.choices !== undefined && candidate.choices !== null) {
     if (!Array.isArray(candidate.choices) || candidate.choices.length < 3 || candidate.choices.length > 5) {
       return {
@@ -202,10 +213,6 @@ export function validateExtractorOutput(value: unknown): ModelOutputValidation<E
     has_figure: candidate.has_figure,
     figure_info: figureInfo,
   };
-
-  if (candidate.choices !== undefined && candidate.choices !== null) {
-    output.choices = candidate.choices as string[];
-  }
 
   return { ok: true, output };
 }
