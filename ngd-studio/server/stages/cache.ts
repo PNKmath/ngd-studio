@@ -15,6 +15,7 @@ export interface StageCache {
   readonly paths: StageCachePaths;
   questionImagePath(questionNumber: number): string;
   questionJsonPath(questionNumber: number): string;
+  extractorResultPath(questionNumber: number): string;
   solverResultPath(questionNumber: number): string;
   verifierResultPath(questionNumber: number): string;
   /** Returns the path to the combined exam_data.json output. */
@@ -43,24 +44,28 @@ export class FileBackedStageCache implements StageCache {
     };
   }
 
+  private pad(n: number): string {
+    return String(n).padStart(2, "0");
+  }
+
   questionImagePath(questionNumber: number): string {
-    const padded = String(questionNumber).padStart(2, "0");
-    return path.join(this.paths.questionImagesDir, `q${padded}.png`);
+    return path.join(this.paths.questionImagesDir, `q${this.pad(questionNumber)}.png`);
   }
 
   questionJsonPath(questionNumber: number): string {
-    const padded = String(questionNumber).padStart(2, "0");
-    return path.join(this.paths.cacheDir, `q${padded}.json`);
+    return path.join(this.paths.cacheDir, `q${this.pad(questionNumber)}.json`);
+  }
+
+  extractorResultPath(questionNumber: number): string {
+    return path.join(this.paths.cacheDir, `q${this.pad(questionNumber)}_extracted.json`);
   }
 
   solverResultPath(questionNumber: number): string {
-    const padded = String(questionNumber).padStart(2, "0");
-    return path.join(this.paths.cacheDir, `q${padded}_solved.json`);
+    return path.join(this.paths.cacheDir, `q${this.pad(questionNumber)}_solved.json`);
   }
 
   verifierResultPath(questionNumber: number): string {
-    const padded = String(questionNumber).padStart(2, "0");
-    return path.join(this.paths.cacheDir, `q${padded}_verified.json`);
+    return path.join(this.paths.cacheDir, `q${this.pad(questionNumber)}_verified.json`);
   }
 
   examDataPath(): string {

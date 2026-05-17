@@ -1,11 +1,12 @@
 ---
 phase: 3
 title: extractor stage 신규 (vision 1-shot)
-status: pending
+status: completed
 depends_on: [1, 2]
 scope:
   - ngd-studio/server/stages/extractor.ts
   - ngd-studio/server/stages/__tests__/extractor.test.ts
+  - ngd-studio/server/stages/cache.ts
 intervention_likely: false
 intervention_reason: ""
 ---
@@ -94,13 +95,13 @@ equation 검증은 solver 책임이라 extractor 단계에서는 raw HWP equatio
 
 ## 체크리스트
 
-- [ ] `server/stages/extractor.ts` 신규 작성, `runExtractorStage` export
-- [ ] `validateExtractorOutput` 구현 (agent MD schema 기반)
-- [ ] `server/stages/cache.ts:extractorResultPath` 헬퍼 추가
-- [ ] mock provider 단위 테스트 5케이스 작성 (정상, JSON invalid, exit !=0, description_en 한글, imagePaths 전달)
-- [ ] provider.run options에 `imagePaths`가 전달되는지 확인 (Phase 1 의존)
-- [ ] `runExtractorStage`가 ModelStageResult 패턴 준수 (solver.ts와 동일 구조)
-- [ ] `npx tsc --noEmit` + `npx vitest run server/stages/__tests__/extractor.test.ts --reporter=basic` 통과
+- [x] `server/stages/extractor.ts` 신규 작성, `runExtractorStage` export
+- [x] `validateExtractorOutput` 구현 (agent MD schema 기반)
+- [x] `server/stages/cache.ts:extractorResultPath` 헬퍼 추가
+- [x] mock provider 단위 테스트 5케이스 작성 (정상, JSON invalid, exit !=0, description_en 한글, imagePaths 전달)
+- [x] provider.run options에 `imagePaths`가 전달되는지 확인 (Phase 1 의존)
+- [x] `runExtractorStage`가 ModelStageResult 패턴 준수 (solver.ts와 동일 구조)
+- [x] `npx tsc --noEmit` + `npx vitest run server/stages/__tests__/extractor.test.ts --reporter=basic` 통과
 
 ## 영향 범위
 
@@ -114,3 +115,64 @@ cd ngd-studio
 npx tsc --noEmit
 npx vitest run server/stages/__tests__/extractor.test.ts --reporter=basic
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-17 20:56 KST) — 완료
+**상태**: completed
+**소요 시간**: 약 5분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`server/stages/extractor.ts`를 신규 작성하고 `server/stages/cache.ts`에 `extractorResultPath` 헬퍼를 추가했다. `runExtractorStage`는 `runSolverStage`와 동일한 `ModelStageResult` 패턴을 따르며, `validateExtractorOutput`은 스펙의 schema 검증(answer, has_figure, figure_info, crop_ratio, choices, description_en 한글 금지)을 구현했다. 단위 테스트 13개 모두 통과.
+
+#### 변경 파일
+- `ngd-studio/server/stages/extractor.ts` (신규, +183줄)
+- `ngd-studio/server/stages/__tests__/extractor.test.ts` (신규, +192줄)
+- `ngd-studio/server/stages/cache.ts` (수정, +7줄 — `extractorResultPath` 추가)
+
+#### 검증 결과
+- [x] tsc: `npx tsc --noEmit` → pass (출력 없음)
+- [x] vitest: `npx vitest run server/stages/__tests__/extractor.test.ts --reporter=basic` → 13 tests passed
+
+#### 추가 발견사항
+- `questionJsonPath`(`q{n}.json`)와 `extractorResultPath`(`q{n}_extracted.json`)는 별도 경로. 설계 스펙이 구분하므로 그대로 유지.
+- `runExtractorStage`의 default provider를 `deepseekV4` 대신 `claudeSdkProvider`로 지정 (extractor는 vision이 필요하고 DeepSeek V4는 vision 미지원 — MEMORY.md 참고).
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+pass — 3 files in scope (extractor.ts, extractor.test.ts, cache.ts). frontmatter scope에 cache.ts가 누락되어 있어 사용자 승인 후 scope에 추가함 (체크리스트 본문은 처음부터 cache.ts 편집을 요구).
+
+#### Verification Re-run (orchestrator)
+exit 0 — `npx tsc --noEmit` + `npx vitest run server/stages/__tests__/extractor.test.ts --reporter=basic` 모두 pass.
+
+#### Simplify (orchestrator)
+2 files, 4 edits, verify pass. cache.ts에 pad() 헬퍼 추출(padStart 5회 중복 제거), extractor.ts에서 ensureCacheDir 중복인 mkdir 호출 + 미사용 import 제거.
+
+#### Review (orchestrator)
+VERDICT: fix_required (2 issues). TOP_ISSUE: validateExtractorOutput이 question 부재/빈 문자열을 ""로 silently 통과 — 스펙은 비어있지 않은 string 요구. FIX_HINT: question이 string이 아니거나 trim 후 빈 문자열이면 validationFailure 반환, 테스트 1케이스 추가.
+
+### 2회차 (2026-05-17 21:07 KST) — completed
+**상태**: completed
+**소요 시간**: 약 2분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`validateExtractorOutput`의 `question` 필드 검증 버그를 수정했다. 기존에는 `typeof candidate.question === "string" ? candidate.question : ""`로 silently fallback하여 question 부재/빈 문자열을 통과시켰다. 이를 `typeof candidate.question !== "string" || candidate.question.trim() === ""`이면 validationFailure를 반환하도록 수정했다. `VALID_OUTPUT`에 `question` 필드 추가, 테스트 케이스 1건(missing + whitespace-only 2 assertion) 추가.
+
+#### 변경 파일
+- `ngd-studio/server/stages/extractor.ts` (수정, +3줄 — question validation 강화, fallback "" 제거)
+- `ngd-studio/server/stages/__tests__/extractor.test.ts` (수정, +14줄 — VALID_OUTPUT에 question 추가, question 누락/빈 문자열 테스트 케이스 1건 추가)
+
+#### 검증 결과
+- [x] tsc: `npx tsc --noEmit` → pass (출력 없음)
+- [x] vitest: `npx vitest run server/stages/__tests__/extractor.test.ts --reporter=basic` → 14 tests passed (13 기존 + 1 신규)
+
+#### 추가 발견사항
+- VALID_OUTPUT에 `question` 필드가 없어 기존 통과 테스트도 새 검증 이후 실패할 수 있었으므로 동시에 추가. 기존 14 tests all pass.
+- stageOverride 룩업 tier 누락 지적은 FIX_HINT 지시에 따라 수정하지 않음 — phase 5(orchestrator)에서 처리.
+
+#### 질문 / 결정 사항
+없음
