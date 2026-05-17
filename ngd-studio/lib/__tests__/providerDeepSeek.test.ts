@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
-import { buildDeepSeekMessages, deepseekV4Provider, isDeepSeekStageAllowed } from "../ai/providers/deepseekV4";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  DEEPSEEK_STAGE_TIMEOUTS_MS,
+  buildDeepSeekMessages,
+  deepseekV4Provider,
+  isDeepSeekStageAllowed,
+  resolveDeepSeekTimeoutMs,
+} from "../ai/providers/deepseekV4";
 import { mkdtemp, readFile, rm } from "fs/promises";
 import os from "os";
 import path from "path";
@@ -16,8 +22,61 @@ async function collectEvents(result: ReturnType<typeof deepseekV4Provider.run>) 
 }
 
 describe("DeepSeek V4 provider", () => {
-  it("allows only known stage keys", () => {
-    expect(isDeepSeekStageAllowed("create.extractor")).toBe(true);
+  it("exposes per-stage timeouts and falls back to a default", () => {
+    expect(DEEPSEEK_STAGE_TIMEOUTS_MS["create.extractor"]).toBe(180_000);
+    expect(DEEPSEEK_STAGE_TIMEOUTS_MS["create.solver"]).toBe(300_000);
+    expect(DEEPSEEK_STAGE_TIMEOUTS_MS["create.verifier"]).toBe(120_000);
+    expect(DEEPSEEK_STAGE_TIMEOUTS_MS["review.reviewer"]).toBe(300_000);
+    expect(resolveDeepSeekTimeoutMs("create.solver")).toBe(300_000);
+    expect(resolveDeepSeekTimeoutMs(undefined)).toBe(300_000);
+  });
+
+  it("aborts the fetch and emits a stage-labeled timeout error", async () => {
+    const previousKey = process.env.DEEPSEEK_API_KEY;
+    const previousDisable = process.env.NGD_STUDIO_DISABLE_RUNTIME_ENV;
+    process.env.DEEPSEEK_API_KEY = "test-key";
+    process.env.NGD_STUDIO_DISABLE_RUNTIME_ENV = "1";
+
+    let observedSignal: AbortSignal | undefined;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((_url, init) => {
+      observedSignal = (init as RequestInit | undefined)?.signal as AbortSignal | undefined;
+      return new Promise((_, reject) => {
+        observedSignal?.addEventListener("abort", () => {
+          const err = new Error("aborted");
+          (err as Error & { name: string }).name = "AbortError";
+          reject(err);
+        });
+      });
+    });
+
+    try {
+      vi.useFakeTimers();
+      const result = deepseekV4Provider.run("hi", { stageKey: "create.verifier" });
+      const eventsPromise = collectEvents(result);
+      // Drive the timer past the verifier timeout (120s)
+      await vi.advanceTimersByTimeAsync(120_000 + 100);
+      vi.useRealTimers();
+
+      const events = await eventsPromise;
+      expect(await result.exitCode).toBe(1);
+      expect(observedSignal?.aborted).toBe(true);
+      const last = events.at(-1) as { type: string; subtype: string; result: string };
+      expect(last.type).toBe("result");
+      expect(last.subtype).toBe("error");
+      expect(last.result).toMatch(/timed out after 120s/);
+      expect(last.result).toMatch(/create\.verifier/);
+    } finally {
+      vi.useRealTimers();
+      fetchSpy.mockRestore();
+      if (previousKey === undefined) delete process.env.DEEPSEEK_API_KEY;
+      else process.env.DEEPSEEK_API_KEY = previousKey;
+      if (previousDisable === undefined) delete process.env.NGD_STUDIO_DISABLE_RUNTIME_ENV;
+      else process.env.NGD_STUDIO_DISABLE_RUNTIME_ENV = previousDisable;
+    }
+  });
+
+  it("allows only text-only stages (DeepSeek V4 has no image input)", () => {
+    expect(isDeepSeekStageAllowed("create.extractor")).toBe(false);
     expect(isDeepSeekStageAllowed("create.solver")).toBe(true);
     expect(isDeepSeekStageAllowed("create.verifier")).toBe(true);
     expect(isDeepSeekStageAllowed("review.reviewer")).toBe(true);

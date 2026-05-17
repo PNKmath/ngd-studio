@@ -4,8 +4,9 @@ import type { ClaudeEvent } from "../../claude";
 import { getRuntimeEnvValue } from "../../server/runtimeEnv";
 import type { AIProviderAdapter, AIStageKey, ProviderRunOptions, ProviderRunResult } from "../types";
 
+// DeepSeek V4 (Pro/Flash) public preview는 이미지 입력을 지원하지 않으므로
+// 이미지 기반 extractor는 제외한다. 멀티모달 출시되면 다시 추가.
 export const DEEPSEEK_ALLOWED_STAGES: AIStageKey[] = [
-  "create.extractor",
   "create.solver",
   "create.verifier",
   "review.reviewer",
@@ -20,11 +21,36 @@ interface DeepSeekChatResponse {
   choices?: Array<{
     message?: {
       content?: string;
+      reasoning_content?: string;
     };
+    finish_reason?: string;
   }>;
   usage?: {
     total_tokens?: number;
+    completion_tokens?: number;
+    completion_tokens_details?: {
+      reasoning_tokens?: number;
+    };
   };
+}
+
+const DEFAULT_MAX_TOKENS = 8192;
+
+export const DEEPSEEK_STAGE_TIMEOUTS_MS: Record<AIStageKey, number> = {
+  "create.extractor": 180_000,
+  "create.solver": 300_000,
+  "create.verifier": 120_000,
+  "review.reviewer": 300_000,
+};
+// 위 맵은 vision 출시 후 extractor가 재허용될 때를 대비해 유지한다.
+
+const FALLBACK_TIMEOUT_MS = 300_000;
+
+export function resolveDeepSeekTimeoutMs(stageKey: AIStageKey | undefined): number {
+  if (stageKey && stageKey in DEEPSEEK_STAGE_TIMEOUTS_MS) {
+    return DEEPSEEK_STAGE_TIMEOUTS_MS[stageKey];
+  }
+  return FALLBACK_TIMEOUT_MS;
 }
 
 export function isDeepSeekStageAllowed(stageKey: unknown): stageKey is AIStageKey {
@@ -88,18 +114,37 @@ async function* runDeepSeek(prompt: string, options: ProviderRunOptions | undefi
     return;
   }
 
+  const timeoutMs = resolveDeepSeekTimeoutMs(options?.stageKey);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: buildDeepSeekMessages(prompt, options),
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: buildDeepSeekMessages(prompt, options),
+          max_tokens: DEFAULT_MAX_TOKENS,
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (controller.signal.aborted) {
+        yield resultEvent(
+          "error",
+          `DeepSeek V4 request timed out after ${Math.round(timeoutMs / 1000)}s (stage=${options?.stageKey ?? "unspecified"}).`,
+        );
+        close(1);
+        return;
+      }
+      throw err;
+    }
 
     if (!response.ok) {
       yield resultEvent("error", `DeepSeek API request failed: ${response.status}`);
@@ -108,7 +153,11 @@ async function* runDeepSeek(prompt: string, options: ProviderRunOptions | undefi
     }
 
     const json = await response.json() as DeepSeekChatResponse;
-    const text = json.choices?.[0]?.message?.content?.trim();
+    const choice = json.choices?.[0];
+    const text = choice?.message?.content?.trim();
+    const finishReason = choice?.finish_reason;
+    const reasoningTokens = json.usage?.completion_tokens_details?.reasoning_tokens ?? 0;
+
     if (text) {
       yield {
         type: "assistant",
@@ -118,11 +167,29 @@ async function* runDeepSeek(prompt: string, options: ProviderRunOptions | undefi
         },
       };
     }
-    yield resultEvent("success", text || "DeepSeek V4 completed without text output.");
+
+    if (!text) {
+      const detail = finishReason === "length"
+        ? `DeepSeek V4 output truncated by max_tokens (reasoning_tokens=${reasoningTokens}). Increase max_tokens or simplify the prompt.`
+        : `DeepSeek V4 returned empty content (finish_reason=${finishReason ?? "unknown"}).`;
+      yield resultEvent("error", detail);
+      close(1);
+      return;
+    }
+
+    if (finishReason && finishReason !== "stop") {
+      yield resultEvent("error", `DeepSeek V4 finished with reason="${finishReason}". Output may be incomplete.`);
+      close(1);
+      return;
+    }
+
+    yield resultEvent("success", text);
     close(0);
   } catch (err) {
     yield resultEvent("error", err instanceof Error ? err.message : "DeepSeek API request failed.");
     close(1);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
