@@ -11,18 +11,18 @@ import {
   type ModelOutputValidation,
 } from "./modelHarness";
 import type { ModelStageResult, ModelStageRunner } from "./model";
+import { buildSolverPrompt } from "./prompts/solverPrompt";
 
-export type SolverExplanationSegmentKind = "text" | "equation";
-
-export interface SolverExplanationSegment {
-  kind: SolverExplanationSegmentKind;
-  content: string;
-}
+export type SolverExplanationPart =
+  | { t: string }
+  | { eq: string }
+  | { br: true };
 
 export interface SolverStageInput {
   questionNumber: number;
   extracted: unknown;
   guidelineContext?: string;
+  feedback?: string;
   cache: StageCache;
   provider?: AIProviderAdapter;
   validateEquation?: (content: string) => string | undefined;
@@ -30,9 +30,9 @@ export interface SolverStageInput {
 }
 
 export interface SolverStageOutput {
+  number?: number;
   answer: string;
-  explanation: SolverExplanationSegment[];
-  verifierContext?: Record<string, unknown>;
+  explanation_parts: SolverExplanationPart[];
 }
 
 export const solverStageRunner: ModelStageRunner<SolverStageInput, SolverStageOutput> = {
@@ -43,7 +43,12 @@ export const solverStageRunner: ModelStageRunner<SolverStageInput, SolverStageOu
 export async function runSolverStage(input: SolverStageInput): Promise<ModelStageResult<SolverStageOutput>> {
   const startedAt = new Date().toISOString();
   const provider = input.provider ?? deepseekV4Provider;
-  const prompt = buildSolverPrompt(input);
+  const { system, user } = buildSolverPrompt({
+    extracted: input.extracted,
+    guidelineContext: input.guidelineContext,
+    feedback: input.feedback,
+  });
+  const prompt = system + "\n\n" + user;
   const providerResult = provider.run(prompt, { stageKey: "create.solver", signal: input.signal });
   const { text, exitCode } = await collectProviderText(providerResult);
 
@@ -99,17 +104,6 @@ export async function runSolverStage(input: SolverStageInput): Promise<ModelStag
   };
 }
 
-export function buildSolverPrompt(input: Pick<SolverStageInput, "extracted" | "guidelineContext">): string {
-  return [
-    "Solve the extracted exam-question data.",
-    "Return only JSON with this schema: {\"answer\":string,\"explanation\":[{\"kind\":\"text\"|\"equation\",\"content\":string}],\"verifierContext\"?:object}.",
-    "Equation segments must contain HWP equation syntax only. Text segments must not contain raw equation XML.",
-    "Do not edit files. Do not return markdown.",
-    input.guidelineContext ? `Guidelines:\n${input.guidelineContext}` : undefined,
-    `Extracted JSON:\n${JSON.stringify(input.extracted)}`,
-  ].filter(Boolean).join("\n\n");
-}
-
 export function validateSolverOutput(
   value: unknown,
   validateEquation?: (content: string) => string | undefined
@@ -118,52 +112,55 @@ export function validateSolverOutput(
     return { ok: false, message: "solver output must be an object" };
   }
 
-  const candidate = value as { answer?: unknown; explanation?: unknown; verifierContext?: unknown };
+  const candidate = value as { number?: unknown; answer?: unknown; explanation_parts?: unknown };
   if (typeof candidate.answer !== "string" || !candidate.answer.trim()) {
     return { ok: false, message: "solver answer is required" };
   }
-  if (!Array.isArray(candidate.explanation) || candidate.explanation.length === 0) {
-    return { ok: false, message: "solver explanation must be a non-empty array" };
+  if (!Array.isArray(candidate.explanation_parts) || candidate.explanation_parts.length === 0) {
+    return { ok: false, message: "solver explanation_parts must be a non-empty array" };
   }
 
-  const explanation: SolverExplanationSegment[] = [];
-  for (const segment of candidate.explanation) {
-    if (!segment || typeof segment !== "object") {
-      return { ok: false, message: "solver explanation segment must be an object" };
+  const explanation_parts: SolverExplanationPart[] = [];
+  for (const part of candidate.explanation_parts) {
+    if (!part || typeof part !== "object") {
+      return { ok: false, message: "solver explanation_parts element must be an object" };
     }
-    const kind = (segment as { kind?: unknown }).kind;
-    const content = (segment as { content?: unknown }).content;
-    if (kind !== "text" && kind !== "equation") {
-      return { ok: false, message: "solver explanation segment kind is invalid" };
-    }
-    if (typeof content !== "string" || !content.trim()) {
-      return { ok: false, message: "solver explanation segment content is required" };
-    }
-    if (kind === "text" && /<hp:equation\b/i.test(content)) {
-      return { ok: false, message: "solver text segment contains raw equation XML" };
-    }
-    if (kind === "equation") {
-      const equationIssue = validateEquation?.(content);
-      if (equationIssue) {
-        return { ok: false, message: equationIssue, details: { segmentKind: kind } };
+    if ("t" in (part as object)) {
+      const t = (part as { t?: unknown }).t;
+      if (typeof t !== "string") {
+        return { ok: false, message: "solver explanation_parts {t} must be a string" };
       }
+      explanation_parts.push({ t });
+    } else if ("eq" in (part as object)) {
+      const eq = (part as { eq?: unknown }).eq;
+      if (typeof eq !== "string") {
+        return { ok: false, message: "solver explanation_parts {eq} must be a string" };
+      }
+      const equationIssue = validateEquation?.(eq);
+      if (equationIssue) {
+        return { ok: false, message: equationIssue, details: { partKey: "eq" } };
+      }
+      explanation_parts.push({ eq });
+    } else if ("br" in (part as object)) {
+      const br = (part as { br?: unknown }).br;
+      if (br !== true) {
+        return { ok: false, message: "solver explanation_parts {br} must be true" };
+      }
+      explanation_parts.push({ br: true });
+    } else {
+      const keys = Object.keys(part as object);
+      return { ok: false, message: `solver explanation_parts element has unknown key(s): ${keys.join(", ")}` };
     }
-    explanation.push({ kind, content });
   }
 
-  if (
-    candidate.verifierContext !== undefined &&
-    (!candidate.verifierContext || typeof candidate.verifierContext !== "object" || Array.isArray(candidate.verifierContext))
-  ) {
-    return { ok: false, message: "solver verifierContext must be an object" };
-  }
+  const number = typeof candidate.number === "number" ? candidate.number : undefined;
 
   return {
     ok: true,
     output: {
+      ...(number !== undefined ? { number } : {}),
       answer: candidate.answer,
-      explanation,
-      verifierContext: candidate.verifierContext as Record<string, unknown> | undefined,
+      explanation_parts,
     },
   };
 }

@@ -10,8 +10,10 @@ import { mkdtemp, readFile, rm } from "fs/promises";
 import os from "os";
 import path from "path";
 import { createStageCache } from "../../server/stages/cache";
-import { buildSolverPrompt, runSolverStage, validateSolverOutput } from "../../server/stages/solver";
-import { buildVerifierPrompt, runVerifierStage } from "../../server/stages/verifier";
+import { runSolverStage, validateSolverOutput } from "../../server/stages/solver";
+import { runVerifierStage } from "../../server/stages/verifier";
+import { buildSolverPrompt } from "../../server/stages/prompts/solverPrompt";
+import { buildVerifierPrompt } from "../../server/stages/prompts/verifierPrompt";
 
 async function collectEvents(result: ReturnType<typeof deepseekV4Provider.run>) {
   const events = [];
@@ -137,10 +139,11 @@ describe("DeepSeek V4 provider", () => {
       guidelineContext: "Check answer consistency.",
     });
 
-    expect(prompt).toContain("Return only JSON");
-    expect(prompt).toContain("\"status\":\"pass\"|\"fail\"");
-    expect(prompt).toContain("Do not edit files");
-    expect(prompt).toContain("Check answer consistency.");
+    // NGD Korean prompt returns {system, user}
+    expect(typeof prompt.system).toBe("string");
+    expect(prompt.system.trim().length).toBeGreaterThan(0);
+    expect(prompt.user).toContain("Check answer consistency.");
+    expect(prompt.user).toContain("1+1");
   });
 
   it("validates verifier output and writes only the structured cache result", async () => {
@@ -244,31 +247,32 @@ describe("DeepSeek V4 provider", () => {
       guidelineContext: "Keep equations explicit.",
     });
 
-    expect(prompt).toContain("Return only JSON");
-    expect(prompt).toContain("\"answer\":string");
-    expect(prompt).toContain("Do not edit files");
+    // NGD Korean prompt returns {system, user}
+    expect(typeof prompt.system).toBe("string");
+    expect(prompt.system.trim().length).toBeGreaterThan(0);
+    expect(prompt.user).toContain("Keep equations explicit.");
 
+    // New NGD schema: answer + explanation_parts
     expect(validateSolverOutput({
-      answer: "2",
-      explanation: [
-        { kind: "text", content: "Solve the equation." },
-        { kind: "equation", content: "x=2" },
+      answer: "②",
+      explanation_parts: [
+        { t: "먼저 x를 구한다." },
+        { eq: "x = 2" },
+        { br: true },
       ],
-      verifierContext: { method: "substitution" },
     })).toMatchObject({
       ok: true,
-      output: { answer: "2" },
+      output: { answer: "②" },
     });
     expect(validateSolverOutput({
-      answer: "2",
-      explanation: [{ kind: "text", content: "<hp:equation>x=2</hp:equation>" }],
+      answer: "②",
+      explanation_parts: [{ unknown_key: "value" }],
     })).toMatchObject({
       ok: false,
-      message: "solver text segment contains raw equation XML",
     });
     expect(validateSolverOutput({
-      answer: "2",
-      explanation: [{ kind: "equation", content: "x==2" }],
+      answer: "②",
+      explanation_parts: [{ eq: "x==2" }],
     }, () => "invalid equation syntax")).toMatchObject({
       ok: false,
       message: "invalid equation syntax",
@@ -281,9 +285,9 @@ describe("DeepSeek V4 provider", () => {
 
     try {
       const output = {
-        answer: "2",
-        explanation: [{ kind: "text", content: "1+1 equals 2." }],
-        verifierContext: { confidence: "high" },
+        number: 2,
+        answer: "②",
+        explanation_parts: [{ t: "1 더하기 1은 2이다." }],
       };
       const result = await runSolverStage({
         questionNumber: 2,

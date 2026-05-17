@@ -11,14 +11,21 @@ import {
   type ModelOutputValidation,
 } from "./modelHarness";
 import type { ModelStageResult, ModelStageRunner } from "./model";
+import { buildVerifierPrompt } from "./prompts/verifierPrompt";
 
-export type VerifierStatus = "pass" | "fail";
-export type VerifierIssueSeverity = "info" | "warning" | "error";
+export type VerifierIssueCategory =
+  | "math_accuracy"
+  | "math_completeness"
+  | "curriculum_scope"
+  | "curriculum_term"
+  | "format_rule"
+  | "equation_syntax"
+  | "extraction_mismatch";
 
 export interface VerifierIssue {
-  message: string;
-  severity?: VerifierIssueSeverity;
-  path?: string;
+  category: VerifierIssueCategory;
+  description: string;
+  location?: string;
 }
 
 export interface VerifierStageInput {
@@ -32,9 +39,10 @@ export interface VerifierStageInput {
 }
 
 export interface VerifierStageOutput {
-  status: VerifierStatus;
+  number?: number;
+  status: "pass" | "fail";
   issues: VerifierIssue[];
-  feedback?: string;
+  feedback?: string | null;
 }
 
 export const verifierStageRunner: ModelStageRunner<VerifierStageInput, VerifierStageOutput> = {
@@ -45,7 +53,12 @@ export const verifierStageRunner: ModelStageRunner<VerifierStageInput, VerifierS
 export async function runVerifierStage(input: VerifierStageInput): Promise<ModelStageResult<VerifierStageOutput>> {
   const startedAt = new Date().toISOString();
   const provider = input.provider ?? deepseekV4Provider;
-  const prompt = buildVerifierPrompt(input);
+  const { system, user } = buildVerifierPrompt({
+    extracted: input.extracted,
+    solved: input.solved,
+    guidelineContext: input.guidelineContext,
+  });
+  const prompt = system + "\n\n" + user;
   const providerResult = provider.run(prompt, { stageKey: "create.verifier", signal: input.signal });
   const { text, exitCode } = await collectProviderText(providerResult);
 
@@ -101,62 +114,64 @@ export async function runVerifierStage(input: VerifierStageInput): Promise<Model
   };
 }
 
-export function buildVerifierPrompt(input: Pick<VerifierStageInput, "extracted" | "solved" | "guidelineContext">): string {
-  return [
-    "Verify the extracted and solved exam-question data.",
-    "Return only JSON with this schema: {\"status\":\"pass\"|\"fail\",\"issues\":[{\"message\":string,\"severity\"?:\"info\"|\"warning\"|\"error\",\"path\"?:string}],\"feedback\"?:string}.",
-    "Do not edit files. Do not return markdown.",
-    input.guidelineContext ? `Guidelines:\n${input.guidelineContext}` : undefined,
-    `Extracted JSON:\n${JSON.stringify(input.extracted)}`,
-    input.solved === undefined ? undefined : `Solved JSON:\n${JSON.stringify(input.solved)}`,
-  ].filter(Boolean).join("\n\n");
-}
+const VALID_ISSUE_CATEGORIES: ReadonlySet<string> = new Set<VerifierIssueCategory>([
+  "math_accuracy",
+  "math_completeness",
+  "curriculum_scope",
+  "curriculum_term",
+  "format_rule",
+  "equation_syntax",
+  "extraction_mismatch",
+]);
 
 export function validateVerifierOutput(value: unknown): ModelOutputValidation<VerifierStageOutput> {
   if (!value || typeof value !== "object") {
     return { ok: false, message: "verifier output must be an object" };
   }
 
-  const candidate = value as { status?: unknown; issues?: unknown; feedback?: unknown };
+  const candidate = value as { number?: unknown; status?: unknown; issues?: unknown; feedback?: unknown };
   if (candidate.status !== "pass" && candidate.status !== "fail") {
     return { ok: false, message: "verifier status must be pass or fail" };
   }
   if (!Array.isArray(candidate.issues)) {
     return { ok: false, message: "verifier issues must be an array" };
   }
+  if (candidate.status === "fail" && candidate.issues.length === 0) {
+    return { ok: false, message: "verifier issues must have at least one entry when status is fail" };
+  }
 
   const issues: VerifierIssue[] = [];
   for (const issue of candidate.issues) {
-    if (!issue || typeof issue !== "object" || typeof (issue as { message?: unknown }).message !== "string") {
-      return { ok: false, message: "verifier issue message is required" };
+    if (!issue || typeof issue !== "object") {
+      return { ok: false, message: "verifier issue must be an object" };
     }
-    const severity = (issue as { severity?: unknown }).severity;
-    if (
-      severity !== undefined &&
-      severity !== "info" &&
-      severity !== "warning" &&
-      severity !== "error"
-    ) {
-      return { ok: false, message: "verifier issue severity is invalid" };
+    const category = (issue as { category?: unknown }).category;
+    const description = (issue as { description?: unknown }).description;
+    const location = (issue as { location?: unknown }).location;
+
+    if (typeof category !== "string" || !VALID_ISSUE_CATEGORIES.has(category)) {
+      return { ok: false, message: `verifier issue category is invalid: ${String(category)}` };
     }
-    const issuePath = (issue as { path?: unknown }).path;
+    if (typeof description !== "string" || !description.trim()) {
+      return { ok: false, message: "verifier issue description is required" };
+    }
     issues.push({
-      message: (issue as { message: string }).message,
-      severity: severity as VerifierIssueSeverity | undefined,
-      path: typeof issuePath === "string" ? issuePath : undefined,
+      category: category as VerifierIssueCategory,
+      description,
+      location: typeof location === "string" ? location : undefined,
     });
   }
 
-  if (candidate.feedback !== undefined && typeof candidate.feedback !== "string") {
-    return { ok: false, message: "verifier feedback must be a string" };
-  }
+  const number = typeof candidate.number === "number" ? candidate.number : undefined;
+  const feedback = typeof candidate.feedback === "string" ? candidate.feedback : null;
 
   return {
     ok: true,
     output: {
+      ...(number !== undefined ? { number } : {}),
       status: candidate.status,
       issues,
-      feedback: candidate.feedback,
+      feedback,
     },
   };
 }

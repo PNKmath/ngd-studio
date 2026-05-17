@@ -3,10 +3,6 @@
  *
  * System/user prompt builder for the NGD exam solver stage.
  * Source: .claude/agents/ngd-exam-solver.md
- *
- * Note: The original buildSolverPrompt in server/stages/solver.ts returns a plain string.
- * This module provides a richer {system, user} variant.
- * solver.ts re-exports a backward-compatible string wrapper that calls this.
  */
 
 export interface SolverPromptInput {
@@ -91,19 +87,4 @@ export function buildSolverPrompt(input: SolverPromptInput): { system: string; u
     system: SOLVER_SYSTEM,
     user: parts.join("\n\n"),
   };
-}
-
-/**
- * Backward-compatible string prompt builder for existing solver.ts callers.
- * Returns a single concatenated string (system + user) as used by the legacy provider.
- */
-export function buildSolverPromptString(input: Pick<SolverPromptInput, "extracted" | "guidelineContext">): string {
-  return [
-    "Solve the extracted exam-question data.",
-    "Return only JSON with this schema: {\"answer\":string,\"explanation\":[{\"kind\":\"text\"|\"equation\",\"content\":string}],\"verifierContext\"?:object}.",
-    "Equation segments must contain HWP equation syntax only. Text segments must not contain raw equation XML.",
-    "Do not edit files. Do not return markdown.",
-    input.guidelineContext ? `Guidelines:\n${input.guidelineContext}` : undefined,
-    `Extracted JSON:\n${JSON.stringify(input.extracted)}`,
-  ].filter(Boolean).join("\n\n");
 }

@@ -9,7 +9,7 @@ export type { ExamMeta, ExtractorPromptInput } from "./extractorPrompt";
 export { buildExtractorPrompt } from "./extractorPrompt";
 
 export type { SolverPromptInput } from "./solverPrompt";
-export { buildSolverPrompt, buildSolverPromptString } from "./solverPrompt";
+export { buildSolverPrompt } from "./solverPrompt";
 
 export type { VerifierPromptInput } from "./verifierPrompt";
 export { buildVerifierPrompt } from "./verifierPrompt";

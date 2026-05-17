@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildExtractorPrompt } from "../prompts/extractorPrompt";
-import { buildSolverPrompt, buildSolverPromptString } from "../prompts/solverPrompt";
+import { buildSolverPrompt } from "../prompts/solverPrompt";
 import { buildVerifierPrompt } from "../prompts/verifierPrompt";
 
 describe("buildExtractorPrompt", () => {
@@ -85,19 +85,6 @@ describe("buildSolverPrompt", () => {
   });
 });
 
-describe("buildSolverPromptString (legacy)", () => {
-  it("returns a non-empty string", () => {
-    const result = buildSolverPromptString({ extracted: { number: 1 } });
-    expect(typeof result).toBe("string");
-    expect(result.trim().length).toBeGreaterThan(0);
-  });
-
-  it("includes extracted JSON", () => {
-    const result = buildSolverPromptString({ extracted: { number: 42 } });
-    expect(result).toContain('"number":');
-    expect(result).toContain("42");
-  });
-});
 
 describe("buildVerifierPrompt", () => {
   const sampleExtracted = { number: 1, type: "choice" };

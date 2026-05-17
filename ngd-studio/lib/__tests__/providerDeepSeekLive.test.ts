@@ -43,7 +43,7 @@ describeLive("DeepSeek V4 live integration", () => {
       const result = await runVerifierStage({
         questionNumber: 1,
         extracted: { question: "What is 1+1?", choices: ["1", "2", "3", "4"], answer: 2 },
-        solved: { answer: "2", explanation: [{ kind: "text", content: "1 plus 1 equals 2." }] },
+        solved: { answer: "2", explanation_parts: [{ t: "1 plus 1 equals 2." }] },
         guidelineContext: "Verify the solved answer matches the extracted answer. Status must be \"pass\" or \"fail\".",
         cache,
       });
@@ -149,7 +149,7 @@ describeBothLive("extractor + solver + verifier full e2e (claude-sdk + deepseek-
           throw new Error(`solver failed: ${JSON.stringify(solverResult)}`);
         }
         expect(typeof solverResult.output.answer).toBe("string");
-        expect(Array.isArray(solverResult.output.explanation)).toBe(true);
+        expect(Array.isArray(solverResult.output.explanation_parts)).toBe(true);
 
         // Step 3: Verifier (deepseek-v4).
         const verifierResult = await runVerifierStage({
