@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: Model stage contract
-status: pending
+status: completed
 depends_on: []
 scope:
   - ngd-studio/server/stages/model.ts
@@ -30,12 +30,12 @@ executor: sonnet
 
 ## 체크리스트
 
-- [ ] model stage input/output/result 타입 추가
-- [ ] provider adapter와 stage harness 책임 경계 명시
-- [ ] `AIStageKey`와 `WorkflowStageKey` 경계 유지
-- [ ] file mutation 권한이 model provider 타입에 포함되지 않음
-- [ ] legacy `AIProviderAdapter` API 호환 유지
-- [ ] TypeScript 검증 통과
+- [x] model stage input/output/result 타입 추가
+- [x] provider adapter와 stage harness 책임 경계 명시
+- [x] `AIStageKey`와 `WorkflowStageKey` 경계 유지
+- [x] file mutation 권한이 model provider 타입에 포함되지 않음
+- [x] legacy `AIProviderAdapter` API 호환 유지
+- [x] TypeScript 검증 통과
 
 ## 영향 범위
 
@@ -46,3 +46,12 @@ executor: sonnet
 ```bash
 pnpm exec tsc --noEmit
 ```
+
+## 실행 결과
+
+### 2026-05-17 Phase 1
+
+- `server/stages/model.ts`에 bounded model stage input/result/provider/runner 계약을 추가했다.
+- `ModelWorkflowStageKey`를 추가해 workflow stage와 model-call stage의 타입 경계를 명시했다.
+- legacy `AIProviderAdapter.run(prompt)`를 변경하지 않고 `createStageModelProvider()` 호환 어댑터만 추가했다.
+- 검증: `pnpm exec tsc --noEmit` 통과.

@@ -13,6 +13,8 @@ export type WorkflowStageKey =
   | "checker"
   | "review.reviewer";
 
+export type ModelWorkflowStageKey = Extract<WorkflowStageKey, AIStageKey>;
+
 export type StageStatus = "pending" | "running" | "completed" | "failed" | "skipped";
 
 export type StageFileKind =

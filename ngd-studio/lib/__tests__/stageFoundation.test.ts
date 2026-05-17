@@ -9,6 +9,7 @@ import { runCheckerStage, runDeterministicCheckerRules } from "../../server/stag
 import { runStageCommand, stageCommandToError } from "../../server/stages/commands";
 import { errorEvent, fileEvent, logEvent, progressEvent, resultEvent, stageEvent } from "../../server/stages/events";
 import { FileBackedJobStore } from "../../server/stages/jobStore";
+import { createStageModelProvider, toProviderRunOptions, type ModelStageRunner } from "../../server/stages/model";
 import { createStageAttemptTelemetryEntry, toProviderTelemetryEntry } from "../../server/stages/telemetry";
 
 const tempDirs: string[] = [];
@@ -101,6 +102,70 @@ describe("stage foundation helpers", () => {
       status: "failed",
       validationOk: false,
       failureKind: "validation",
+    });
+  });
+
+  it("keeps model stage contracts bounded to provider output", async () => {
+    const runCalls: Array<{ prompt: string; stageKey?: string }> = [];
+    const provider = createStageModelProvider({
+      id: "deepseek-v4",
+      label: "DeepSeek V4",
+      run(prompt, options) {
+        runCalls.push({ prompt, stageKey: options?.stageKey });
+        return {
+          process: {} as never,
+          events: {} as never,
+          exitCode: Promise.resolve(0),
+          metadata: {
+            requestedProvider: "deepseek-v4",
+            provider: "deepseek-v4",
+            label: "DeepSeek V4",
+          },
+        };
+      },
+    });
+
+    const result = await provider.runModel({
+      stageKey: "create.verifier",
+      workflowStageKey: "create.verifier",
+      prompt: "Return verifier JSON only",
+      outputKind: "json",
+    });
+
+    expect(runCalls).toEqual([{ prompt: "Return verifier JSON only", stageKey: "create.verifier" }]);
+    expect(result).toMatchObject({
+      provider: "deepseek-v4",
+      label: "DeepSeek V4",
+    });
+    expect(toProviderRunOptions({ stageKey: "create.solver", prompt: "solve" })).toMatchObject({
+      stageKey: "create.solver",
+    });
+
+    const runner: ModelStageRunner<{ prompt: string }, { ok: boolean }> = {
+      key: "create.verifier",
+      async run() {
+        return {
+          status: "completed",
+          output: { ok: true },
+          provider: {
+            requestedProvider: "deepseek-v4",
+            provider: "deepseek-v4",
+            modelStageKey: "create.verifier",
+            label: "DeepSeek V4",
+          },
+          validation: { ok: true, output: { ok: true } },
+        };
+      },
+    };
+
+    await expect(runner.run({ prompt: "x" }, {
+      jobId: "job-1",
+      workflowStageKey: "create.verifier",
+      modelStageKey: "create.verifier",
+    })).resolves.toMatchObject({
+      status: "completed",
+      output: { ok: true },
+      provider: { modelStageKey: "create.verifier" },
     });
   });
 

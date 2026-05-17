@@ -4,6 +4,7 @@ import type { ClaudeEvent } from "../claude";
 export type AIProviderId = "auto" | "claude" | "codex" | "deepseek-v4";
 export type ResolvedAIProviderId = Exclude<AIProviderId, "auto">;
 // Provider/model-call stage keys. Broader workflow stages are defined in server/stages/types.ts.
+// Model-stage contracts live in server/stages/model.ts so provider adapters do not own file mutation.
 export type AIStageKey = "create.extractor" | "create.solver" | "create.verifier" | "review.reviewer";
 
 export interface ProviderRunOptions {
