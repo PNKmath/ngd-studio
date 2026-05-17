@@ -11,7 +11,7 @@ const BASE_DIR = path.resolve(process.cwd(), "..");
 
 export async function POST(req: NextRequest) {
   try {
-    const { pdfPath, dpi = 200, rotation: rawRotation = 0 } = await req.json();
+    const { pdfPath, dpi = 200, rotation: rawRotation = 0, flip: rawFlip = false } = await req.json();
 
     if (!pdfPath || typeof pdfPath !== "string") {
       return NextResponse.json({ error: "pdfPath is required" }, { status: 400 });
@@ -21,7 +21,11 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(rotationValue)) {
       return NextResponse.json({ error: "rotation must be a number" }, { status: 400 });
     }
+    if (typeof rawFlip !== "boolean") {
+      return NextResponse.json({ error: "flip must be a boolean" }, { status: 400 });
+    }
     const rotation = normalizePdfRotation(rotationValue);
+    // flip does not affect page dimensions (width/height are rotation-only); accepted for API symmetry.
     const fullPath = path.join(BASE_DIR, pdfPath);
 
     const script = `

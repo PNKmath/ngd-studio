@@ -12,7 +12,7 @@ const CACHE_DIR = path.join(BASE_DIR, "outputs", ".pdf-preview-cache");
 
 export async function POST(req: NextRequest) {
   try {
-    const { pdfPath, page = 0, dpi = 150, rotation: rawRotation = 0 } = await req.json();
+    const { pdfPath, page = 0, dpi = 150, rotation: rawRotation = 0, flip: rawFlip = false } = await req.json();
 
     if (!pdfPath || typeof pdfPath !== "string") {
       return NextResponse.json({ error: "pdfPath is required" }, { status: 400 });
@@ -22,13 +22,16 @@ export async function POST(req: NextRequest) {
     if (!Number.isFinite(rotationValue)) {
       return NextResponse.json({ error: "rotation must be a number" }, { status: 400 });
     }
+    if (typeof rawFlip !== "boolean") {
+      return NextResponse.json({ error: "flip must be a boolean" }, { status: 400 });
+    }
     const rotation = normalizePdfRotation(rotationValue);
     const fullPath = path.join(BASE_DIR, pdfPath);
 
-    // Cache key based on file path, page, dpi, and physical image rotation.
+    // Cache key based on file path, page, dpi, physical image rotation, and flip.
     const hash = crypto
       .createHash("md5")
-      .update(`${pdfPath}:${page}:${dpi}:${rotation}`)
+      .update(`${pdfPath}:${page}:${dpi}:${rotation}:${rawFlip}`)
       .digest("hex");
     const cachePath = path.join(CACHE_DIR, `${hash}.png`);
 
@@ -55,6 +58,10 @@ if args["page"] >= len(doc):
 scale = args["dpi"] / 72.0
 matrix = fitz.Matrix(scale, scale).prerotate(args["rotation"])
 pix = doc[args["page"]].get_pixmap(matrix=matrix)
+if args.get("flip"):
+    # Horizontal mirror: negate x-scale and translate by width
+    mirror = fitz.Matrix(-1, 1).pretranslate(-pix.width, 0)
+    pix = doc[args["page"]].get_pixmap(matrix=matrix * mirror)
 pix.save(args["out"])
 print(json.dumps({"width": pix.width, "height": pix.height, "pages": len(doc)}))
 `;
@@ -64,6 +71,7 @@ print(json.dumps({"width": pix.width, "height": pix.height, "pages": len(doc)}))
       page,
       dpi,
       rotation,
+      flip: rawFlip,
       out: cachePath,
     });
 
@@ -89,6 +97,7 @@ let pageIndex = Int(args[2]) ?? 0
 let dpi = Double(args[3]) ?? 150.0
 let outPath = args[4]
 let rotation = ((Int(args.count > 5 ? args[5] : "0") ?? 0) % 360 + 360) % 360
+let doFlip = args.count > 6 && args[6] == "true"
 guard let doc = PDFDocument(url: URL(fileURLWithPath: pdfPath)), let page = doc.page(at: pageIndex) else { exit(1) }
 let box = page.bounds(for: .mediaBox)
 let scale = dpi / 72.0
@@ -123,6 +132,15 @@ if rotation == 90 {
 }
 outCtx.draw(baseImage, in: CGRect(x: 0, y: 0, width: width, height: height))
 outCtx.restoreGState()
+if doFlip {
+  // Horizontal mirror: scaleX = -1, translate by outWidth
+  outCtx.saveGState()
+  outCtx.translateBy(x: CGFloat(outWidth), y: 0)
+  outCtx.scaleBy(x: -1, y: 1)
+  guard let rotatedImage = outCtx.makeImage() else { exit(1) }
+  outCtx.draw(rotatedImage, in: CGRect(x: 0, y: 0, width: outWidth, height: outHeight))
+  outCtx.restoreGState()
+}
 guard let cgImage = outCtx.makeImage(), let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:]) else { exit(1) }
 try png.write(to: URL(fileURLWithPath: outPath))
 print("{\\"width\\":\\(outWidth),\\"height\\":\\(outHeight),\\"pages\\":\\(doc.pageCount)}")
@@ -130,7 +148,7 @@ print("{\\"width\\":\\(outWidth),\\"height\\":\\(outHeight),\\"pages\\":\\(doc.p
 
       const result = await execFileAsync(
         "swift",
-        ["-e", swiftScript, fullPath, String(page), String(dpi), cachePath, String(rotation)],
+        ["-e", swiftScript, fullPath, String(page), String(dpi), cachePath, String(rotation), String(rawFlip)],
         { timeout: 15000 }
       );
       stdout = result.stdout;

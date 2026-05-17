@@ -7,7 +7,8 @@ export interface PdfMeta {
   dpi: number;
 }
 
-export function readPdfMetaFromBuffer(buffer: Buffer, dpi: number, rotation = 0): PdfMeta {
+// flip is accepted for API symmetry but does not affect page dimensions.
+export function readPdfMetaFromBuffer(buffer: Buffer, dpi: number, rotation = 0, _flip = false): PdfMeta {
   const text = buffer.toString("latin1");
   const pageMatches = text.match(/\/Type\s*\/Page\b/g);
   const mediaBox = text.match(/\/MediaBox\s*\[\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s*\]/);

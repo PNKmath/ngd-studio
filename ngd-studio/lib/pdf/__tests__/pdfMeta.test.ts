@@ -33,4 +33,18 @@ describe("readPdfMetaFromBuffer", () => {
       page0Height: 1653,
     });
   });
+
+  it("flip does not change dimensions (rotation=0)", () => {
+    expect(readPdfMetaFromBuffer(pdf, 200, 0, true)).toMatchObject({
+      page0Width: 1653,
+      page0Height: 2338,
+    });
+  });
+
+  it("flip does not change dimensions (rotation=90)", () => {
+    expect(readPdfMetaFromBuffer(pdf, 200, 90, true)).toMatchObject({
+      page0Width: 2338,
+      page0Height: 1653,
+    });
+  });
 });
