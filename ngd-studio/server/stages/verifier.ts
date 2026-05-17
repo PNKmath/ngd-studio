@@ -28,6 +28,7 @@ export interface VerifierStageInput {
   guidelineContext?: string;
   cache: StageCache;
   provider?: AIProviderAdapter;
+  signal?: AbortSignal;
 }
 
 export interface VerifierStageOutput {
@@ -45,7 +46,7 @@ export async function runVerifierStage(input: VerifierStageInput): Promise<Model
   const startedAt = new Date().toISOString();
   const provider = input.provider ?? deepseekV4Provider;
   const prompt = buildVerifierPrompt(input);
-  const providerResult = provider.run(prompt, { stageKey: "create.verifier" });
+  const providerResult = provider.run(prompt, { stageKey: "create.verifier", signal: input.signal });
   const { text, exitCode } = await collectProviderText(providerResult);
 
   if (exitCode !== 0) {

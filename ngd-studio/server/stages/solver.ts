@@ -26,6 +26,7 @@ export interface SolverStageInput {
   cache: StageCache;
   provider?: AIProviderAdapter;
   validateEquation?: (content: string) => string | undefined;
+  signal?: AbortSignal;
 }
 
 export interface SolverStageOutput {
@@ -43,7 +44,7 @@ export async function runSolverStage(input: SolverStageInput): Promise<ModelStag
   const startedAt = new Date().toISOString();
   const provider = input.provider ?? deepseekV4Provider;
   const prompt = buildSolverPrompt(input);
-  const providerResult = provider.run(prompt, { stageKey: "create.solver" });
+  const providerResult = provider.run(prompt, { stageKey: "create.solver", signal: input.signal });
   const { text, exitCode } = await collectProviderText(providerResult);
 
   if (exitCode !== 0) {

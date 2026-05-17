@@ -36,6 +36,7 @@ export interface ExtractorStageInput {
   examMeta?: ExamMeta;
   cache: StageCache;
   provider?: AIProviderAdapter;
+  signal?: AbortSignal;
 }
 
 export async function runExtractorStage(
@@ -55,6 +56,7 @@ export async function runExtractorStage(
   const providerResult = provider.run(combinedPrompt, {
     stageKey: "create.extractor",
     imagePaths: [input.imagePath],
+    signal: input.signal,
   });
 
   const { text, exitCode } = await collectProviderText(providerResult);
