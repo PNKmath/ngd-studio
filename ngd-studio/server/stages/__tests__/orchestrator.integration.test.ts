@@ -349,12 +349,12 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
 
     // solver and verifier stage events should be emitted.
     const solverStageEvent = events.find(
-      (e) => e.event === "stage" && (e.data as Record<string, unknown>).name === "create.solver"
+      (e) => e.event === "stage" && (e.data as Record<string, unknown>).name === "solver"
     );
     expect(solverStageEvent).toBeDefined();
 
     const verifierStageEvent = events.find(
-      (e) => e.event === "stage" && (e.data as Record<string, unknown>).name === "create.verifier"
+      (e) => e.event === "stage" && (e.data as Record<string, unknown>).name === "verifier"
     );
     expect(verifierStageEvent).toBeDefined();
 

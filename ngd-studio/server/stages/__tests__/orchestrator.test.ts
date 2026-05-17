@@ -408,7 +408,7 @@ describe("runStageOrchestrator", () => {
 
     // Should not have emitted solver stage event (skipped).
     const solverStageEvent = events.find(
-      (e) => e.event === "stage" && (e.data as Record<string, unknown>).name === "create.solver"
+      (e) => e.event === "stage" && (e.data as Record<string, unknown>).name === "solver"
     );
     expect(solverStageEvent).toBeUndefined();
 

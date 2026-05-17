@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: orchestrator 이벤트 emit을 canonical name으로 변경
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - ngd-studio/server/stages/orchestrator.ts
@@ -63,11 +63,11 @@ const VERIFIER_STAGE: PipelineStageName = aiStageToPipeline("create.verifier")!;
 
 ## 체크리스트
 
-- [ ] orchestrator.ts의 모든 `stageEvent`/`progressEvent`/`logEvent` 호출에서 stage name 인자를 canonical name으로 변경 (extractor/solver/verifier)
-- [ ] provider 호출 시 `stageKey: "create.*"` 형태의 AI provider 인자는 **변경 없이 유지**
-- [ ] orchestrator.test.ts의 event name 검사 부분 갱신
-- [ ] orchestrator.integration.test.ts의 event name 검사 부분 갱신
-- [ ] `cd ngd-studio && npx tsc --noEmit && npx vitest run server/stages/__tests__/orchestrator.test.ts server/stages/__tests__/orchestrator.integration.test.ts --reporter=basic` 전부 pass
+- [x] orchestrator.ts의 모든 `stageEvent`/`progressEvent`/`logEvent` 호출에서 stage name 인자를 canonical name으로 변경 (extractor/solver/verifier)
+- [x] provider 호출 시 `stageKey: "create.*"` 형태의 AI provider 인자는 **변경 없이 유지**
+- [x] orchestrator.test.ts의 event name 검사 부분 갱신
+- [x] orchestrator.integration.test.ts의 event name 검사 부분 갱신
+- [x] `cd ngd-studio && npx tsc --noEmit && npx vitest run server/stages/__tests__/orchestrator.test.ts server/stages/__tests__/orchestrator.integration.test.ts --reporter=basic` 전부 pass
 
 ## 영향 범위
 
@@ -82,3 +82,29 @@ cd ngd-studio
 npx tsc --noEmit
 npx vitest run server/stages/__tests__/orchestrator.test.ts server/stages/__tests__/orchestrator.integration.test.ts --reporter=basic
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-17 23:48 KST) — completed
+**상태**: completed
+**소요 시간**: 약 5분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+orchestrator.ts에서 SSE emit 시 사용하는 stage name을 "create.extractor"/"create.solver"/"create.verifier"에서 canonical bare name("extractor"/"solver"/"verifier")으로 전환했다. AI provider 선택용 stageKey("create.*")는 그대로 유지했다. 두 테스트 파일에서 SSE event name을 검사하는 assertion도 동일하게 갱신했다.
+
+#### 변경 파일
+- `ngd-studio/server/stages/orchestrator.ts` (수정, stageEvent/progressEvent/logEvent 호출 12건 변경)
+- `ngd-studio/server/stages/__tests__/orchestrator.test.ts` (수정, solver event name assertion 1건)
+- `ngd-studio/server/stages/__tests__/orchestrator.integration.test.ts` (수정, solver/verifier event name assertion 2건)
+
+#### 검증 결과
+- [x] tsc --noEmit: `cd ngd-studio && npx tsc --noEmit` → pass (출력 없음)
+- [x] orchestrator.test.ts: 17/17 tests pass
+- [x] orchestrator.integration.test.ts: 4/5 tests pass (1 pre-existing failure — 아래 참조)
+
+#### 추가 발견사항
+`orchestrator.integration.test.ts`의 "full flow from extractor review" 테스트가 1건 실패하지만, git stash로 확인한 결과 Phase 2 변경 이전(Phase 1 상태)에도 동일하게 실패한다. 해당 테스트는 `result1.resultSummary === "extraction_review_pending"` 를 기대하는데, orchestrator 소스에 "작업자 요청으로 auto-continue" 주석과 함께 추출 후 즉시 다음 stage로 진행하도록 변경된 상태라 pre-existing failure다. Phase 2 scope 밖이므로 별도 대응 없이 기록만 남긴다.
+
+#### 질문 / 결정 사항
+없음

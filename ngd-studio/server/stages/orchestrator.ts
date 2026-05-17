@@ -1,5 +1,5 @@
 import path from "path";
-import { readFile } from "fs/promises";
+import { readFile, readdir, stat } from "fs/promises";
 import type { SSEEvent } from "@/lib/claude";
 import type { AIProviderId } from "@/lib/ai/types";
 import { getProviderAdapter } from "@/lib/ai/registry";
@@ -356,12 +356,12 @@ const VERIFIER_CONCURRENCY = 6;
 async function runExtractorStageGroup(opts: ExtractorGroupOptions): Promise<void> {
   const { questionImages, targetQuestions, cache, stageOverrides, send, isAborted, signal, providerTelemetry } = opts;
 
-  send(stageEvent("create.extractor", "running"));
-  send(progressEvent("create.extractor", 0));
+  send(stageEvent("extractor", "running"));
+  send(progressEvent("extractor", 0));
 
   const provider = getProviderForStage("create.extractor", stageOverrides);
   const imagesToProcess = questionImages.filter((q) => targetQuestions.includes(q.number));
-  send(logEvent("create.extractor",
+  send(logEvent("extractor",
     `${provider.label} 으로 ${imagesToProcess.length}문제 추출 시작 (동시 ${EXTRACTOR_CONCURRENCY})`));
 
   let completed = 0;
@@ -372,7 +372,7 @@ async function runExtractorStageGroup(opts: ExtractorGroupOptions): Promise<void
     imagesToProcess,
     async (img) => {
       if (isAborted()) throw new Error("aborted");
-      send(logEvent("create.extractor", `Q${img.number} 추출 시작`));
+      send(logEvent("extractor", `Q${img.number} 추출 시작`));
       const result = await runExtractorStage({
         questionNumber: img.number,
         imagePath: img.path,
@@ -381,9 +381,9 @@ async function runExtractorStageGroup(opts: ExtractorGroupOptions): Promise<void
         signal,
       });
       if (result.status === "completed") {
-        send(logEvent("create.extractor", `Q${img.number} 추출 완료`));
+        send(logEvent("extractor", `Q${img.number} 추출 완료`));
       } else {
-        send(logEvent("create.extractor",
+        send(logEvent("extractor",
           `Q${img.number} 추출 실패: ${result.error?.message ?? "unknown"}`, "error"));
       }
       return result;
@@ -436,29 +436,29 @@ async function runExtractorStageGroup(opts: ExtractorGroupOptions): Promise<void
       });
     }
 
-    send(progressEvent("create.extractor", Math.round(((i + 1) / imagesToProcess.length) * 100)));
+    send(progressEvent("extractor", Math.round(((i + 1) / imagesToProcess.length) * 100)));
   }
 
   const summary = `완료: ${completed}/${imagesToProcess.length}${failed.length > 0 ? `, 실패: [${failed.join(", ")}]` : ""}`;
 
   if (completed === 0 && imagesToProcess.length > 0) {
-    send(stageEvent("create.extractor", "failed", { summary }));
+    send(stageEvent("extractor", "failed", { summary }));
     throw new Error(`extractor: 모든 문제 추출 실패. ${summary}`);
   }
 
   // Partial failure: emit warning but continue (UI will show individual failures).
   if (failed.length > 0) {
-    send(logEvent("create.extractor", `일부 문제 추출 실패: [${failed.join(", ")}]`, "warn"));
+    send(logEvent("extractor", `일부 문제 추출 실패: [${failed.join(", ")}]`, "warn"));
   }
 
-  send(stageEvent("create.extractor", "done", { summary }));
+  send(stageEvent("extractor", "done", { summary }));
 }
 
 async function runSolverStageGroup(opts: StageGroupOptions): Promise<void> {
   const { questionNumbers, cache, stageOverrides, send, isAborted, signal, providerTelemetry } = opts;
 
-  send(stageEvent("create.solver", "running"));
-  send(progressEvent("create.solver", 0));
+  send(stageEvent("solver", "running"));
+  send(progressEvent("solver", 0));
 
   const provider = getProviderForStage("create.solver", stageOverrides);
 
@@ -521,18 +521,18 @@ async function runSolverStageGroup(opts: StageGroupOptions): Promise<void> {
       });
     }
 
-    send(progressEvent("create.solver", Math.round(((i + 1) / questionNumbers.length) * 100)));
+    send(progressEvent("solver", Math.round(((i + 1) / questionNumbers.length) * 100)));
   }
 
   const summary = `완료: ${completed}/${questionNumbers.length}${failed.length > 0 ? `, 실패: [${failed.join(", ")}]` : ""}`;
-  send(stageEvent("create.solver", completed > 0 ? "done" : "failed", { summary }));
+  send(stageEvent("solver", completed > 0 ? "done" : "failed", { summary }));
 }
 
 async function runVerifierStageGroup(opts: StageGroupOptions): Promise<void> {
   const { questionNumbers, cache, stageOverrides, send, isAborted, signal, providerTelemetry } = opts;
 
-  send(stageEvent("create.verifier", "running"));
-  send(progressEvent("create.verifier", 0));
+  send(stageEvent("verifier", "running"));
+  send(progressEvent("verifier", 0));
 
   const solverProvider = getProviderForStage("create.solver", stageOverrides);
   const verifierProvider = getProviderForStage("create.verifier", stageOverrides);
@@ -663,11 +663,11 @@ async function runVerifierStageGroup(opts: StageGroupOptions): Promise<void> {
       });
     }
 
-    send(progressEvent("create.verifier", Math.round(((i + 1) / questionNumbers.length) * 100)));
+    send(progressEvent("verifier", Math.round(((i + 1) / questionNumbers.length) * 100)));
   }
 
   const summary = `완료: ${completed}/${questionNumbers.length}${failed.length > 0 ? `, 실패: [${failed.join(", ")}]` : ""}`;
-  send(stageEvent("create.verifier", completed > 0 ? "done" : "failed", { summary }));
+  send(stageEvent("verifier", completed > 0 ? "done" : "failed", { summary }));
 }
 
 // ──────────────────────────────────────────────
@@ -742,7 +742,6 @@ async function runLegacyBuilderFallback(
   send(logEvent("builder", "outputs/ 폴더에서 최신 HWPX를 탐색합니다.", "warn"));
 
   try {
-    const { readdir, stat } = await import("fs/promises");
     const outputsDir = path.join(baseDir, "outputs");
     const files = await readdir(outputsDir);
     const hwpxFiles = files.filter((f) => f.endsWith(".hwpx"));
