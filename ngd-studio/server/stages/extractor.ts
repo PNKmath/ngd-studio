@@ -24,7 +24,7 @@ export interface ExtractorFigureInfo {
 export interface ExtractorStageOutput {
   question: string;
   choices?: string[];
-  answer: string | number;
+  answer?: string | number;
   has_figure: boolean;
   figure_info: ExtractorFigureInfo | null;
   [key: string]: unknown;
@@ -125,12 +125,11 @@ export function validateExtractorOutput(value: unknown): ModelOutputValidation<E
 
   const candidate = value as Record<string, unknown>;
 
-  // answer: string or number, must exist
-  if (candidate.answer === undefined || candidate.answer === null) {
-    return { ok: false, message: "extractor answer is required" };
-  }
-  if (typeof candidate.answer !== "string" && typeof candidate.answer !== "number") {
-    return { ok: false, message: "extractor answer must be a string or number" };
+  // answer: extractor는 정답을 추출하지 않는다 (solver 책임). 응답에 포함돼 있으면 타입만 검사.
+  if (candidate.answer !== undefined && candidate.answer !== null) {
+    if (typeof candidate.answer !== "string" && typeof candidate.answer !== "number") {
+      return { ok: false, message: "extractor answer must be a string or number" };
+    }
   }
 
   // has_figure: boolean
@@ -200,7 +199,6 @@ export function validateExtractorOutput(value: unknown): ModelOutputValidation<E
   const output: ExtractorStageOutput = {
     ...candidate,
     question,
-    answer: candidate.answer as string | number,
     has_figure: candidate.has_figure,
     figure_info: figureInfo,
   };

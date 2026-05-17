@@ -235,9 +235,14 @@ describe("validateExtractorOutput", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("fails when answer is missing", () => {
+  it("passes when answer is missing (extractor는 answer를 추출하지 않음 — solver 책임)", () => {
     const { answer: _, ...rest } = VALID_OUTPUT;
     const result = validateExtractorOutput(rest);
+    expect(result.ok).toBe(true);
+  });
+
+  it("fails when answer is present but wrong type", () => {
+    const result = validateExtractorOutput({ ...VALID_OUTPUT, answer: true });
     expect(result.ok).toBe(false);
     expect((result as { ok: false; message: string }).message).toContain("answer");
   });
