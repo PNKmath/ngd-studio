@@ -42,7 +42,7 @@ export interface VerifierStageOutput {
   number?: number;
   status: "pass" | "fail";
   issues: VerifierIssue[];
-  feedback?: string | null;
+  feedback: string | null;
 }
 
 export const verifierStageRunner: ModelStageRunner<VerifierStageInput, VerifierStageOutput> = {
