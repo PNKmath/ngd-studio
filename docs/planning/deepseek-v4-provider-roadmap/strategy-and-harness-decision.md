@@ -21,6 +21,8 @@ DeepSeek V4를 사용하지 않을 곳:
 - 로컬 파일 탐색과 명령 실행이 필요한 workflow orchestration
 - builder/checker처럼 deterministic script로 대체 가능한 작업
 
+Studio 설정 UI에서는 이 정책을 사용자가 stage별로 판단하지 않게 한다. DeepSeek를 켜면 `AI_STAGE_KEYS`에 속한 모델 호출 단계 전체(`create.extractor`, `create.solver`, `create.verifier`, `review.reviewer`)에 적용하고, `builder`, `checker`, `cropper` 같은 deterministic 단계는 provider override 대상에서 제외한다.
+
 ## API 전제
 
 DeepSeek 공식 API는 `deepseek-v4-flash`, `deepseek-v4-pro` chat completion model id를 문서화한다. 또한 function/tool call schema를 받을 수 있다. 다만 tool call 문서가 명시하듯, 실제 함수 실행 기능은 호출자 쪽에서 제공해야 한다. 즉 API model은 “어떤 tool을 호출하라”는 구조화된 출력을 만들 수 있지만, 파일 읽기/쓰기/명령 실행 권한을 자체적으로 갖지는 않는다.
@@ -46,13 +48,13 @@ Claude/Codex CLI는 로컬 agent 환경, 파일 tool, Bash tool, `.claude/skills
 | Stage | 현재 방식 | 코딩 대체 가능성 | 모델 필요성 | DeepSeek 후보 |
 |---|---|---:|---:|---:|
 | cropper | skill/agent 또는 기존 cropper 코드 | 높음 | 낮음 | 아니오 |
-| create.extractor | 이미지 인식 agent | 중간 | 높음 | 조건부 |
+| create.extractor | 이미지 인식 agent | 중간 | 높음 | 예, vision/OCR contract 필요 |
 | create.solver | 수학 풀이 agent | 낮음 | 높음 | 예 |
 | create.verifier | 독립 검증 agent | 중간 | 중간~높음 | 예 |
 | figure | crop + image generation | 중간 | 모델은 이미지 생성 쪽 | 아니오 |
 | builder | `build_hwpx.py` + 후처리 script | 높음 | 낮음 | 아니오 |
 | checker | HWPX XML 규칙 검수 agent | 높음 | 일부 semantic check만 중간 | 제한적 |
-| review.reviewer | PDF/HWPX 비교 + 직접 수정 agent | 중간 | 중간 | report 초안만 |
+| review.reviewer | PDF/HWPX 비교 + 직접 수정 agent | 중간 | 중간 | 예, report 초안만 |
 
 ## 코딩으로 먼저 빼야 할 것
 
@@ -170,6 +172,8 @@ DeepSeek가 할 일:
 ### 조건부: `create.extractor`
 
 DeepSeek API의 실제 이미지 입력 지원 여부가 명확히 확인되기 전까지 extractor 후보에서 낮춘다. 이미지 입력이 안정적으로 지원되지 않으면 extractor는 Claude/vision model 또는 별도 OCR 파이프라인을 사용한다.
+
+제품 설정에서는 extractor도 `AI_STAGE_KEYS`의 모델 호출 단계로 함께 허용한다. 실제 rollout은 `extractor-vision-contract`에서 이미지/OCR 입력 형태와 validation 실패 fallback을 확정한 뒤 품질 telemetry로 판단한다.
 
 ## 하네스 결정
 

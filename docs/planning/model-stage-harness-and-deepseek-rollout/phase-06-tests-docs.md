@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: Tests / docs 정리
-status: pending
+status: completed
 depends_on: [5]
 scope:
   - ngd-studio/lib/__tests__/
@@ -29,11 +29,11 @@ provider, recommendation, harness focused tests를 정리한다. README에는 De
 
 ## 체크리스트
 
-- [ ] verifier/solver harness focused test 추가 또는 보강
-- [ ] provider settings/recommendation test 통과
-- [ ] `pnpm test` 또는 합리적 focused Vitest 명령 통과
-- [ ] README에 DeepSeek 사용/비사용 stage 기준 기록
-- [ ] 후속 후보를 `review-report-draft-stage` 또는 `extractor-vision-contract`로 기록
+- [x] verifier/solver harness focused test 추가 또는 보강
+- [x] provider settings/recommendation test 통과
+- [x] `pnpm test` 또는 합리적 focused Vitest 명령 통과
+- [x] README에 DeepSeek 사용/비사용 stage 기준 기록
+- [x] 후속 후보를 `review-report-draft-stage` 또는 `extractor-vision-contract`로 기록
 
 ## 영향 범위
 
@@ -44,3 +44,12 @@ provider, recommendation, harness focused tests를 정리한다. README에는 De
 ```bash
 pnpm test
 ```
+
+## 실행 결과
+
+### 2026-05-17 Phase 6
+
+- README에 `AI_STAGE_KEYS` 전체 DeepSeek 허용과 deterministic 단계 제외 기준을 기록했다.
+- DeepSeek roadmap 문서에 설정 UI 정책과 extractor/reviewer 후속 조건을 반영했다.
+- 후속 후보를 `review-report-draft-stage`, `extractor-vision-contract`로 기록했다.
+- 검증: `pnpm test` 통과.

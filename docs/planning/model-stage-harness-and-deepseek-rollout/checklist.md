@@ -17,9 +17,9 @@ created: 2026-05-16
 | 2 | [phase-02-json-harness-validation.md](./phase-02-json-harness-validation.md) | 6 | 6 | 100% | completed | b41d5d2 |
 | 3 | [phase-03-verifier-harness.md](./phase-03-verifier-harness.md) | 6 | 6 | 100% | completed | 65bde83 |
 | 4 | [phase-04-solver-harness.md](./phase-04-solver-harness.md) | 5 | 5 | 100% | completed | 84dcb1e |
-| 5 | [phase-05-deepseek-rollout-policy.md](./phase-05-deepseek-rollout-policy.md) | 6 | 6 | 100% | completed | pending |
-| 6 | [phase-06-tests-docs.md](./phase-06-tests-docs.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **34** | **29** | **85%** | | |
+| 5 | [phase-05-deepseek-rollout-policy.md](./phase-05-deepseek-rollout-policy.md) | 6 | 6 | 100% | completed | ab0c2be |
+| 6 | [phase-06-tests-docs.md](./phase-06-tests-docs.md) | 5 | 5 | 100% | completed | pending |
+| **Total** | | **34** | **34** | **100%** | | |
 
 ## Phase 의존성
 
@@ -54,12 +54,12 @@ Phase 1~2에서 model stage contract와 JSON validation harness를 만든다. Ph
 
 ### 공통 검증
 
-- [ ] DeepSeek가 HWPX/파일 mutation을 직접 수행하지 않음
-- [ ] provider output은 schema validation 후 cache에 기록됨
-- [ ] legacy Claude/Codex prompt fallback이 제거되지 않음
-- [ ] deterministic builder/checker runner와 scope가 섞이지 않음
-- [ ] `pnpm test` 또는 focused Vitest 명령이 통과함
-- [ ] `pnpm exec tsc --noEmit` 통과
+- [x] DeepSeek가 HWPX/파일 mutation을 직접 수행하지 않음
+- [x] provider output은 schema validation 후 cache에 기록됨
+- [x] legacy Claude/Codex prompt fallback이 제거되지 않음
+- [x] deterministic builder/checker runner와 scope가 섞이지 않음
+- [x] `pnpm test` 또는 focused Vitest 명령이 통과함
+- [x] `pnpm exec tsc --noEmit` 통과
 
 ## 관련 문서
 
