@@ -5,32 +5,27 @@ import { getQueueStatus } from "@/lib/queue";
 
 const IS_WINDOWS = os.platform() === "win32";
 
-export async function GET() {
-  let cliAvailable = false;
-  let cliVersion = "";
-
+function checkCli(binary: string): { available: boolean; version: string } {
   try {
-    // Windows: WSL 경유로 claude 확인 (login shell로 올바른 PATH 사용)
     const cmd = IS_WINDOWS
-      ? 'wsl.exe -- bash -lc "claude --version 2>/dev/null"'
-      : "claude --version 2>/dev/null";
-
+      ? `wsl.exe -- bash -lc "${binary} --version 2>/dev/null"`
+      : `${binary} --version 2>/dev/null`;
     const result = execSync(cmd, { timeout: 10000 }).toString().trim();
-    if (result) {
-      cliAvailable = true;
-      cliVersion = result;
-    }
+    if (result) return { available: true, version: result };
   } catch {
-    cliAvailable = false;
+    // fall through
   }
+  return { available: false, version: "" };
+}
 
+export async function GET() {
+  const claude = checkCli("claude");
+  const codex = checkCli("codex");
   const queueStatus = getQueueStatus();
 
   return NextResponse.json({
-    cli: {
-      available: cliAvailable,
-      version: cliVersion,
-    },
+    cli: claude,
+    codexCli: codex,
     queue: queueStatus,
     timestamp: new Date().toISOString(),
   });

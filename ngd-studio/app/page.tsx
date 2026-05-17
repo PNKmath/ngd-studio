@@ -14,9 +14,20 @@ interface Job {
   finishedAt?: string;
 }
 
+interface ProviderQueueStatus {
+  running: string | null;
+  queueLength: number;
+}
+
 interface SystemStatus {
   cli: { available: boolean; version: string };
-  queue: { running: string | null; queueLength: number };
+  codexCli: { available: boolean; version: string };
+  queue: {
+    running: string | null;
+    runningProvider: "claude" | "codex" | "deepseek-v4" | null;
+    queueLength: number;
+    byProvider: Record<"claude" | "codex" | "deepseek-v4", ProviderQueueStatus>;
+  };
 }
 
 export default function DashboardPage() {
@@ -74,35 +85,19 @@ export default function DashboardPage() {
       {/* System status */}
       <Card className="p-4">
         <h3 className="text-sm font-medium mb-3">시스템 상태</h3>
-        <div className="flex items-center gap-6 text-sm">
-          <div className="flex items-center gap-2">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                systemStatus?.cli.available
-                  ? "bg-[var(--color-status-success)]"
-                  : "bg-[var(--color-status-error)]"
-              }`}
-            />
-            <span>Claude CLI</span>
-            {systemStatus?.cli.available ? (
-              <span className="text-xs text-muted-foreground">
-                {systemStatus.cli.version || "연결됨"}
-              </span>
-            ) : (
-              <span className="text-xs text-[var(--color-status-error)]">
-                {systemStatus === null ? "확인중..." : "미설치"}
-              </span>
-            )}
-          </div>
-          <div className="w-px h-4 bg-border" />
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">대기열</span>
-            <span>
-              {systemStatus?.queue.running ? "1건 진행중" : "유휴"}
-              {(systemStatus?.queue.queueLength ?? 0) > 0 &&
-                ` / ${systemStatus!.queue.queueLength}건 대기`}
-            </span>
-          </div>
+        <div className="space-y-2 text-sm">
+          <ProviderStatusRow
+            label="Claude Code"
+            cli={systemStatus?.cli}
+            queue={systemStatus?.queue.byProvider.claude}
+            loaded={systemStatus !== null}
+          />
+          <ProviderStatusRow
+            label="Codex"
+            cli={systemStatus?.codexCli}
+            queue={systemStatus?.queue.byProvider.codex}
+            loaded={systemStatus !== null}
+          />
         </div>
       </Card>
 
@@ -155,6 +150,51 @@ export default function DashboardPage() {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function ProviderStatusRow({
+  label,
+  cli,
+  queue,
+  loaded,
+}: {
+  label: string;
+  cli?: { available: boolean; version: string };
+  queue?: ProviderQueueStatus;
+  loaded: boolean;
+}) {
+  const available = cli?.available ?? false;
+  return (
+    <div className="flex items-center gap-6">
+      <div className="flex items-center gap-2 min-w-[200px]">
+        <span
+          className={`w-2 h-2 rounded-full ${
+            available
+              ? "bg-[var(--color-status-success)]"
+              : "bg-[var(--color-status-error)]"
+          }`}
+        />
+        <span>{label}</span>
+        {available ? (
+          <span className="text-xs text-muted-foreground">
+            {cli?.version || "연결됨"}
+          </span>
+        ) : (
+          <span className="text-xs text-[var(--color-status-error)]">
+            {!loaded ? "확인중..." : "미설치"}
+          </span>
+        )}
+      </div>
+      <div className="w-px h-4 bg-border" />
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground">대기열</span>
+        <span>
+          {queue?.running ? "1건 진행중" : "유휴"}
+          {(queue?.queueLength ?? 0) > 0 && ` / ${queue!.queueLength}건 대기`}
+        </span>
       </div>
     </div>
   );

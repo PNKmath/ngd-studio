@@ -102,7 +102,9 @@ export async function runLegacyPromptJob({
       event: "log",
       data: {
         stage: "system",
-        message: `CLI 프로세스 시작됨 (PID: ${proc.pid}). API 연결 대기중...`,
+        message: proc.pid !== undefined
+          ? `CLI 프로세스 시작됨 (PID: ${proc.pid}). API 연결 대기중...`
+          : `${metadata.label} 호출 시작. API 연결 대기중...`,
         timestamp: new Date().toISOString(),
         level: "info",
       },
