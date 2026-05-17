@@ -396,7 +396,7 @@ function QuestionImages({ qNum }: { qNum: number }) {
   const originalSrc = `/api/file?path=${encodeURIComponent(`inputs/시험지 제작/question_images/q${padded}.png`)}`;
   // 정리본: CLI 작업 경로 (SSE 서버 경유 또는 outputs에 복사된 경우)
   const cleanedSrc = `/api/file?path=${encodeURIComponent(`inputs/시험지 제작/question_images/cleaned/q${padded}.png`)}`;
-  const [showImages, setShowImages] = useState(false);
+  const [showImages, setShowImages] = useState(true);
   const [cleanedError, setCleanedError] = useState(false);
 
   return (
@@ -650,52 +650,79 @@ function ActionButtons({ qNum }: { qNum: number }) {
   );
 }
 
-function QuestionCard({ qr }: { qr: QuestionResult }) {
-  const reviewActive = useJobStore((s) => s.extractionReviewActive);
-  const updateQuestionResult = useJobStore((s) => s.updateQuestionResult);
-  // 편집 모드는 카드 자체 상태로도 토글 가능 (검증 모드 자동 진입 + 사용자가 닫을 수 있음)
-  const [editing, setEditing] = useState(false);
-  const [savedExt, setSavedExt] = useState<Record<string, unknown> | null>(null);
-  const [expanded, setExpanded] = useState(reviewActive);
-  const ext = qr.extracted as Record<string, unknown> | undefined;
-  const sol = qr.solved as Record<string, unknown> | undefined;
+function statusOf(qr: QuestionResult): { color: string; phases: string } {
   const ver = qr.verified as Record<string, unknown> | undefined;
-
-  const phases: string[] = [];
-  if (ext) phases.push("추출");
-  if (sol) phases.push("해설");
-  if (ver) phases.push("검증");
-
-  const statusColor = ver
+  const sol = qr.solved as Record<string, unknown> | undefined;
+  const ext = qr.extracted as Record<string, unknown> | undefined;
+  const color = ver
     ? "bg-[var(--color-status-success)]"
     : sol
     ? "bg-yellow-500"
     : ext
     ? "bg-blue-500"
     : "bg-muted";
+  const phases: string[] = [];
+  if (ext) phases.push("추출");
+  if (sol) phases.push("해설");
+  if (ver) phases.push("검증");
+  return { color, phases: phases.join(" → ") };
+}
+
+function QuestionListItem({
+  qr,
+  selected,
+  onSelect,
+}: {
+  qr: QuestionResult;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const { color } = statusOf(qr);
+  const ext = qr.extracted as Record<string, unknown> | undefined;
+  const subtopic = ext && (ext.subtopic ?? "") ? String(ext.subtopic) : "";
+  return (
+    <button
+      onClick={onSelect}
+      className={`w-full flex items-center gap-2 px-3 py-2 text-left border-l-2 transition-colors ${
+        selected
+          ? "border-l-primary bg-primary/5"
+          : "border-l-transparent hover:bg-muted/50"
+      }`}
+    >
+      <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
+      <span className="text-sm font-medium">{qr.number}번</span>
+      {subtopic && (
+        <span className="text-[10px] text-muted-foreground truncate">{subtopic}</span>
+      )}
+    </button>
+  );
+}
+
+function QuestionDetail({ qr }: { qr: QuestionResult }) {
+  const reviewActive = useJobStore((s) => s.extractionReviewActive);
+  const updateQuestionResult = useJobStore((s) => s.updateQuestionResult);
+  const [editing, setEditing] = useState(false);
+  const [savedExt, setSavedExt] = useState<Record<string, unknown> | null>(null);
+  const ext = qr.extracted as Record<string, unknown> | undefined;
+  const sol = qr.solved as Record<string, unknown> | undefined;
+  const ver = qr.verified as Record<string, unknown> | undefined;
+
+  const { color, phases } = statusOf(qr);
 
   return (
-    <div className="border rounded-md overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors"
-      >
-        <span className={`w-2 h-2 rounded-full shrink-0 ${statusColor}`} />
-        <span className="text-sm font-medium">{qr.number}번</span>
+    <div className="flex flex-col h-full">
+      <div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/30">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${color}`} />
+        <span className="text-sm font-medium">문제 {qr.number}번</span>
         <span className="text-xs text-muted-foreground">
           {ext && (ext as Record<string, unknown>).subtopic
             ? String((ext as Record<string, unknown>).subtopic)
             : ""}
         </span>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {phases.join(" → ")}
-        </span>
-        <span className="text-xs text-muted-foreground">{expanded ? "▲" : "▼"}</span>
-      </button>
-
-      {expanded && (
-        <div className="px-3 pb-3 space-y-3 border-t bg-muted/20">
-          {/* Images: original + cleaned */}
+        <span className="ml-auto text-xs text-muted-foreground">{phases}</span>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {/* Images: original + cleaned (default 펼침) */}
           <QuestionImages qNum={qr.number} />
 
           {/* Extracted — 편집 모드 또는 읽기 전용 */}
@@ -811,8 +838,7 @@ function QuestionCard({ qr }: { qr: QuestionResult }) {
 
           {/* Action buttons */}
           <ActionButtons qNum={qr.number} />
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -826,8 +852,21 @@ export function QuestionResultPanel() {
   const store = useJobStore();
   const entries = Object.values(questionResults).sort((a, b) => a.number - b.number);
   const [globalLoading, setGlobalLoading] = useState<string | null>(null);
+  const [selectedNum, setSelectedNum] = useState<number | null>(null);
+
+  // Auto-select first entry when entries become available or current selection disappears.
+  useEffect(() => {
+    if (entries.length === 0) {
+      setSelectedNum(null);
+      return;
+    }
+    if (selectedNum == null || !entries.find((q) => q.number === selectedNum)) {
+      setSelectedNum(entries[0].number);
+    }
+  }, [entries, selectedNum]);
 
   if (entries.length === 0) return null;
+  const selected = entries.find((q) => q.number === selectedNum) ?? entries[0];
 
   const doneCount = entries.filter((q) => q.verified || q.solved).length;
   const isDone = status === "done" || status === "failed";
@@ -925,10 +964,20 @@ export function QuestionResultPanel() {
         </div>
       )}
 
-      <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
-        {entries.map((qr) => (
-          <QuestionCard key={qr.number} qr={qr} />
-        ))}
+      <div className="grid grid-cols-[140px_1fr] gap-0 border rounded-md overflow-hidden h-[640px]">
+        <div className="border-r bg-muted/20 overflow-y-auto">
+          {entries.map((qr) => (
+            <QuestionListItem
+              key={qr.number}
+              qr={qr}
+              selected={qr.number === selected.number}
+              onSelect={() => setSelectedNum(qr.number)}
+            />
+          ))}
+        </div>
+        <div className="overflow-hidden">
+          <QuestionDetail qr={selected} />
+        </div>
       </div>
     </Card>
   );
