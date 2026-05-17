@@ -1,0 +1,8 @@
+{
+  "answer": "4",
+  "explanation": [
+    { "kind": "text", "content": "주어진 식을 계산하면" },
+    { "kind": "equation", "content": "2 + 2 = 4" },
+    { "kind": "text", "content": "따라서 정답은 4이다." }
+  ]
+}

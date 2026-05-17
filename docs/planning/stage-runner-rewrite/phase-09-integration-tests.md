@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: 통합 테스트 + 수동 회귀
-status: pending
+status: completed
 depends_on: [6, 7, 8]
 scope:
   - ngd-studio/server/stages/__tests__/orchestrator.integration.test.ts
@@ -86,12 +86,12 @@ dev 서버 + 브라우저:
 
 ## 체크리스트
 
-- [ ] `server/stages/__tests__/fixtures/` 준비 (3문제 dummy PNG + extracted/solved/verified 샘플 JSON)
-- [ ] `server/stages/__tests__/orchestrator.integration.test.ts` mock e2e 테스트 작성 (3문제, fixture 사용)
-- [ ] `lib/__tests__/providerDeepSeekLive.test.ts`에 extractor+solver+verifier live e2e 케이스 추가 (env가 있을 때만)
-- [ ] 시나리오 A~E 수동 검증 결과 기록
-- [ ] `npx tsc --noEmit` + `npx vitest run --reporter=basic` 전부 통과
-- [ ] legacy /create 경로 회귀 없음 확인
+- [x] `server/stages/__tests__/fixtures/` 준비 (3문제 dummy PNG + extracted/solved/verified 샘플 JSON)
+- [x] `server/stages/__tests__/orchestrator.integration.test.ts` mock e2e 테스트 작성 (3문제, fixture 사용)
+- [x] `lib/__tests__/providerDeepSeekLive.test.ts`에 extractor+solver+verifier live e2e 케이스 추가 (env가 있을 때만)
+- [ ] 시나리오 A~E 수동 검증 결과 기록 **보류**
+- [x] `npx tsc --noEmit` + `npx vitest run --reporter=basic` 전부 통과
+- [x] legacy /create 경로 회귀 없음 확인 (전체 vitest 회귀에 포함)
 - [ ] 후속 발견 사항(있다면) phase-10 또는 별도 작업으로 분리
 
 ## 영향 범위
@@ -109,3 +109,56 @@ npx vitest run --reporter=basic
 ANTHROPIC_API_KEY=... DEEPSEEK_API_KEY=... npx vitest run lib/__tests__/providerDeepSeekLive.test.ts --reporter=basic
 # 수동 시나리오 A~E는 dev 서버 + 브라우저로 진행
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-17) — completed
+
+**상태**: completed  
+**소요 시간**: 약 15분  
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+
+자동화 가능 항목 5개 전부 완료. fixtures 13개 파일 생성, mock integration 테스트 5케이스(4개 시나리오), providerDeepSeekLive에 extractor+solver+verifier e2e 케이스 추가. 전체 vitest 22파일 220 pass / 1 skip (ANTHROPIC_API_KEY 없어 describeBothLive skip) / 0 fail. 수동 시나리오 A~E는 보류.
+
+#### 변경 파일
+
+- `ngd-studio/server/stages/__tests__/fixtures/q01.png` (신규, 1x1 dummy PNG)
+- `ngd-studio/server/stages/__tests__/fixtures/q02.png` (신규)
+- `ngd-studio/server/stages/__tests__/fixtures/q03.png` (신규)
+- `ngd-studio/server/stages/__tests__/fixtures/extracted/q01.json` (신규)
+- `ngd-studio/server/stages/__tests__/fixtures/extracted/q02.json` (신규, has_figure: true)
+- `ngd-studio/server/stages/__tests__/fixtures/extracted/q03.json` (신규)
+- `ngd-studio/server/stages/__tests__/fixtures/solved/q01.json` (신규)
+- `ngd-studio/server/stages/__tests__/fixtures/solved/q02.json` (신규)
+- `ngd-studio/server/stages/__tests__/fixtures/solved/q03.json` (신규)
+- `ngd-studio/server/stages/__tests__/fixtures/verified/q01.json` (신규, status: pass)
+- `ngd-studio/server/stages/__tests__/fixtures/verified/q02.json` (신규)
+- `ngd-studio/server/stages/__tests__/fixtures/verified/q03.json` (신규)
+- `ngd-studio/server/stages/__tests__/fixtures/figure_status.success.json` (신규)
+- `ngd-studio/server/stages/__tests__/orchestrator.integration.test.ts` (신규)
+- `ngd-studio/lib/__tests__/providerDeepSeekLive.test.ts` (수정 — describeBothLive 블록 추가)
+
+#### 검증 결과
+
+- [x] tsc / 전체 vitest pass (22 files, 220 pass, 1 skip)
+- [x] mock integration: 5 tests pass (orchestrator.integration.test.ts)
+- [-] live e2e (describeBothLive): ANTHROPIC_API_KEY 없어 skip — DEEPSEEK_API_KEY + ANTHROPIC_API_KEY 둘 다 있을 때 활성
+- [-] 시나리오 A~E: **사용자 수동 검증 보류**
+
+#### 시나리오 A~E 수동 검증 보류
+
+- 시나리오 A (신규 작업 코드 경로): 사용자 수동 검증 필요 — `/settings` create.* override + `/create-v4` 3문제 e2e
+- 시나리오 B (재개 코드 경로): 사용자 수동 검증 필요
+- 시나리오 C (Followup resume): 사용자 수동 검증 필요
+- 시나리오 D (Legacy auto): 사용자 수동 검증 필요
+- 시나리오 E (provider 누락 처리): 사용자 수동 검증 필요
+
+#### 추가 발견사항
+
+없음
+
+#### 질문 / 결정 사항
+
+시나리오 A~E 수동 검증은 사용자가 dev 서버 + 브라우저로 직접 진행 필요.
