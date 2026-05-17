@@ -400,11 +400,13 @@ describe("runStageOrchestrator", () => {
     const reviewEvent = events.find((e) => e.event === "extraction_review");
     expect(reviewEvent).toBeUndefined();
 
-    // Should not have emitted solver stage event (skipped).
+    // Should emit solver stage as "done" with cache-skip summary (UI clarity).
     const solverStageEvent = events.find(
       (e) => e.event === "stage" && (e.data as Record<string, unknown>).name === "solver"
     );
-    expect(solverStageEvent).toBeUndefined();
+    expect(solverStageEvent).toBeDefined();
+    expect((solverStageEvent!.data as Record<string, unknown>).status).toBe("done");
+    expect((solverStageEvent!.data as Record<string, unknown>).summary).toContain("캐시");
 
     // Should have tried to run builder.
     const builderStageEvent = events.find(

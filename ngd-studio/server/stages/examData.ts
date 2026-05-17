@@ -58,7 +58,7 @@ export async function buildExamDataJson(input: {
   }
 
   const output: ExamDataOutput = {
-    info: meta,
+    info: normalizeMeta(meta),
     problems,
   };
 
@@ -75,6 +75,28 @@ export async function buildExamDataJson(input: {
  * Read the best available JSON for question number `n`.
  * Priority: verified > solved > extracted
  */
+function normalizeMeta(meta: ExamMetaInput): ExamMetaInput {
+  const examType = meta.exam_type ?? meta.examType ?? "";
+  const year = typeof meta.year === "number" ? meta.year : new Date().getFullYear();
+  const semester = meta.semester ?? "";
+  const subject = meta.subject ?? "";
+  let filenameBase = meta.filename_base;
+  if (!filenameBase) {
+    const parts = [meta.code, "고", year, semester, meta.region, meta.school, subject, meta.code]
+      .filter((v) => v !== undefined && v !== "")
+      .map((v) => `[${v}]`)
+      .join("");
+    filenameBase = parts.length > 0 ? parts : `exam_${year}`;
+  }
+  return {
+    ...meta,
+    exam_type: examType,
+    examType,
+    year,
+    filename_base: filenameBase,
+  };
+}
+
 async function readQuestionWithFallback(
   cache: StageCache,
   n: number

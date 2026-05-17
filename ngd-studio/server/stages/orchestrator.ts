@@ -505,6 +505,15 @@ export async function runStageOrchestrator(
 
     const failedQuestionNumbers = new Set<number>();
 
+    if (pipelineQuestions.length === 0) {
+      // All model stages skipped (e.g. resume past verifier). Emit done events
+      // so UI shows cached stages as completed rather than perpetual pending.
+      for (const stage of ["extractor", "solver", "verifier"] as const) {
+        send(stageEvent(stage, "done", { summary: "캐시로 스킵" }));
+        send(progressEvent(stage, 100));
+      }
+    }
+
     if (pipelineQuestions.length > 0) {
       if (checkAborted()) return cancelled(providerTelemetry);
 
@@ -518,10 +527,15 @@ export async function runStageOrchestrator(
         if (runVerifier  && !state.verified)                      stageCounter.verifier.total++;
       }
 
-      // If all questions already have cached results for a given stage, skip
-      // emitting running/done for that stage (nothing to do).
-      // Any stage with total=0 won't have onEnter called, so no stageEvent emitted —
-      // that's correct (stage was fully skipped by resume logic).
+      // If all questions already have cached results for a given stage, emit
+      // a "done" event with cache-summary so UI doesn't show the card as pending.
+      for (const stage of ["extractor", "solver", "verifier"] as const) {
+        const enabled = stage === "extractor" ? runExtractor : stage === "solver" ? runSolver : runVerifier;
+        if (enabled && stageCounter[stage].total === 0) {
+          send(stageEvent(stage, "done", { summary: "캐시로 스킵" }));
+          send(progressEvent(stage, 100));
+        }
+      }
 
       const pipelineResults = await Promise.all(pipelineQuestions.map(processQuestion));
 

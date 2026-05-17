@@ -135,13 +135,17 @@ describe("buildExamDataJson", () => {
       questionNumbers: [1],
     });
 
-    expect(result.info).toEqual(meta);
+    expect(result.info).toMatchObject(meta);
     expect(result.problems).toHaveLength(1);
+
+    // normalizeMeta also injects camelCase + filename_base defaults
+    expect(result.info.examType).toBe("기말");
+    expect(result.info.filename_base).toBeTypeOf("string");
 
     // Verify the written file preserves all meta fields
     const written = JSON.parse(await readFile(cache.examDataPath(), "utf8")) as {
       info: typeof meta;
     };
-    expect(written.info).toEqual(meta);
+    expect(written.info).toMatchObject(meta);
   });
 });
