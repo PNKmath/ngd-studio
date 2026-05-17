@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Cpu, KeyRound, Loader2, PlugZap, Settings2, Sparkles, Workflow } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Cpu, KeyRound, Loader2, PlugZap, Settings2, Sparkles, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AI_STAGE_KEYS,
@@ -13,43 +13,86 @@ import {
   writeAISettings,
   type AISettings,
   type SelectableProviderId,
+  type StageProviderId,
 } from "@/lib/ai/settings";
+import { STAGE_PROVIDER_CAPABILITY } from "@/lib/ai/stageCapability";
 import { recommendStageProvider } from "@/lib/ai/recommendation";
+import type { AIProviderId, AIStageKey } from "@/lib/ai";
 import { cn } from "@/lib/utils";
 
-const providerOptions: {
+// ── Provider card definitions ────────────────────────────────────────────────
+
+interface ProviderOption {
   id: SelectableProviderId;
   label: string;
   detail: string;
   resolved: string;
-  vision: "supported" | "pending";
+  vision: "supported" | "pending" | "none";
   visionNote: string;
-}[] = [
+  authNote: string;
+  /** Runtime env keys required for this provider */
+  requiredEnvKeys: string[];
+  /** CLI availability key from /api/status */
+  cliKey?: "cli" | "codexCli";
+}
+
+const providerOptions: ProviderOption[] = [
   {
     id: "auto",
     label: "자동",
-    detail: "현재는 Claude로 실행하고, 이후 작업 특성 기반 추천으로 확장합니다.",
-    resolved: "Claude",
+    detail: "현재는 Claude CLI로 실행하고, 이후 작업 특성 기반 추천으로 확장합니다.",
+    resolved: "Claude CLI (기본)",
     vision: "supported",
     visionNote: "추출 단계 사용 가능",
+    authNote: "claude auth login 또는 ANTHROPIC_API_KEY",
+    requiredEnvKeys: [],
+    cliKey: "cli",
   },
   {
     id: "claude-cli",
-    label: "Claude",
+    label: "Claude CLI",
     detail: "기존 stream-json 기반 workflow를 그대로 사용합니다.",
     resolved: "Claude CLI",
     vision: "supported",
     visionNote: "추출 단계 사용 가능",
+    authNote: "claude auth login 또는 ANTHROPIC_API_KEY",
+    requiredEnvKeys: [],
+    cliKey: "cli",
+  },
+  {
+    id: "claude-sdk",
+    label: "Claude SDK",
+    detail: "Anthropic SDK를 직접 호출합니다. ANTHROPIC_API_KEY가 필요합니다.",
+    resolved: "Claude SDK",
+    vision: "supported",
+    visionNote: "추출 단계 사용 가능",
+    authNote: "ANTHROPIC_API_KEY 필요",
+    requiredEnvKeys: ["ANTHROPIC_API_KEY"],
   },
   {
     id: "codex-cli",
-    label: "Codex",
+    label: "Codex CLI",
     detail: "로컬 Codex CLI provider를 사용합니다.",
     resolved: "Codex CLI",
     vision: "pending",
-    visionNote: "vision 지원 (Codex v0.115+), --image flag adapter 구현됨",
+    visionNote: "vision 지원 (Codex v0.115+)",
+    authNote: "codex 설치 및 인증 필요",
+    requiredEnvKeys: [],
+    cliKey: "codexCli",
+  },
+  {
+    id: "openai-sdk",
+    label: "OpenAI SDK",
+    detail: "OpenAI SDK를 직접 호출합니다. OPENAI_API_KEY가 필요합니다.",
+    resolved: "OpenAI SDK",
+    vision: "supported",
+    visionNote: "추출 단계 사용 가능",
+    authNote: "OPENAI_API_KEY 필요",
+    requiredEnvKeys: ["OPENAI_API_KEY"],
   },
 ];
+
+// ── Stage labels ─────────────────────────────────────────────────────────────
 
 const stageLabels: Record<(typeof AI_STAGE_KEYS)[number], string> = {
   "create.extractor": "제작 추출",
@@ -58,21 +101,66 @@ const stageLabels: Record<(typeof AI_STAGE_KEYS)[number], string> = {
   "review.reviewer": "오검 리뷰",
 };
 
+const PROVIDER_LABEL: Record<AIProviderId, string> = {
+  auto: "자동",
+  "claude-cli": "Claude CLI",
+  "claude-sdk": "Claude SDK",
+  "codex-cli": "Codex CLI",
+  "openai-sdk": "OpenAI SDK",
+  "deepseek-v4": "DeepSeek V4",
+};
+
+// ── Tab type ─────────────────────────────────────────────────────────────────
+
 type SettingsTab = "engine" | "keys";
+
+// ── Env & status types ───────────────────────────────────────────────────────
 
 interface EnvKeyStatus {
   configured: boolean;
   value?: string;
 }
 
-type ApiTestProvider = "deepseek" | "gemini";
+interface CliStatus {
+  available: boolean;
+  version: string;
+}
+
+interface StatusResponse {
+  cli?: CliStatus;
+  codexCli?: CliStatus;
+}
+
+type ApiTestProvider = "deepseek" | "gemini" | "claude" | "openai";
 
 interface ApiTestState {
   status: "idle" | "running" | "success" | "error";
   message?: string;
 }
 
+// ── API key fields ────────────────────────────────────────────────────────────
+
 const apiKeyFields = [
+  {
+    key: "ANTHROPIC_API_KEY",
+    label: "Anthropic API Key",
+    placeholder: "sk-ant-...",
+  },
+  {
+    key: "ANTHROPIC_MODEL",
+    label: "Anthropic Model",
+    placeholder: "claude-sonnet-4-6",
+  },
+  {
+    key: "OPENAI_API_KEY",
+    label: "OpenAI API Key",
+    placeholder: "sk-...",
+  },
+  {
+    key: "OPENAI_MODEL",
+    label: "OpenAI Model",
+    placeholder: "gpt-4o",
+  },
   {
     key: "DEEPSEEK_API_KEY",
     label: "DeepSeek API Key",
@@ -95,49 +183,72 @@ const apiKeyFields = [
   },
 ] as const;
 
+// ── Main page component ───────────────────────────────────────────────────────
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("engine");
   const [settings, setSettings] = useState<AISettings>(() => readAISettings());
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [envStatus, setEnvStatus] = useState<Record<string, EnvKeyStatus>>({});
+  const [cliStatus, setCliStatus] = useState<StatusResponse>({});
   const [envMessage, setEnvMessage] = useState("");
   const [apiTests, setApiTests] = useState<Record<ApiTestProvider, ApiTestState>>({
     deepseek: { status: "idle" },
     gemini: { status: "idle" },
+    claude: { status: "idle" },
+    openai: { status: "idle" },
   });
+
   const deepSeekEnabled = allModelStagesUseDeepSeek(settings.stageOverrides);
+
+  const applyEnvKeys = useCallback((keys: Record<string, EnvKeyStatus> | undefined) => {
+    setEnvStatus(keys ?? {});
+    setEnvValues((current) => ({
+      ...current,
+      ANTHROPIC_MODEL: keys?.ANTHROPIC_MODEL?.value ?? current.ANTHROPIC_MODEL ?? "",
+      OPENAI_MODEL: keys?.OPENAI_MODEL?.value ?? current.OPENAI_MODEL ?? "",
+      DEEPSEEK_API_BASE_URL: keys?.DEEPSEEK_API_BASE_URL?.value ?? current.DEEPSEEK_API_BASE_URL ?? "",
+      DEEPSEEK_MODEL: keys?.DEEPSEEK_MODEL?.value ?? current.DEEPSEEK_MODEL ?? "",
+    }));
+  }, []);
 
   const loadEnvSettings = useCallback(async () => {
     const response = await fetch("/api/env-settings");
     if (!response.ok) return;
     const data = await response.json() as { keys?: Record<string, EnvKeyStatus> };
-    setEnvStatus(data.keys ?? {});
-    setEnvValues((current) => ({
-      ...current,
-      DEEPSEEK_API_BASE_URL: data.keys?.DEEPSEEK_API_BASE_URL?.value ?? current.DEEPSEEK_API_BASE_URL ?? "",
-      DEEPSEEK_MODEL: data.keys?.DEEPSEEK_MODEL?.value ?? current.DEEPSEEK_MODEL ?? "",
-    }));
+    applyEnvKeys(data.keys);
+  }, [applyEnvKeys]);
+
+  const loadCliStatus = useCallback(async () => {
+    const response = await fetch("/api/status");
+    if (!response.ok) return;
+    const data = await response.json() as StatusResponse;
+    setCliStatus(data);
   }, []);
 
   useEffect(() => {
-    queueMicrotask(() => void loadEnvSettings());
-  }, [loadEnvSettings]);
+    void loadEnvSettings();
+    void loadCliStatus();
+  }, [loadEnvSettings, loadCliStatus]);
 
   const selectProvider = (provider: SelectableProviderId) => {
     setSettings(writeAISettings({ ...settings, defaultProvider: provider }));
   };
 
-  const enableDeepSeek = () => {
-    setSettings(writeAISettings({
-      ...settings,
-      stageOverrides: createDeepSeekStageOverrides(),
-    }));
+  const setStageOverride = (stageKey: AIStageKey, provider: StageProviderId | "") => {
+    const next = { ...settings.stageOverrides };
+    if (provider === "") {
+      delete next[stageKey];
+    } else {
+      next[stageKey] = provider;
+    }
+    setSettings(writeAISettings({ ...settings, stageOverrides: next }));
   };
 
-  const disableDeepSeek = () => {
+  const toggleDeepSeek = () => {
     setSettings(writeAISettings({
       ...settings,
-      stageOverrides: {},
+      stageOverrides: deepSeekEnabled ? {} : createDeepSeekStageOverrides(),
     }));
   };
 
@@ -162,13 +273,13 @@ export default function SettingsPage() {
     }
 
     const data = await response.json() as { keys?: Record<string, EnvKeyStatus> };
-    setEnvStatus(data.keys ?? {});
+    applyEnvKeys(data.keys);
     setEnvValues((current) => ({
       ...current,
+      ANTHROPIC_API_KEY: "",
+      OPENAI_API_KEY: "",
       DEEPSEEK_API_KEY: "",
       GEMINI_API_KEY: "",
-      DEEPSEEK_API_BASE_URL: data.keys?.DEEPSEEK_API_BASE_URL?.value ?? current.DEEPSEEK_API_BASE_URL ?? "",
-      DEEPSEEK_MODEL: data.keys?.DEEPSEEK_MODEL?.value ?? current.DEEPSEEK_MODEL ?? "",
     }));
     setEnvMessage("저장되었습니다.");
   };
@@ -196,8 +307,28 @@ export default function SettingsPage() {
     }));
   };
 
+  /** Check if a provider card has an auth warning */
+  function providerHasAuthWarning(option: ProviderOption): boolean {
+    // CLI providers
+    if (option.cliKey) {
+      const cliInfo = cliStatus[option.cliKey];
+      if (option.id === "auto" || option.id === "claude-cli") {
+        // OK if CLI is available OR ANTHROPIC_API_KEY is set
+        const cliOk = cliInfo?.available ?? false;
+        const sdkKeyOk = envStatus["ANTHROPIC_API_KEY"]?.configured ?? false;
+        return !cliOk && !sdkKeyOk;
+      }
+      if (option.id === "codex-cli") {
+        return !(cliInfo?.available ?? false);
+      }
+    }
+    // SDK providers: check required env keys
+    return option.requiredEnvKeys.some((key) => !(envStatus[key]?.configured ?? false));
+  }
+
   return (
     <div className="max-w-4xl space-y-6">
+      {/* Tab bar */}
       <div className="flex w-fit rounded-lg border bg-card p-1">
         {([
           { id: "engine", label: "AI 엔진", icon: Cpu },
@@ -225,166 +356,191 @@ export default function SettingsPage() {
 
       {activeTab === "engine" ? (
         <>
+          {/* ── 기본 실행 엔진 (5장 + auto 카드) ─────────────────────── */}
           <section className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Cpu className="size-4" />
-          AI 엔진
-        </div>
-
-        <div className="rounded-lg border bg-card">
-          <div className="flex items-start justify-between gap-4 border-b px-4 py-4">
-            <div className="space-y-1">
-              <h2 className="text-base font-medium">기본 실행 엔진</h2>
-              <p className="text-sm text-muted-foreground">
-                새 작업을 시작할 때 `/api/run`에 전달할 provider 기본값입니다.
-              </p>
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Cpu className="size-4" />
+              AI 엔진
             </div>
-            <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
-              <Settings2 className="size-3.5" />
-              localStorage
-            </div>
-          </div>
 
-          <div className="grid gap-2 p-4 md:grid-cols-3">
-            {providerOptions.map((option) => {
-              const selected = option.id === settings.defaultProvider;
-
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => selectProvider(option.id)}
-                  className={cn(
-                    "min-h-32 rounded-lg border p-4 text-left transition-colors",
-                    selected
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/40 hover:bg-muted/40"
-                  )}
-                >
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">{option.label}</span>
-                    <span
-                      className={cn(
-                        "flex size-5 items-center justify-center rounded-full border",
-                        selected
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-muted-foreground/30 text-transparent"
-                      )}
-                      aria-hidden="true"
-                    >
-                      <Check className="size-3.5" />
-                    </span>
-                  </div>
-                  <p className="min-h-10 text-sm leading-5 text-muted-foreground">
-                    {option.detail}
+            <div className="rounded-lg border bg-card">
+              <div className="flex items-start justify-between gap-4 border-b px-4 py-4">
+                <div className="space-y-1">
+                  <h2 className="text-base font-medium">기본 실행 엔진</h2>
+                  <p className="text-sm text-muted-foreground">
+                    새 작업을 시작할 때 사용할 provider 기본값입니다. Stage별 override가 없으면 이 값이 적용됩니다.
                   </p>
-                  <div className="mt-4 space-y-1 text-xs text-muted-foreground">
-                    <div>
-                      실행: <span className="text-foreground">{option.resolved}</span>
-                    </div>
-                    <div>
-                      이미지 입력:{" "}
-                      <span className={option.vision === "supported" ? "text-foreground" : "text-amber-500"}>
-                        {option.visionNote}
-                      </span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Workflow className="size-4" />
-          Stage override
-        </div>
-
-        <div className="rounded-lg border bg-card">
-          <div className="flex items-start justify-between gap-4 border-b px-4 py-4">
-            <div>
-              <h2 className="text-base font-medium">AI 단계 DeepSeek</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                풀이 · 검증 · 오검 리뷰 단계에 적용됩니다. (추출은 이미지 입력이 필요해 제외)
-              </p>
-            </div>
-            <Button
-              variant={deepSeekEnabled ? "secondary" : "default"}
-              onClick={deepSeekEnabled ? disableDeepSeek : enableDeepSeek}
-            >
-              <Sparkles className="size-4" />
-              {deepSeekEnabled ? "자동으로 전환" : "DeepSeek 사용"}
-            </Button>
-          </div>
-
-          <div className="grid gap-2 p-4 md:grid-cols-2">
-            {AI_STAGE_KEYS.map((stageKey) => {
-              const recommendation = recommendStageProvider({
-                stageKey,
-                stageOverrides: settings.stageOverrides,
-                telemetry: [],
-              });
-              const active = settings.stageOverrides[stageKey] === "deepseek-v4";
-              const supported = DEEPSEEK_MODEL_STAGE_KEYS.includes(stageKey);
-
-              return (
-                <div
-                  key={stageKey}
-                  className={cn(
-                    "flex min-h-20 items-center justify-between gap-3 rounded-lg border px-4 py-3",
-                    !supported && "opacity-60",
-                    active ? "border-primary bg-primary/5" : "border-border bg-background"
-                  )}
-                  title={supported ? undefined : "DeepSeek V4는 이미지 입력을 지원하지 않아 이 단계에는 사용할 수 없습니다."}
-                >
-                  <div>
-                    <div className="text-sm font-medium">{stageLabels[stageKey]}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {stageKey} · 실행 {recommendation.provider}
-                      {!supported && " · DeepSeek 미지원"}
-                    </div>
-                  </div>
-                  <span
-                    className={cn(
-                      "flex size-5 items-center justify-center rounded-full border",
-                      active
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-muted-foreground/30 text-transparent"
-                    )}
-                    aria-hidden="true"
-                  >
-                    <Check className="size-3.5" />
-                  </span>
                 </div>
-              );
-            })}
-          </div>
+                <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                  <Settings2 className="size-3.5" />
+                  localStorage
+                </div>
+              </div>
 
-          <div className="border-t px-4 py-3 text-xs text-muted-foreground">
-            builder, checker, cropper는 로컬 deterministic runner가 처리합니다.
-            extractor는 DeepSeek V4가 이미지 입력을 지원하지 않아 Claude/Codex로만 실행됩니다.
-          </div>
-        </div>
-      </section>
+              <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                {providerOptions.map((option) => {
+                  const selected = option.id === settings.defaultProvider;
+                  const hasWarning = providerHasAuthWarning(option);
 
-      <section className="rounded-lg border bg-card px-4 py-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-base font-medium">현재 선택</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              다음 작업부터 `{settings.defaultProvider}` provider와 AI 단계 설정이 요청 본문에 포함됩니다.
-            </p>
-          </div>
-          <Button
-            variant="secondary"
-            onClick={resetSettings}
-          >
-            자동으로 되돌리기
-          </Button>
-        </div>
-      </section>
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => selectProvider(option.id)}
+                      className={cn(
+                        "min-h-36 rounded-lg border p-4 text-left transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : hasWarning
+                          ? "border-destructive/40 hover:border-destructive/60 hover:bg-muted/40"
+                          : "border-border hover:border-primary/40 hover:bg-muted/40"
+                      )}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium">{option.label}</span>
+                          {hasWarning && (
+                            <AlertTriangle className="size-3.5 text-destructive" aria-label={option.authNote} />
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            "flex size-5 items-center justify-center rounded-full border",
+                            selected
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-muted-foreground/30 text-transparent"
+                          )}
+                          aria-hidden="true"
+                        >
+                          <Check className="size-3.5" />
+                        </span>
+                      </div>
+
+                      <p className="min-h-10 text-xs leading-5 text-muted-foreground">
+                        {option.detail}
+                      </p>
+
+                      <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                        <div>
+                          실행: <span className="text-foreground">{option.resolved}</span>
+                        </div>
+                        <div>
+                          이미지:{" "}
+                          <span className={option.vision === "supported" ? "text-foreground" : option.vision === "pending" ? "text-amber-500" : "text-destructive"}>
+                            {option.visionNote}
+                          </span>
+                        </div>
+                        <div className={cn("text-xs", hasWarning ? "text-destructive" : "text-muted-foreground")}>
+                          {hasWarning ? "⚠ " : ""}{option.authNote}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {/* ── Stage override 드롭다운 매트릭스 ─────────────────────── */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Workflow className="size-4" />
+              Stage override
+            </div>
+
+            <div className="rounded-lg border bg-card">
+              <div className="flex items-start justify-between gap-4 border-b px-4 py-4">
+                <div>
+                  <h2 className="text-base font-medium">AI 단계별 Provider 선택</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    각 stage에서 사용할 provider를 지정합니다. "자동"은 기본 provider를 사용합니다.
+                  </p>
+                </div>
+                <Button
+                  variant={deepSeekEnabled ? "secondary" : "default"}
+                  onClick={toggleDeepSeek}
+                >
+                  <Sparkles className="size-4" />
+                  {deepSeekEnabled ? "자동으로 전환" : "DeepSeek 일괄 사용"}
+                </Button>
+              </div>
+
+              <div className="grid gap-2 p-4 md:grid-cols-2">
+                {AI_STAGE_KEYS.map((stageKey) => {
+                  const recommendation = recommendStageProvider({
+                    stageKey,
+                    stageOverrides: settings.stageOverrides,
+                    telemetry: [],
+                  });
+                  const currentOverride = settings.stageOverrides[stageKey] ?? "";
+                  const allowedProviders = STAGE_PROVIDER_CAPABILITY[stageKey];
+                  const deepSeekSupported = DEEPSEEK_MODEL_STAGE_KEYS.includes(stageKey);
+
+                  return (
+                    <div
+                      key={stageKey}
+                      className={cn(
+                        "rounded-lg border px-4 py-3 space-y-2",
+                        currentOverride ? "border-primary/40 bg-primary/5" : "border-border bg-background"
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium">{stageLabels[stageKey]}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {stageKey} · 실행: {PROVIDER_LABEL[recommendation.provider] ?? recommendation.provider}
+                            {!deepSeekSupported && " · DeepSeek 미지원"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <select
+                        value={currentOverride}
+                        onChange={(e) => setStageOverride(stageKey, e.target.value as StageProviderId | "")}
+                        className="w-full rounded-md border bg-background px-2 py-1.5 text-sm outline-none transition-colors focus:border-primary"
+                      >
+                        <option value="">자동 (기본 provider 사용)</option>
+                        {allowedProviders.filter((p) => p !== "auto").map((p) => (
+                          <option key={p} value={p}>
+                            {PROVIDER_LABEL[p] ?? p}
+                          </option>
+                        ))}
+                      </select>
+
+                      {!deepSeekSupported && (
+                        <p className="text-xs text-muted-foreground">
+                          DeepSeek V4는 이미지 입력을 지원하지 않아 이 단계에는 사용할 수 없습니다.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t px-4 py-3 text-xs text-muted-foreground">
+                builder, checker, cropper는 로컬 deterministic runner가 처리합니다.
+                create.extractor는 DeepSeek V4가 이미지 입력을 지원하지 않아 선택 불가입니다.
+              </div>
+            </div>
+          </section>
+
+          {/* ── 현재 선택 요약 ─────────────────────────────────────────── */}
+          <section className="rounded-lg border bg-card px-4 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-medium">현재 선택</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  다음 작업부터 <code className="text-xs bg-muted px-1 rounded">{settings.defaultProvider}</code> provider와 stage override 설정이 요청 본문에 포함됩니다.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={resetSettings}
+              >
+                자동으로 되돌리기
+              </Button>
+            </div>
+          </section>
         </>
       ) : (
         <section className="space-y-3">
@@ -397,7 +553,7 @@ export default function SettingsPage() {
             <div className="border-b px-4 py-4">
               <h2 className="text-base font-medium">로컬 API 키</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                입력한 값은 이 앱의 `.env.local`에 저장되고 다음 실행부터 바로 사용됩니다.
+                입력한 값은 이 앱의 <code className="text-xs bg-muted px-1 rounded">.env.local</code>에 저장되고 다음 실행부터 바로 사용됩니다.
               </p>
             </div>
 
@@ -414,7 +570,9 @@ export default function SettingsPage() {
                         "rounded-md px-2 py-1 text-xs",
                         configured ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
                       )}>
-                        {configured ? "설정됨" : "미설정"}
+                        {configured
+                          ? <span className="flex items-center gap-1"><CheckCircle2 className="size-3" /> 설정됨</span>
+                          : "미설정"}
                       </span>
                     </div>
                     <input
@@ -446,6 +604,7 @@ export default function SettingsPage() {
             </div>
           </div>
 
+          {/* ── 연결 테스트 ─────────────────────────────────────────────── */}
           <div className="rounded-lg border bg-card">
             <div className="border-b px-4 py-4">
               <h2 className="text-base font-medium">연결 테스트</h2>
@@ -456,6 +615,8 @@ export default function SettingsPage() {
 
             <div className="grid gap-3 p-4 md:grid-cols-2">
               {([
+                { provider: "claude", label: "Claude SDK" },
+                { provider: "openai", label: "OpenAI SDK" },
                 { provider: "deepseek", label: "DeepSeek" },
                 { provider: "gemini", label: "Nano Banana / Gemini" },
               ] as const).map((item) => {

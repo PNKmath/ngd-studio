@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { readRuntimeEnv, type RuntimeEnvMap } from "@/lib/server/runtimeEnv";
 
-type TestProvider = "deepseek" | "gemini";
+type TestProvider = "deepseek" | "gemini" | "claude" | "openai";
 
 interface TestBody {
   provider?: TestProvider;
@@ -24,17 +26,30 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => undefined) as TestBody | undefined;
   const provider = body?.provider;
 
-  if (provider !== "deepseek" && provider !== "gemini") {
+  if (provider !== "deepseek" && provider !== "gemini" && provider !== "claude" && provider !== "openai") {
     return NextResponse.json({ ok: false, message: "provider is required" }, { status: 400 });
   }
 
   const env = mergeRuntimeEnv(body?.values);
-  const result = provider === "deepseek"
-    ? await testDeepSeek(env)
-    : await testGemini(env);
+  const result =
+    provider === "deepseek" ? await testDeepSeek(env) :
+    provider === "gemini" ? await testGemini(env) :
+    provider === "claude" ? await testClaude(env) :
+    await testOpenAI(env);
 
   return NextResponse.json(result, { status: result.ok ? 200 : 400 });
 }
+
+const MERGEABLE_ENV_KEYS = new Set([
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_MODEL",
+  "OPENAI_API_KEY",
+  "OPENAI_MODEL",
+  "DEEPSEEK_API_KEY",
+  "DEEPSEEK_API_BASE_URL",
+  "DEEPSEEK_MODEL",
+  "GEMINI_API_KEY",
+]);
 
 function mergeRuntimeEnv(values: TestBody["values"]): RuntimeEnvMap {
   const env = { ...readRuntimeEnv() };
@@ -44,13 +59,8 @@ function mergeRuntimeEnv(values: TestBody["values"]): RuntimeEnvMap {
     if (typeof value !== "string") continue;
     const trimmed = value.trim();
     if (!trimmed && key.endsWith("_API_KEY")) continue;
-    if (
-      key === "DEEPSEEK_API_KEY" ||
-      key === "DEEPSEEK_API_BASE_URL" ||
-      key === "DEEPSEEK_MODEL" ||
-      key === "GEMINI_API_KEY"
-    ) {
-      env[key] = trimmed;
+    if (MERGEABLE_ENV_KEYS.has(key)) {
+      env[key as keyof RuntimeEnvMap] = trimmed;
     }
   }
 
@@ -111,6 +121,46 @@ async function testGemini(env: RuntimeEnvMap): Promise<{ ok: boolean; message: s
   }
 
   return { ok: true, message: "Gemini 연결 성공" };
+}
+
+async function testClaude(env: RuntimeEnvMap): Promise<{ ok: boolean; message: string; detail?: string }> {
+  const apiKey = env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return { ok: false, message: "ANTHROPIC_API_KEY가 없습니다." };
+  }
+
+  try {
+    const client = new Anthropic({ apiKey, timeout: TEST_TIMEOUT_MS });
+    await client.messages.create({
+      model: env.ANTHROPIC_MODEL ?? "claude-haiku-4-5",
+      max_tokens: 1,
+      messages: [{ role: "user", content: "ping" }],
+    });
+    return { ok: true, message: "Claude SDK 연결 성공" };
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 200) : String(err);
+    return { ok: false, message: "Claude SDK 연결 실패", detail: message };
+  }
+}
+
+async function testOpenAI(env: RuntimeEnvMap): Promise<{ ok: boolean; message: string; detail?: string }> {
+  const apiKey = env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return { ok: false, message: "OPENAI_API_KEY가 없습니다." };
+  }
+
+  try {
+    const client = new OpenAI({ apiKey, timeout: TEST_TIMEOUT_MS });
+    await client.chat.completions.create({
+      model: env.OPENAI_MODEL ?? "gpt-4o-mini",
+      max_tokens: 1,
+      messages: [{ role: "user", content: "ping" }],
+    });
+    return { ok: true, message: "OpenAI SDK 연결 성공" };
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 200) : String(err);
+    return { ok: false, message: "OpenAI SDK 연결 실패", detail: message };
+  }
 }
 
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response> {
