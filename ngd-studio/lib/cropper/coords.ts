@@ -1,10 +1,29 @@
-import type { CropBox } from "./types";
+import type { CropBox, PdfRotation } from "./types";
 
 interface Viewport {
   displayWidth: number;
   displayHeight: number;
   imageWidth: number;
   imageHeight: number;
+}
+
+/** 외부 입력 회전값을 cropper가 지원하는 90도 단위로 정규화 */
+export function normalizePdfRotation(rotation: number): PdfRotation {
+  const normalized = ((Math.round(rotation / 90) * 90) % 360 + 360) % 360;
+  return normalized as PdfRotation;
+}
+
+/** 회전이 실제 렌더 이미지에 적용된 뒤의 픽셀 치수 */
+export function getRotatedImageSize(args: {
+  width: number;
+  height: number;
+  rotation: number;
+}): { width: number; height: number } {
+  const rotation = normalizePdfRotation(args.rotation);
+  if (rotation === 90 || rotation === 270) {
+    return { width: args.height, height: args.width };
+  }
+  return { width: args.width, height: args.height };
 }
 
 /** 화면 좌표 (clientX, clientY 기준 컨테이너 상대) → 이미지 픽셀 좌표 */

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  normalizePdfRotation,
+  getRotatedImageSize,
   screenToImage,
   imageToScreen,
   normalizeBox,
@@ -15,6 +17,38 @@ const viewport = {
   imageWidth: 800,
   imageHeight: 1200,
 };
+
+describe("PDF rotation helpers", () => {
+  it("normalizes arbitrary numeric rotation to supported quarter turns", () => {
+    expect(normalizePdfRotation(0)).toBe(0);
+    expect(normalizePdfRotation(44)).toBe(0);
+    expect(normalizePdfRotation(45)).toBe(90);
+    expect(normalizePdfRotation(91)).toBe(90);
+    expect(normalizePdfRotation(180)).toBe(180);
+    expect(normalizePdfRotation(450)).toBe(90);
+    expect(normalizePdfRotation(-90)).toBe(270);
+    expect(normalizePdfRotation(-181)).toBe(180);
+  });
+
+  it("swaps image dimensions only for 90 and 270 degree rotations", () => {
+    expect(getRotatedImageSize({ width: 800, height: 1200, rotation: 0 })).toEqual({
+      width: 800,
+      height: 1200,
+    });
+    expect(getRotatedImageSize({ width: 800, height: 1200, rotation: 90 })).toEqual({
+      width: 1200,
+      height: 800,
+    });
+    expect(getRotatedImageSize({ width: 800, height: 1200, rotation: 180 })).toEqual({
+      width: 800,
+      height: 1200,
+    });
+    expect(getRotatedImageSize({ width: 800, height: 1200, rotation: 270 })).toEqual({
+      width: 1200,
+      height: 800,
+    });
+  });
+});
 
 describe("screenToImage / imageToScreen round-trip", () => {
   it("round-trips from screen to image and back", () => {
@@ -243,5 +277,27 @@ describe("normalizedBboxToCropBox", () => {
     // 클램프 후 x+w <= imgW, y+h <= imgH
     expect(result.x + result.w).toBeLessThanOrEqual(imgW);
     expect(result.y + result.h).toBeLessThanOrEqual(imgH);
+  });
+
+  it("uses the rotated rendered image dimensions without reverse-transforming bbox", () => {
+    const rotatedSize = getRotatedImageSize({
+      width: imgW,
+      height: imgH,
+      rotation: 90,
+    });
+    const result = normalizedBboxToCropBox({
+      bbox: [100, 200, 400, 600],
+      pageIndex: 0,
+      imageWidth: rotatedSize.width,
+      imageHeight: rotatedSize.height,
+      number: 7,
+      id: "rotated-bbox",
+    });
+
+    expect(rotatedSize).toEqual({ width: 1200, height: 800 });
+    expect(result.x).toBe(240);
+    expect(result.y).toBe(80);
+    expect(result.w).toBe(480);
+    expect(result.h).toBe(240);
   });
 });

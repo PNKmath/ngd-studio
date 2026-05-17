@@ -1,4 +1,6 @@
 /** 박스 좌표는 PDF 페이지가 렌더된 이미지의 픽셀 좌표계 (dpi=200 기준). */
+export type PdfRotation = 0 | 90 | 180 | 270;
+
 export interface CropBox {
   id: string;          // uuid (crypto.randomUUID())
   page: number;        // 0-indexed
