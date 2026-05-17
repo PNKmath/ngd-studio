@@ -15,6 +15,7 @@ export interface StageCache {
   readonly paths: StageCachePaths;
   questionImagePath(questionNumber: number): string;
   questionJsonPath(questionNumber: number): string;
+  solverResultPath(questionNumber: number): string;
   verifierResultPath(questionNumber: number): string;
   ensureCacheDir(): Promise<void>;
   ensureQuestionImagesDir(): Promise<void>;
@@ -48,6 +49,11 @@ export class FileBackedStageCache implements StageCache {
   questionJsonPath(questionNumber: number): string {
     const padded = String(questionNumber).padStart(2, "0");
     return path.join(this.paths.cacheDir, `q${padded}.json`);
+  }
+
+  solverResultPath(questionNumber: number): string {
+    const padded = String(questionNumber).padStart(2, "0");
+    return path.join(this.paths.cacheDir, `q${padded}_solved.json`);
   }
 
   verifierResultPath(questionNumber: number): string {

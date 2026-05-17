@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "fs/promises";
 import os from "os";
 import path from "path";
 import { createStageCache } from "../../server/stages/cache";
+import { buildSolverPrompt, runSolverStage, validateSolverOutput } from "../../server/stages/solver";
 import { buildVerifierPrompt, runVerifierStage } from "../../server/stages/verifier";
 
 async function collectEvents(result: ReturnType<typeof deepseekV4Provider.run>) {
@@ -166,6 +167,97 @@ describe("DeepSeek V4 provider", () => {
         validation: { ok: false, message: "verifier status must be pass or fail" },
         error: { code: "verifier_validation_failed", retryable: true },
       });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("builds and validates bounded solver output for downstream verifier use", () => {
+    const prompt = buildSolverPrompt({
+      extracted: { question: "x^2=4" },
+      guidelineContext: "Keep equations explicit.",
+    });
+
+    expect(prompt).toContain("Return only JSON");
+    expect(prompt).toContain("\"answer\":string");
+    expect(prompt).toContain("Do not edit files");
+
+    expect(validateSolverOutput({
+      answer: "2",
+      explanation: [
+        { kind: "text", content: "Solve the equation." },
+        { kind: "equation", content: "x=2" },
+      ],
+      verifierContext: { method: "substitution" },
+    })).toMatchObject({
+      ok: true,
+      output: { answer: "2" },
+    });
+    expect(validateSolverOutput({
+      answer: "2",
+      explanation: [{ kind: "text", content: "<hp:equation>x=2</hp:equation>" }],
+    })).toMatchObject({
+      ok: false,
+      message: "solver text segment contains raw equation XML",
+    });
+    expect(validateSolverOutput({
+      answer: "2",
+      explanation: [{ kind: "equation", content: "x==2" }],
+    }, () => "invalid equation syntax")).toMatchObject({
+      ok: false,
+      message: "invalid equation syntax",
+    });
+  });
+
+  it("writes validated solver output to cache without removing verifier fallback", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "solver-stage-"));
+    const cache = createStageCache(tempDir);
+
+    try {
+      const output = {
+        answer: "2",
+        explanation: [{ kind: "text", content: "1+1 equals 2." }],
+        verifierContext: { confidence: "high" },
+      };
+      const result = await runSolverStage({
+        questionNumber: 2,
+        extracted: { question: "1+1" },
+        cache,
+        provider: {
+          id: "deepseek-v4",
+          label: "DeepSeek V4",
+          run() {
+            return {
+              process: {} as never,
+              events: (async function* () {
+                yield {
+                  type: "assistant" as const,
+                  message: {
+                    role: "assistant" as const,
+                    content: [{ type: "text" as const, text: JSON.stringify(output) }],
+                  },
+                };
+              })(),
+              exitCode: Promise.resolve(0),
+              metadata: {
+                requestedProvider: "deepseek-v4",
+                provider: "deepseek-v4",
+                label: "DeepSeek V4",
+              },
+            };
+          },
+        },
+      });
+
+      expect(result).toMatchObject({
+        status: "completed",
+        output,
+        validation: { ok: true },
+        provider: { modelStageKey: "create.solver" },
+      });
+      await expect(readFile(cache.solverResultPath(2), "utf8")).resolves.toBe(
+        `${JSON.stringify(output, null, 2)}\n`
+      );
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
