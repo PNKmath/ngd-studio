@@ -90,11 +90,13 @@ export default function CreateV4Page() {
   const result = useJobStore((s) => s.result);
   const v3Meta = useJobStore((s) => s.v3Meta);
   const setV3Meta = useJobStore((s) => s.setV3Meta);
+  const extractionReviewActive = useJobStore((s) => s.extractionReviewActive);
 
   const isRunning = status === "running";
   const isPaused = status === "paused";
   const isFailed = status === "failed";
   const isDone = status === "done" || status === "failed";
+  const isExtractionReview = isDone && (extractionReviewActive || result?.summary === "extraction_review_pending");
   const hasJob = isRunning || isDone || isPaused;
 
   const resumeOrRetry = useCallback(async () => {
@@ -552,12 +554,14 @@ export default function CreateV4Page() {
               <span className={`w-2 h-2 rounded-full ${
                 isRunning ? "bg-yellow-500 animate-pulse" :
                 isPaused ? "bg-blue-500" :
+                isExtractionReview ? "bg-amber-500" :
                 result?.status === "success" ? "bg-[var(--color-status-success)]" :
                 "bg-[var(--color-status-error)]"
               }`} />
               <span className="font-medium">
                 {isRunning ? "제작 진행 중..."
                   : isPaused ? "일시정지됨"
+                  : isExtractionReview ? "추출 완료 — 검토 후 재개"
                   : result?.status === "success" ? "제작 완료"
                   : "제작 실패"}
               </span>
@@ -577,14 +581,21 @@ export default function CreateV4Page() {
               </div>
             )}
 
-            {isFailed && !isRunning && (
+            {isExtractionReview && !isRunning && (
+              <div className="grid grid-cols-2 gap-2">
+                <Button onClick={resumeOrRetry} variant="default">재개 (solver부터)</Button>
+                <Button onClick={reset} variant="outline">새 작업</Button>
+              </div>
+            )}
+
+            {isFailed && !isRunning && !isExtractionReview && (
               <div className="grid grid-cols-2 gap-2">
                 <Button onClick={resumeOrRetry} variant="default">재시도 ({inferResumeStage(stages)}부터)</Button>
                 <Button onClick={reset} variant="outline">새 작업</Button>
               </div>
             )}
 
-            {isDone && jobId && (
+            {isDone && jobId && !isExtractionReview && (
               <DownloadButton jobId={jobId} disabled={result?.status !== "success"} />
             )}
           </Card>
