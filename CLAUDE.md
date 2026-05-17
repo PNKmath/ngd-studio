@@ -92,36 +92,24 @@ outputs/           완성된 HWPX + images/ (생성 그림)
 - 그림: 모든 생성 그림에 NGD 워터마크 필수
 - 파일명: `[코드][고][년도][학기-차수][지역][학교][과목][범위][코드][작업자][검수자][그림코드]`
 
-## ngd-studio 개발 환경 규칙 (WSL ↔ Windows)
+## ngd-studio 개발 환경
 
-**사용자는 Windows에서 pnpm/Next.js를 실행한다. Claude Code는 WSL에서 동작한다.**
-한 번이라도 WSL pnpm이 `/mnt/c/NGD/ngd-studio/node_modules`에 쓰면 Linux 심링크가 만들어져 Windows 쪽에서 EACCES/lstat 실패가 난다. 한 번 깨지면 사용자가 Windows에서 `node_modules` 전체 삭제 + 재설치해야 복구된다.
+- **개발 OS**: macOS (단일)
+- **배포 타깃**: Windows / macOS 양쪽에서 동작해야 함 — 작성하는 모든 Node/Next.js 코드는 두 OS에서 동등하게 작동해야 한다.
 
-### WSL에서 금지
+### 개발 시 허용 명령
 
-- `pnpm install` / `pnpm add` / `pnpm rebuild` / `pnpm update`
-- `npm install` / `yarn install`
-- `node_modules/` 디렉터리 안의 파일 생성·이동·심링크 작업
-- `pnpm dev` (장시간 실행, Windows의 dev 서버와 충돌)
-
-### WSL에서 허용 (이미 설치된 모듈만 사용)
-
-- `npx tsc --noEmit` — TypeScript 타입 검증
+- `pnpm install` / `pnpm add` / `pnpm dev` / `pnpm build` — Mac에서 자유롭게 실행
+- `npx tsc --noEmit` — 타입 검증
 - `npx vitest run <file> --reporter=basic` — 단위 테스트
-- `pnpm build` (one-shot, `node_modules`에 쓰지 않음 — 다만 next swc 캐시가 Windows와 다른 경로면 재컴파일 발생 가능, 가능하면 피할 것)
-- `node_modules/.bin/*` 직접 호출
 
-### 설치/재설치가 필요할 때
+### 크로스 플랫폼 코드 규칙 (Windows + macOS 양쪽 동작 필수)
 
-사용자에게 Windows에서 직접 실행을 요청한다:
-
-```
-! cd C:\NGD\ngd-studio
-! pnpm install
-```
-
-(`!` 프리픽스로 Claude Code 세션에서 사용자가 직접 실행 — 결과가 conversation에 들어옴)
-
-### Python (cross-platform)
-
-`workspaces/crop/*.py` 등 Python 스크립트는 양쪽 모두에서 동작. Next.js API route에서 호출 시 `process.platform === "win32" ? "python" : "python3"` 패턴을 사용한다 (`app/api/pdf-meta/route.ts:41` 참고).
+- **Python 실행**: `process.platform === "win32" ? "python" : "python3"` 패턴 사용 (`app/api/pdf-meta/route.ts:41` 참고)
+- **경로 조합**: 반드시 `path.join` / `path.resolve` 사용. 문자열 `"/"` 하드코딩 금지.
+- **셸 호출**: `child_process.spawn` 사용 시 `shell: true`는 피하고 인자는 배열로. `.bat`/`.cmd` 호출이 필요하면 OS 분기 또는 cross-spawn 사용.
+- **줄바꿈**: 코드 파일은 LF. `.gitattributes` / `.editorconfig`로 강제.
+- **파일 권한**: `chmod`에 의존하는 동작 금지 (Windows에서 무시됨).
+- **임시 파일 경로**: `os.tmpdir()` 사용. `/tmp` 하드코딩 금지.
+- **환경 변수**: 홈 디렉터리는 Windows `process.env.USERPROFILE` / Unix `process.env.HOME` — 둘 다 처리.
+- **Python 스크립트** (`workspaces/crop/*.py` 등): pathlib 사용, `os.sep` 의존 금지, encoding 명시(`encoding="utf-8"`).
