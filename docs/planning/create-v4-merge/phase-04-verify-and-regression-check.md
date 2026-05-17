@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: 타입 체크 + 회귀 시나리오 수동 검증
-status: pending
+status: needs_user
 depends_on: [3]
 scope:
   - ngd-studio/app/create-v4/page.tsx
@@ -73,14 +73,46 @@ Mac에서 `pnpm dev` 띄우고 다음 시나리오를 순서대로 확인:
 
 ## 체크리스트
 
-- [ ] `npx tsc --noEmit` 통과
+- [x] `npx tsc --noEmit` 통과
 - [ ] 시나리오 A (신규 작업) PASS 확인
 - [ ] 시나리오 B (재개) PASS 확인
 - [ ] 시나리오 C (figure 확인) 실데이터로 PASS 또는 스킵 사유 기록
 - [ ] 시나리오 D (build / followup) PASS 확인
 - [ ] 시나리오 E (`/create` 호환성) PASS 확인
-- [ ] 결과를 `## 실행 결과`에 기록
+- [x] 결과를 `## 실행 결과`에 기록
 - [ ] `/create` 폐기 후보 메모를 README나 별도 작업으로 남김
+
+## 실행 결과
+
+### 1회차 (2026-05-17 KST) — needs_user
+**상태**: needs_user
+**소요 시간**: 약 1분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+자동 가능 부분(tsc 정적 검증)만 실행. 수동 회귀 시나리오 5개(A-E)는 사용자 직접 확인 필요. /create 폐기 후보 메모 초안은 아래 작성.
+
+#### 변경 파일
+- 없음 (Phase 4는 검증 전용)
+
+#### 검증 결과
+- [x] `npx tsc --noEmit`: pass (exit 0, 출력 없음)
+- [ ] 시나리오 A 신규 작업: skip — 사용자 직접 확인 필요
+- [ ] 시나리오 B 재개: skip — 사용자 직접 확인 필요
+- [ ] 시나리오 C figure 확인: skip — 사용자 직접 확인 필요
+- [ ] 시나리오 D build/followup: skip — 사용자 직접 확인 필요
+- [ ] 시나리오 E /create 호환성: skip — 사용자 직접 확인 필요
+
+#### /create 폐기 후보 메모 (초안)
+> `/create-v4`가 Phase 1-3으로 `/create`의 모든 기능을 흡수했다. 수동 회귀 시나리오 A-E가 실 사용에서 PASS로 확인되면 `/create` 폐기 가능. 폐기 시점: 별도 후속 작업.
+
+(적용 위치: `ngd-studio/README.md` 또는 `docs/planning/create-v4-merge/README.md` — 사용자 결정 필요)
+
+#### 질문 / 결정 사항
+- 위 메모를 어디에 적용할지 사용자 결정 필요
+- 수동 시나리오 A-E PASS 여부 확인 필요
+
+---
 
 ## 영향 범위
 

@@ -247,3 +247,6 @@ SIMPLIFIED: 1 / CHANGES: 2 / VERIFY: pass — unused `mode` subscription 제거 
 
 #### Review (orchestrator)
 VERDICT: pass / ISSUES: 0 — 스펙의 모든 체크리스트 항목이 diff에 충실히 구현되었고 인용된 심볼이 실제 코드에 모두 존재
+
+#### Commit
+61c7e4d — feat(create-v4): Phase 2 — 작업 상태 분기 + Running/Done 뷰 도입

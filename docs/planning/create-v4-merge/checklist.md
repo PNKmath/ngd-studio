@@ -1,6 +1,6 @@
 ---
 task: create-v4-merge
-phase_count: 4
+phase_count: 5
 created: 2026-05-17
 ---
 
@@ -14,18 +14,20 @@ created: 2026-05-17
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
 | 1 | [phase-01-idle-sidebar-redesign.md](./phase-01-idle-sidebar-redesign.md) | 7 | 6 | 86% | completed | 23852b8 |
-| 2 | [phase-02-state-branch-and-running-view.md](./phase-02-state-branch-and-running-view.md) | 14 | 0 | 0% | pending | - |
-| 3 | [phase-03-resume-and-conditional-panels.md](./phase-03-resume-and-conditional-panels.md) | 15 | 0 | 0% | pending | - |
-| 4 | [phase-04-verify-and-regression-check.md](./phase-04-verify-and-regression-check.md) | 8 | 0 | 0% | pending | - |
-| **Total** | | **44** | **0** | **0%** | | |
+| 2 | [phase-02-state-branch-and-running-view.md](./phase-02-state-branch-and-running-view.md) | 14 | 13 | 93% | completed | 61c7e4d |
+| 3 | [phase-03-resume-and-conditional-panels.md](./phase-03-resume-and-conditional-panels.md) | 15 | 13 | 87% | completed | 7f9fadd |
+| 4 | [phase-04-verify-and-regression-check.md](./phase-04-verify-and-regression-check.md) | 8 | 2 | 25% | needs_user | - |
+| 5 | [phase-05-deepseek-stage-orchestration.md](./phase-05-deepseek-stage-orchestration.md) | 12 | 0 | 0% | draft | - |
+| **Total** | | **56** | **0** | **0%** | | |
 
 ## Phase 의존성
 
 ```
-Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 4
+Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 4 ──▶ Phase 5
 ```
 
-모든 phase가 `app/create-v4/page.tsx` 한 파일을 수정하므로 병렬 불가.
+Phase 1~4는 모두 `app/create-v4/page.tsx` 한 파일을 수정하므로 병렬 불가.
+Phase 5는 server-side (sse.ts, server/stages/*) 변경이라 다른 phase와 파일 충돌 없음.
 
 ## 우선순위
 
@@ -35,6 +37,7 @@ Phase 1 ──▶ Phase 2 ──▶ Phase 3 ──▶ Phase 4
 | P0 | Phase 2 | 작업 상태 분기 + Running/Done 뷰 도입 (핵심) | 60분 |
 | P0 | Phase 3 | 재개 + figure/build/followup 패널 포팅 | 45분 |
 | P1 | Phase 4 | 타입 체크 + 회귀 시나리오 수동 검증 | 15분 |
+| P0 | Phase 5 | DeepSeek stage-by-stage 오케스트레이션 (실제 동작) | 4~8시간 |
 
 ## 권장 실행 순서
 
