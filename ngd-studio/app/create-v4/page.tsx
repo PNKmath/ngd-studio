@@ -1,13 +1,17 @@
 "use client";
 
-import { useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { CropperWorkspace } from "@/components/cropper/CropperWorkspace";
 import { MetaForm, type MetaValue } from "@/components/upload/MetaForm";
 import { parseExamMetaFromFilename } from "@/lib/pdf/filenameMeta";
 import { useJobRunner } from "@/lib/useJobRunner";
+import { useJobStore } from "@/lib/store";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { PipelineView } from "@/components/pipeline/PipelineView";
+import { QuestionResultPanel } from "@/components/results/QuestionResultPanel";
+import { LogStream } from "@/components/log/LogStream";
+import { DownloadButton } from "@/components/shared/DownloadButton";
 
 const AUTO_SPLIT_LS_KEY = "cropper.auto-split-on-upload";
 const META_LS_KEY = "create-v4.meta-form";
@@ -40,8 +44,20 @@ function readInitialMeta() {
 }
 
 export default function CreateV4Page() {
-  const router = useRouter();
-  const { startJob } = useJobRunner();
+  const { startJob, stopJob } = useJobRunner();
+
+  // Store subscriptions
+  const status = useJobStore((s) => s.status);
+  const stages = useJobStore((s) => s.stages);
+  const logs = useJobStore((s) => s.logs);
+  const jobId = useJobStore((s) => s.jobId);
+  const result = useJobStore((s) => s.result);
+  const v3Meta = useJobStore((s) => s.v3Meta);
+  const setV3Meta = useJobStore((s) => s.setV3Meta);
+
+  const isRunning = status === "running";
+  const isDone = status === "done" || status === "failed";
+  const hasJob = isRunning || isDone;
 
   const [autoSplitEnabled, setAutoSplitEnabled] = useState(readInitialAutoSplitEnabled);
 
@@ -79,6 +95,21 @@ export default function CreateV4Page() {
     });
   }, []);
 
+  // v3Meta auto-restore: 이전 작업 메타를 폼에 복원 (idle 상태일 때만)
+  useEffect(() => {
+    if (!v3Meta || hasJob) return;
+    queueMicrotask(() => {
+      setMeta({
+        school: v3Meta.school ?? "",
+        grade: v3Meta.grade ?? 2,
+        subject: v3Meta.subject ?? "수학 I",
+        semester: v3Meta.semester ?? "1학기",
+        examType: v3Meta.examType ?? "중간",
+        range: v3Meta.range ?? "",
+      });
+    });
+  }, [v3Meta, hasJob]);
+
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [recoveryHint, setRecoveryHint] = useState<string | null>(null);
@@ -103,6 +134,9 @@ export default function CreateV4Page() {
       setSubmitting(true);
       setSubmitError(null);
       setRecoveryHint(null);
+
+      // 신규 작업 시작: 이전 .v3cache 정리 (create 페이지와 동일)
+      await fetch("/api/v3cache-reset", { method: "POST" }).catch(() => {});
 
       const formData = new FormData();
       let rIdx = 0;
@@ -149,88 +183,147 @@ export default function CreateV4Page() {
         return;
       }
 
+      // v3Meta를 store에 설정 (startJob 전)
+      const jobMeta = { ...meta, questionCount: items.length };
+      setV3Meta(jobMeta);
+
       try {
         const questionImageNums = items.map((it) => it.number);
         await startJob(
           "create",
           { pdf: "", questionImages: questionImageNums },
-          {
-            ...meta,
-            questionCount: items.length,
-          }
+          jobMeta
         );
-        router.push("/create");
       } catch (e) {
         setSubmitError(e instanceof Error ? e.message : "작업 시작 실패");
         setRecoveryHint("이미지/메타 모두 저장됐습니다. /create로 이동해 '이어 작업'을 클릭하시면 진행됩니다.");
         setSubmitting(false);
       }
     },
-    [meta, isMetaComplete, startJob, router]
+    [meta, isMetaComplete, startJob, setV3Meta]
   );
 
+  // --- Idle 뷰 ---
+  if (!hasJob) {
+    return (
+      <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
+        <div className="flex items-center gap-4 px-4 py-2 border-b bg-background shrink-0 text-sm">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={autoSplitEnabled}
+              onChange={handleAutoSplitToggle}
+              className="accent-primary"
+            />
+            <span className="text-muted-foreground">
+              PDF 업로드 시 자동 분할 자동 실행
+            </span>
+          </label>
+
+          {submitError && (
+            <span className="text-destructive text-xs">
+              오류: {submitError}
+            </span>
+          )}
+
+          {recoveryHint && (
+            <span className="text-amber-500 text-xs">
+              {recoveryHint}{" "}
+              <a href="/create" className="underline">
+                /create로 이동
+              </a>
+            </span>
+          )}
+
+          {submitting && (
+            <span className="text-muted-foreground text-xs animate-pulse">
+              시험지 제작 데이터 업로드 중...
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-1 overflow-hidden">
+          <div className="w-72 shrink-0 border-r overflow-y-auto p-4 space-y-4">
+            <Card className="p-4 space-y-3">
+              <h3 className="text-sm font-medium">시험 정보</h3>
+              <MetaForm
+                value={meta}
+                onChange={handleMetaChange}
+                disabled={submitting}
+              />
+              {!isMetaComplete && (
+                <p className="text-xs text-muted-foreground">
+                  필수 필드를 모두 채워주세요.
+                </p>
+              )}
+            </Card>
+
+            <PipelineView mode="create" />
+          </div>
+
+          <div className="flex-1 overflow-hidden">
+            <CropperWorkspace
+              onExtract={handleExtract}
+              autoSplitOnUpload={autoSplitEnabled}
+              onPdfSelected={handlePdfSelected}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Running / Done 뷰 ---
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
-      <div className="flex items-center gap-4 px-4 py-2 border-b bg-background shrink-0 text-sm">
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={autoSplitEnabled}
-            onChange={handleAutoSplitToggle}
-            className="accent-primary"
-          />
-          <span className="text-muted-foreground">
-            PDF 업로드 시 자동 분할 자동 실행
-          </span>
-        </label>
-
-        {submitError && (
-          <span className="text-destructive text-xs">
-            오류: {submitError}
-          </span>
-        )}
-
-        {recoveryHint && (
-          <span className="text-amber-500 text-xs">
-            {recoveryHint}{" "}
-            <a href="/create" className="underline">
-              /create로 이동
-            </a>
-          </span>
-        )}
-
-        {submitting && (
-          <span className="text-muted-foreground text-xs animate-pulse">
-            시험지 제작 데이터 업로드 중...
-          </span>
-        )}
-      </div>
-
       <div className="flex flex-1 overflow-hidden">
         <div className="w-72 shrink-0 border-r overflow-y-auto p-4 space-y-4">
+          {/* 시험 정보 요약 */}
+          {v3Meta && (
+            <Card className="p-4 space-y-2">
+              <h3 className="text-sm font-medium">시험 정보</h3>
+              <div className="text-xs space-y-1 text-muted-foreground">
+                {v3Meta.school && <div>{v3Meta.school}</div>}
+                <div>
+                  {v3Meta.grade && `${v3Meta.grade}학년 `}
+                  {v3Meta.semester} {v3Meta.examType}
+                </div>
+                {v3Meta.subject && <div>{v3Meta.subject}</div>}
+                {v3Meta.range && <div>{v3Meta.range}</div>}
+                {v3Meta.questionCount && <div>문제 {v3Meta.questionCount}개</div>}
+              </div>
+            </Card>
+          )}
+
+          {/* 상태 + 제어 */}
           <Card className="p-4 space-y-3">
-            <h3 className="text-sm font-medium">시험 정보</h3>
-            <MetaForm
-              value={meta}
-              onChange={handleMetaChange}
-              disabled={submitting}
-            />
-            {!isMetaComplete && (
-              <p className="text-xs text-muted-foreground">
-                필수 필드를 모두 채워주세요.
-              </p>
+            <div className="flex items-center gap-2 text-sm">
+              <span className={`w-2 h-2 rounded-full ${
+                isRunning ? "bg-yellow-500 animate-pulse" :
+                result?.status === "success" ? "bg-[var(--color-status-success)]" :
+                "bg-[var(--color-status-error)]"
+              }`} />
+              <span className="font-medium">
+                {isRunning ? "제작 진행 중..." : result?.status === "success" ? "제작 완료" : "제작 실패"}
+              </span>
+            </div>
+
+            {isRunning && (
+              <Button onClick={stopJob} variant="destructive" className="w-full">중단</Button>
+            )}
+
+            {isDone && jobId && (
+              <DownloadButton jobId={jobId} disabled={result?.status !== "success"} />
             )}
           </Card>
 
-          <PipelineView mode="create" />
+          {/* 라이브 파이프라인 */}
+          <PipelineView mode="create" stages={stages.length > 0 ? stages : undefined} />
         </div>
 
-        <div className="flex-1 overflow-hidden">
-          <CropperWorkspace
-            onExtract={handleExtract}
-            autoSplitOnUpload={autoSplitEnabled}
-            onPdfSelected={handlePdfSelected}
-          />
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          <QuestionResultPanel />
+          <LogStream logs={logs} />
         </div>
       </div>
     </div>

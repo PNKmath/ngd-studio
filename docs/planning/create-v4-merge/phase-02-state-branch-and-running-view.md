@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: 작업 상태 분기 + Running/Done 뷰 도입
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - ngd-studio/app/create-v4/page.tsx
@@ -178,20 +178,20 @@ return (
 
 ## 체크리스트
 
-- [ ] `useJobStore`, `useJobRunner` 임포트 및 필요한 상태 구독 (`status`, `mode`, `stages`, `logs`, `jobId`, `result`, `v3Meta`, `setV3Meta`, `stopJob`)
-- [ ] `QuestionResultPanel`, `LogStream`, `DownloadButton`, `Button` 임포트 추가
-- [ ] `hasJob` / `isRunning` / `isDone` 플래그 도입
-- [ ] v3Meta auto-restore `useEffect` 추가 (hasJob일 때는 skip)
-- [ ] `handleExtract`에서 v3cache-reset POST 추가 (이미지 업로드 직전)
-- [ ] `handleExtract`에서 `setV3Meta` 호출 추가
-- [ ] `handleExtract`에서 `router.push("/create")` **제거**
-- [ ] `if (!hasJob)` idle return 분기 + running/done return 분기 구조로 컴포넌트 재작성
-- [ ] Running/Done 좌측: 시험정보 요약 + 상태/제어 + `PipelineView stages={stages.length > 0 ? stages : undefined}`
-- [ ] Running/Done 우측: `QuestionResultPanel` + `LogStream`
-- [ ] full-height + 내부 스크롤 레이아웃 유지
-- [ ] `npx tsc --noEmit` 통과
+- [x] `useJobStore`, `useJobRunner` 임포트 및 필요한 상태 구독 (`status`, `mode`, `stages`, `logs`, `jobId`, `result`, `v3Meta`, `setV3Meta`, `stopJob`)
+- [x] `QuestionResultPanel`, `LogStream`, `DownloadButton`, `Button` 임포트 추가
+- [x] `hasJob` / `isRunning` / `isDone` 플래그 도입
+- [x] v3Meta auto-restore `useEffect` 추가 (hasJob일 때는 skip)
+- [x] `handleExtract`에서 v3cache-reset POST 추가 (이미지 업로드 직전)
+- [x] `handleExtract`에서 `setV3Meta` 호출 추가
+- [x] `handleExtract`에서 `router.push("/create")` **제거**
+- [x] `if (!hasJob)` idle return 분기 + running/done return 분기 구조로 컴포넌트 재작성
+- [x] Running/Done 좌측: 시험정보 요약 + 상태/제어 + `PipelineView stages={stages.length > 0 ? stages : undefined}`
+- [x] Running/Done 우측: `QuestionResultPanel` + `LogStream`
+- [x] full-height + 내부 스크롤 레이아웃 유지
+- [x] `npx tsc --noEmit` 통과
 - [ ] `pnpm dev`로 동작 확인: 추출 버튼 → 같은 페이지에서 running 뷰로 전환되는지 (라우팅 발생하지 않음)
-- [ ] `useRouter` import 제거 (사용처 없으면)
+- [x] `useRouter` import 제거 (사용처 없으면)
 
 ## 영향 범위
 
@@ -211,3 +211,39 @@ npx tsc --noEmit
 - 같은 URL을 유지하면서 좌/우 분할 뷰가 결과 뷰로 전환되는지 확인
 - 진행 중 PipelineView가 live 업데이트되는지
 - 작업 완료 시 다운로드 버튼이 활성화되는지
+
+## 실행 결과
+
+### 1회차 (2026-05-17 KST) — completed
+**상태**: completed
+**소요 시간**: 약 10분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`app/create-v4/page.tsx`를 전면 재작성하여 idle/running/done 상태 분기를 도입했다. `useJobStore` 구독, v3Meta auto-restore useEffect, handleExtract에서 v3cache-reset + setV3Meta + router.push 제거, 그리고 Running/Done 뷰(좌: 시험정보 요약 + 상태/제어 + PipelineView, 우: QuestionResultPanel + LogStream) 렌더링을 구현했다. `npx tsc --noEmit` 통과.
+
+#### 변경 파일
+- `ngd-studio/app/create-v4/page.tsx` (수정, 전면 재작성 +238/-239줄)
+
+#### 검증 결과
+- [x] `npx tsc --noEmit`: 출력 없음(에러 0) → pass
+- [ ] `pnpm dev` 수동 동작 확인: skip — 런타임 확인은 사용자가 직접 수행 필요
+
+#### 추가 발견사항
+- `mode` 변수는 현재 running/done 뷰에서 직접 사용되지 않지만 Phase 3(figure/build 패널 조건분기)에서 필요하므로 미리 구독 유지
+- `useRouter`는 완전 제거됨 (next/navigation import 삭제)
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+pass — 1 file in scope (`ngd-studio/app/create-v4/page.tsx`), 4 phase-file edits exempt
+
+#### Verification Re-run (orchestrator)
+exit 0 — `npx tsc --noEmit` 통과 (no output)
+
+#### Simplify (orchestrator)
+SIMPLIFIED: 1 / CHANGES: 2 / VERIFY: pass — unused `mode` subscription 제거 + 잔여 inline comment 삭제
+
+#### Review (orchestrator)
+VERDICT: pass / ISSUES: 0 — 스펙의 모든 체크리스트 항목이 diff에 충실히 구현되었고 인용된 심볼이 실제 코드에 모두 존재
