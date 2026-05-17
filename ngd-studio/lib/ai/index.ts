@@ -10,7 +10,9 @@ export type {
 } from "./types";
 export {
   claudeCliProvider,
+  claudeSdkProvider,
   codexCliProvider,
+  openaiSdkProvider,
   deepseekV4Provider,
   getProviderAdapter,
   listProviderAdapters,

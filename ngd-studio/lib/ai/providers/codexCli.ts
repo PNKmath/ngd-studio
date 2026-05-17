@@ -13,7 +13,12 @@ export function buildCodexPrompt(prompt: string): string {
   return `${CODEX_PREAMBLE}\n\n--- USER TASK ---\n${prompt}`;
 }
 
-export function buildCodexExecArgs(prompt: string, cwd: string): string[] {
+export function buildCodexExecArgs(prompt: string, cwd: string, imagePaths?: string[]): string[] {
+  const imageArgs: string[] = [];
+  for (const imgPath of imagePaths ?? []) {
+    imageArgs.push("--image", imgPath);
+  }
+
   return [
     "exec",
     "--json",
@@ -23,6 +28,7 @@ export function buildCodexExecArgs(prompt: string, cwd: string): string[] {
     "danger-full-access",
     "--ask-for-approval",
     "never",
+    ...imageArgs,
     buildCodexPrompt(prompt),
   ];
 }
@@ -149,11 +155,11 @@ async function* parseCodexStream(proc: ChildProcess, stderrChunks: string[]): As
 }
 
 export const codexCliProvider: AIProviderAdapter = {
-  id: "codex",
+  id: "codex-cli",
   label: "Codex CLI",
   run(prompt: string, options?: ProviderRunOptions): ProviderRunResult {
     const cwd = options?.cwd ?? process.cwd();
-    const proc = spawn("codex", buildCodexExecArgs(prompt, cwd), {
+    const proc = spawn("codex", buildCodexExecArgs(prompt, cwd, options?.imagePaths), {
       cwd,
       env: options?.env ? { ...process.env, ...options.env } : process.env,
       stdio: ["ignore", "pipe", "pipe"],
@@ -164,6 +170,11 @@ export const codexCliProvider: AIProviderAdapter = {
       stderrChunks.push(chunk.toString());
     });
 
+    // signal: abort 시 프로세스 종료
+    options?.signal?.addEventListener("abort", () => {
+      proc.kill("SIGTERM");
+    });
+
     return {
       process: proc,
       events: parseCodexStream(proc, stderrChunks),
@@ -171,8 +182,8 @@ export const codexCliProvider: AIProviderAdapter = {
         proc.on("close", (code) => resolve(code ?? 1));
       }),
       metadata: {
-        requestedProvider: "codex",
-        provider: "codex",
+        requestedProvider: "codex-cli",
+        provider: "codex-cli",
         label: "Codex CLI",
       },
     };

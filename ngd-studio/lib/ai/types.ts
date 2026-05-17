@@ -1,7 +1,13 @@
 import type { ChildProcess } from "child_process";
 import type { ClaudeEvent } from "../claude";
 
-export type AIProviderId = "auto" | "claude" | "codex" | "deepseek-v4";
+export type AIProviderId =
+  | "auto"
+  | "claude-cli"   // 기존 claude → 이름 변경
+  | "claude-sdk"   // 신규
+  | "codex-cli"    // 기존 codex → 이름 변경
+  | "openai-sdk"   // 신규
+  | "deepseek-v4"; // 기존
 export type ResolvedAIProviderId = Exclude<AIProviderId, "auto">;
 // Provider/model-call stage keys. Broader workflow stages are defined in server/stages/types.ts.
 // Model-stage contracts live in server/stages/model.ts so provider adapters do not own file mutation.
@@ -14,6 +20,8 @@ export interface ProviderRunOptions {
   mode?: "create" | "resume" | "crop" | "review" | string;
   jobId?: string;
   stageKey?: AIStageKey;
+  imagePaths?: string[];
+  signal?: AbortSignal;
 }
 
 export interface ProviderSelectionRunOptions extends ProviderRunOptions {

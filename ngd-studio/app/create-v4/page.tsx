@@ -13,6 +13,13 @@ import { QuestionResultPanel } from "@/components/results/QuestionResultPanel";
 import { LogStream } from "@/components/log/LogStream";
 import { DownloadButton } from "@/components/shared/DownloadButton";
 import { FollowupChat } from "@/components/shared/FollowupChat";
+import {
+  AI_STAGE_KEYS,
+  DEFAULT_AI_SETTINGS,
+  readAISettings,
+  type AISettings,
+} from "@/lib/ai/settings";
+import type { AIProviderId, AIStageKey } from "@/lib/ai";
 
 type FigureStatus = { pending: boolean; done: boolean; success: number[]; failed: number[]; images: string[] };
 type BuildStatus = {
@@ -72,6 +79,20 @@ export default function CreateV4Page() {
   const hasJob = isRunning || isDone;
 
   const [autoSplitEnabled, setAutoSplitEnabled] = useState(readInitialAutoSplitEnabled);
+  const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
+
+  useEffect(() => {
+    setAiSettings(readAISettings());
+    const onFocus = () => setAiSettings(readAISettings());
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
+  const deepSeekStages = AI_STAGE_KEYS.filter(
+    (key) => aiSettings.stageOverrides[key] === "deepseek-v4"
+  );
+  const deepSeekActive = deepSeekStages.length > 0;
+  const deepSeekBlocksCreate = deepSeekStages.includes("create.extractor");
 
   function handleAutoSplitToggle(e: React.ChangeEvent<HTMLInputElement>) {
     const next = e.target.checked;
@@ -276,6 +297,13 @@ export default function CreateV4Page() {
         return;
       }
 
+      if (deepSeekBlocksCreate) {
+        setSubmitError(
+          "현재 'create.extractor' stage가 DeepSeek로 지정돼 있습니다. DeepSeek V4는 이미지 입력을 지원하지 않으므로 /settings에서 해당 stage를 Claude/Codex로 되돌리세요."
+        );
+        return;
+      }
+
       setSubmitting(true);
       setSubmitError(null);
       setRecoveryHint(null);
@@ -322,7 +350,7 @@ export default function CreateV4Page() {
         if (!res.ok) throw new Error(`메타 저장 실패 (${res.status})`);
       } catch (e) {
         setSubmitError(e instanceof Error ? e.message : "메타 저장 실패");
-        setRecoveryHint("이미지는 저장됐습니다. /create로 이동해 이어 작업하시면 진행됩니다.");
+        setRecoveryHint("이미지는 저장됐습니다. 페이지를 새로고침하면 '이전 작업 재개' 카드에서 이어 작업할 수 있습니다.");
         setSubmitting(false);
         return;
       }
@@ -340,11 +368,11 @@ export default function CreateV4Page() {
         );
       } catch (e) {
         setSubmitError(e instanceof Error ? e.message : "작업 시작 실패");
-        setRecoveryHint("이미지/메타 모두 저장됐습니다. /create로 이동해 '이어 작업'을 클릭하시면 진행됩니다.");
+        setRecoveryHint("이미지/메타 모두 저장됐습니다. 페이지를 새로고침하면 '이전 작업 재개' 카드에서 이어 작업할 수 있습니다.");
         setSubmitting(false);
       }
     },
-    [meta, isMetaComplete, startJob, setV3Meta]
+    [meta, isMetaComplete, deepSeekBlocksCreate, startJob, setV3Meta]
   );
 
   // --- Idle 뷰 ---
@@ -372,10 +400,7 @@ export default function CreateV4Page() {
 
           {recoveryHint && (
             <span className="text-amber-500 text-xs">
-              {recoveryHint}{" "}
-              <a href="/create" className="underline">
-                /create로 이동
-              </a>
+              {recoveryHint}
             </span>
           )}
 
@@ -401,6 +426,12 @@ export default function CreateV4Page() {
                 </p>
               )}
             </Card>
+
+            <AIProviderBadge
+              settings={aiSettings}
+              deepSeekStages={deepSeekStages}
+              deepSeekBlocksCreate={deepSeekBlocksCreate}
+            />
 
             {existingImages && (
               <Card className="p-4 space-y-3 border-amber-500/40 bg-amber-500/5">
@@ -504,6 +535,12 @@ export default function CreateV4Page() {
             )}
           </Card>
 
+          <AIProviderBadge
+            settings={aiSettings}
+            deepSeekStages={deepSeekStages}
+            deepSeekBlocksCreate={deepSeekBlocksCreate}
+          />
+
           {/* 라이브 파이프라인 */}
           <PipelineView mode="create" stages={stages.length > 0 ? stages : undefined} />
         </div>
@@ -605,5 +642,66 @@ export default function CreateV4Page() {
         </div>
       </div>
     </div>
+  );
+}
+
+const PROVIDER_LABEL: Record<AIProviderId, string> = {
+  auto: "auto",
+  "claude-cli": "Claude CLI",
+  "claude-sdk": "Claude SDK",
+  "codex-cli": "Codex CLI",
+  "openai-sdk": "OpenAI SDK",
+  "deepseek-v4": "DeepSeek V4",
+};
+
+const STAGE_LABEL: Record<AIStageKey, string> = {
+  "create.extractor": "추출",
+  "create.solver": "해설",
+  "create.verifier": "검증",
+  "review.reviewer": "오검",
+};
+
+// TODO(복구): 원본 AIProviderBadge body는 transcript에 보존되지 않아 stub으로 재작성됨.
+// 사용자 의도 확인 후 디자인 다듬을 것.
+function AIProviderBadge({
+  settings,
+  deepSeekStages,
+  deepSeekBlocksCreate,
+}: {
+  settings: AISettings;
+  deepSeekStages: AIStageKey[];
+  deepSeekBlocksCreate: boolean;
+}) {
+  return (
+    <Card
+      className={`p-3 space-y-2 ${
+        deepSeekBlocksCreate ? "border-destructive/40 bg-destructive/5" : ""
+      }`}
+    >
+      <div className="text-xs font-medium text-muted-foreground">AI Provider</div>
+      <div className="space-y-1 text-xs">
+        {AI_STAGE_KEYS.map((stageKey) => {
+          const provider = settings.stageOverrides[stageKey] ?? settings.defaultProvider;
+          return (
+            <div key={stageKey} className="flex justify-between">
+              <span className="text-muted-foreground">{STAGE_LABEL[stageKey]}</span>
+              <span className="font-mono">
+                {PROVIDER_LABEL[provider as AIProviderId] ?? provider}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {deepSeekBlocksCreate && (
+        <p className="text-xs text-destructive">
+          ⚠ extractor가 DeepSeek로 지정돼 있어 작업 시작이 차단됩니다.
+        </p>
+      )}
+      {!deepSeekBlocksCreate && deepSeekStages.length > 0 && (
+        <p className="text-xs text-amber-600 dark:text-amber-500">
+          DeepSeek 사용 stage: {deepSeekStages.map((k) => STAGE_LABEL[k]).join(", ")}
+        </p>
+      )}
+    </Card>
   );
 }

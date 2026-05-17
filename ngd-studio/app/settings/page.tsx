@@ -5,6 +5,7 @@ import { Check, Cpu, KeyRound, Loader2, PlugZap, Settings2, Sparkles, Workflow }
 import { Button } from "@/components/ui/button";
 import {
   AI_STAGE_KEYS,
+  DEEPSEEK_MODEL_STAGE_KEYS,
   DEFAULT_AI_SETTINGS,
   allModelStagesUseDeepSeek,
   createDeepSeekStageOverrides,
@@ -21,24 +22,32 @@ const providerOptions: {
   label: string;
   detail: string;
   resolved: string;
+  vision: "supported" | "pending";
+  visionNote: string;
 }[] = [
   {
     id: "auto",
     label: "자동",
     detail: "현재는 Claude로 실행하고, 이후 작업 특성 기반 추천으로 확장합니다.",
     resolved: "Claude",
+    vision: "supported",
+    visionNote: "추출 단계 사용 가능",
   },
   {
-    id: "claude",
+    id: "claude-cli",
     label: "Claude",
     detail: "기존 stream-json 기반 workflow를 그대로 사용합니다.",
     resolved: "Claude CLI",
+    vision: "supported",
+    visionNote: "추출 단계 사용 가능",
   },
   {
-    id: "codex",
+    id: "codex-cli",
     label: "Codex",
     detail: "로컬 Codex CLI provider를 사용합니다.",
     resolved: "Codex CLI",
+    vision: "pending",
+    visionNote: "vision 지원 (Codex v0.115+), --image flag adapter 구현됨",
   },
 ];
 
@@ -269,8 +278,16 @@ export default function SettingsPage() {
                   <p className="min-h-10 text-sm leading-5 text-muted-foreground">
                     {option.detail}
                   </p>
-                  <div className="mt-4 text-xs text-muted-foreground">
-                    실행: <span className="text-foreground">{option.resolved}</span>
+                  <div className="mt-4 space-y-1 text-xs text-muted-foreground">
+                    <div>
+                      실행: <span className="text-foreground">{option.resolved}</span>
+                    </div>
+                    <div>
+                      이미지 입력:{" "}
+                      <span className={option.vision === "supported" ? "text-foreground" : "text-amber-500"}>
+                        {option.visionNote}
+                      </span>
+                    </div>
                   </div>
                 </button>
               );
@@ -290,7 +307,7 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-base font-medium">AI 단계 DeepSeek</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                제작 추출, 풀이, 검증, 오검 리뷰 단계에만 적용됩니다.
+                풀이 · 검증 · 오검 리뷰 단계에 적용됩니다. (추출은 이미지 입력이 필요해 제외)
               </p>
             </div>
             <Button
@@ -310,19 +327,23 @@ export default function SettingsPage() {
                 telemetry: [],
               });
               const active = settings.stageOverrides[stageKey] === "deepseek-v4";
+              const supported = DEEPSEEK_MODEL_STAGE_KEYS.includes(stageKey);
 
               return (
                 <div
                   key={stageKey}
                   className={cn(
                     "flex min-h-20 items-center justify-between gap-3 rounded-lg border px-4 py-3",
+                    !supported && "opacity-60",
                     active ? "border-primary bg-primary/5" : "border-border bg-background"
                   )}
+                  title={supported ? undefined : "DeepSeek V4는 이미지 입력을 지원하지 않아 이 단계에는 사용할 수 없습니다."}
                 >
                   <div>
                     <div className="text-sm font-medium">{stageLabels[stageKey]}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {stageKey} · 실행 {recommendation.provider}
+                      {!supported && " · DeepSeek 미지원"}
                     </div>
                   </div>
                   <span
@@ -343,6 +364,7 @@ export default function SettingsPage() {
 
           <div className="border-t px-4 py-3 text-xs text-muted-foreground">
             builder, checker, cropper는 로컬 deterministic runner가 처리합니다.
+            extractor는 DeepSeek V4가 이미지 입력을 지원하지 않아 Claude/Codex로만 실행됩니다.
           </div>
         </div>
       </section>

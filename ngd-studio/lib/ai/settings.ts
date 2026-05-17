@@ -1,6 +1,9 @@
 import type { AIProviderId, AIStageKey } from "./types";
 
-export type SelectableProviderId = Extract<AIProviderId, "auto" | "claude" | "codex">;
+export type SelectableProviderId = Extract<
+  AIProviderId,
+  "auto" | "claude-cli" | "claude-sdk" | "codex-cli" | "openai-sdk"
+>;
 export type StageProviderId = AIProviderId;
 export type StageOverrideMap = Partial<Record<AIStageKey, StageProviderId>>;
 
@@ -11,7 +14,13 @@ export const AI_STAGE_KEYS: AIStageKey[] = [
   "create.verifier",
   "review.reviewer",
 ];
-export const DEEPSEEK_MODEL_STAGE_KEYS: AIStageKey[] = AI_STAGE_KEYS;
+// DeepSeek V4 (preview)는 이미지 입력 미지원이라 extractor는 제외한다.
+// vision 출시 후 AI_STAGE_KEYS로 되돌릴 것.
+export const DEEPSEEK_MODEL_STAGE_KEYS: AIStageKey[] = [
+  "create.solver",
+  "create.verifier",
+  "review.reviewer",
+];
 export const DEFAULT_AI_SETTINGS: AISettings = {
   defaultProvider: "auto",
   stageOverrides: {},
@@ -27,20 +36,73 @@ interface StorageLike {
   setItem(key: string, value: string): void;
 }
 
-const selectableProviders = new Set<SelectableProviderId>(["auto", "claude", "codex"]);
-const stageProviders = new Set<StageProviderId>(["auto", "claude", "codex", "deepseek-v4"]);
+/** backward-compat: legacy stored provider strings → new IDs */
+const legacySelectableAliases: Partial<Record<string, SelectableProviderId>> = {
+  claude: "claude-cli",
+  codex: "codex-cli",
+};
+
+const legacyStageAliases: Partial<Record<string, StageProviderId>> = {
+  claude: "claude-cli",
+  codex: "codex-cli",
+};
+
+const selectableProviders = new Set<SelectableProviderId>([
+  "auto",
+  "claude-cli",
+  "claude-sdk",
+  "codex-cli",
+  "openai-sdk",
+]);
+
+const stageProviders = new Set<StageProviderId>([
+  "auto",
+  "claude-cli",
+  "claude-sdk",
+  "codex-cli",
+  "openai-sdk",
+  "deepseek-v4",
+]);
+
 const stageKeys = new Set<AIStageKey>(AI_STAGE_KEYS);
 
 export function isSelectableProviderId(value: unknown): value is SelectableProviderId {
-  return typeof value === "string" && selectableProviders.has(value as SelectableProviderId);
+  if (typeof value !== "string") return false;
+  // Accept legacy aliases
+  if (legacySelectableAliases[value]) return true;
+  return selectableProviders.has(value as SelectableProviderId);
 }
 
 export function isStageProviderId(value: unknown): value is StageProviderId {
-  return typeof value === "string" && stageProviders.has(value as StageProviderId);
+  if (typeof value !== "string") return false;
+  if (legacyStageAliases[value]) return true;
+  return stageProviders.has(value as StageProviderId);
 }
 
 export function isAIStageKey(value: unknown): value is AIStageKey {
   return typeof value === "string" && stageKeys.has(value as AIStageKey);
+}
+
+/** Normalize a SelectableProviderId, migrating legacy values */
+function normalizeSelectableProviderId(value: unknown): SelectableProviderId {
+  if (typeof value !== "string") return DEFAULT_AI_SETTINGS.defaultProvider;
+  const migrated = legacySelectableAliases[value];
+  if (migrated) return migrated;
+  if (selectableProviders.has(value as SelectableProviderId)) {
+    return value as SelectableProviderId;
+  }
+  return DEFAULT_AI_SETTINGS.defaultProvider;
+}
+
+/** Normalize a StageProviderId, migrating legacy values */
+function normalizeStageProviderId(value: unknown): StageProviderId | undefined {
+  if (typeof value !== "string") return undefined;
+  const migrated = legacyStageAliases[value];
+  if (migrated) return migrated;
+  if (stageProviders.has(value as StageProviderId)) {
+    return value as StageProviderId;
+  }
+  return undefined;
 }
 
 export function normalizeStageOverrides(value: unknown): StageOverrideMap {
@@ -48,8 +110,10 @@ export function normalizeStageOverrides(value: unknown): StageOverrideMap {
 
   const normalized: StageOverrideMap = {};
   for (const [stageKey, provider] of Object.entries(value)) {
-    if (isAIStageKey(stageKey) && isStageProviderId(provider)) {
-      normalized[stageKey] = provider;
+    if (!isAIStageKey(stageKey)) continue;
+    const normalizedProvider = normalizeStageProviderId(provider);
+    if (normalizedProvider) {
+      normalized[stageKey] = normalizedProvider;
     }
   }
   return normalized;
@@ -73,9 +137,7 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
     if (!raw) return DEFAULT_AI_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<AISettings>;
     return {
-      defaultProvider: isSelectableProviderId(parsed.defaultProvider)
-        ? parsed.defaultProvider
-        : DEFAULT_AI_SETTINGS.defaultProvider,
+      defaultProvider: normalizeSelectableProviderId(parsed.defaultProvider),
       stageOverrides: normalizeStageOverrides(parsed.stageOverrides),
     };
   } catch {
@@ -85,9 +147,7 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
 
 export function writeAISettings(settings: AISettings, storage = getBrowserStorage()): AISettings {
   const normalized: AISettings = {
-    defaultProvider: isSelectableProviderId(settings.defaultProvider)
-      ? settings.defaultProvider
-      : DEFAULT_AI_SETTINGS.defaultProvider,
+    defaultProvider: normalizeSelectableProviderId(settings.defaultProvider),
     stageOverrides: normalizeStageOverrides(settings.stageOverrides),
   };
 

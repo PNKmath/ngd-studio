@@ -40,7 +40,7 @@ export function recommendStageProvider({
   const override = stageOverrides[stageKey];
   if (override && override !== "auto") {
     if (override === "deepseek-v4" && !externalApiAllowed) {
-      return { provider: "claude", reason: "policy-blocked", observations: 0 };
+      return { provider: "claude-cli", reason: "policy-blocked", observations: 0 };
     }
     return { provider: override, reason: "explicit-override", observations: 0 };
   }
@@ -55,11 +55,11 @@ export function recommendStageProvider({
   });
 
   if (stats.length === 0) {
-    return { provider: "claude", reason: "insufficient-data", observations: 0 };
+    return { provider: "claude-cli", reason: "insufficient-data", observations: 0 };
   }
 
   const [best] = stats.sort((a, b) => scoreProvider(a) - scoreProvider(b));
-  if (!best) return { provider: "claude", reason: "fallback", observations: 0 };
+  if (!best) return { provider: "claude-cli", reason: "fallback", observations: 0 };
   return { provider: best.provider, reason: "best-telemetry", observations: best.observations };
 }
 

@@ -4,6 +4,10 @@ import path from "path";
 export const RUNTIME_ENV_PATH = path.join(process.cwd(), ".env.local");
 
 export const RUNTIME_ENV_KEYS = [
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_MODEL",
+  "OPENAI_API_KEY",
+  "OPENAI_MODEL",
   "DEEPSEEK_API_KEY",
   "DEEPSEEK_API_BASE_URL",
   "DEEPSEEK_MODEL",
@@ -14,6 +18,8 @@ export type RuntimeEnvKey = (typeof RUNTIME_ENV_KEYS)[number];
 export type RuntimeEnvMap = Partial<Record<RuntimeEnvKey, string>>;
 
 const DEFAULT_RUNTIME_ENV: RuntimeEnvMap = {
+  ANTHROPIC_MODEL: "claude-sonnet-4-6",
+  OPENAI_MODEL: "gpt-4o",
   DEEPSEEK_API_BASE_URL: "https://api.deepseek.com",
   DEEPSEEK_MODEL: "deepseek-v4-pro",
 };

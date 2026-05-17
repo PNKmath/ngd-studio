@@ -33,8 +33,15 @@ describe("AI settings storage", () => {
     expect(readStageOverrides(createStorage())).toEqual({});
   });
 
-  it("reads a stored selectable default provider", () => {
-    expect(readDefaultProvider(createStorage(JSON.stringify({ defaultProvider: "codex" })))).toBe("codex");
+  it("reads a stored selectable default provider (new IDs)", () => {
+    expect(readDefaultProvider(createStorage(JSON.stringify({ defaultProvider: "codex-cli" })))).toBe("codex-cli");
+    expect(readDefaultProvider(createStorage(JSON.stringify({ defaultProvider: "claude-sdk" })))).toBe("claude-sdk");
+    expect(readDefaultProvider(createStorage(JSON.stringify({ defaultProvider: "openai-sdk" })))).toBe("openai-sdk");
+  });
+
+  it("migrates legacy 'codex' → 'codex-cli' and 'claude' → 'claude-cli' from storage", () => {
+    expect(readDefaultProvider(createStorage(JSON.stringify({ defaultProvider: "codex" })))).toBe("codex-cli");
+    expect(readDefaultProvider(createStorage(JSON.stringify({ defaultProvider: "claude" })))).toBe("claude-cli");
   });
 
   it("falls back to auto for hidden or invalid providers", () => {
@@ -44,18 +51,25 @@ describe("AI settings storage", () => {
 
   it("writes normalized settings", () => {
     const storage = createStorage();
-    expect(writeAISettings({ defaultProvider: "claude", stageOverrides: {} }, storage)).toEqual({
-      defaultProvider: "claude",
+    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {} }, storage)).toEqual({
+      defaultProvider: "claude-cli",
       stageOverrides: {},
     });
-    expect(readDefaultProvider(storage)).toBe("claude");
+    expect(readDefaultProvider(storage)).toBe("claude-cli");
   });
 
-  it("exposes only auto, claude, and codex as selectable providers", () => {
+  it("exposes auto, claude-cli, claude-sdk, codex-cli, openai-sdk as selectable providers", () => {
     expect(isSelectableProviderId("auto")).toBe(true);
+    expect(isSelectableProviderId("claude-cli")).toBe(true);
+    expect(isSelectableProviderId("claude-sdk")).toBe(true);
+    expect(isSelectableProviderId("codex-cli")).toBe(true);
+    expect(isSelectableProviderId("openai-sdk")).toBe(true);
+    expect(isSelectableProviderId("deepseek-v4")).toBe(false);
+  });
+
+  it("accepts legacy 'claude' and 'codex' as selectable (backward-compat)", () => {
     expect(isSelectableProviderId("claude")).toBe(true);
     expect(isSelectableProviderId("codex")).toBe(true);
-    expect(isSelectableProviderId("deepseek-v4")).toBe(false);
   });
 
   it("normalizes stage override keys and providers", () => {
@@ -67,16 +81,28 @@ describe("AI settings storage", () => {
       "create.extractor": "deepseek-v4",
       "create.writer": "deepseek-v4",
       "review.reviewer": "unknown",
-      "create.verifier": "codex",
+      "create.verifier": "codex-cli",
     })).toEqual({
       "create.extractor": "deepseek-v4",
-      "create.verifier": "codex",
+      "create.verifier": "codex-cli",
     });
   });
 
-  it("creates DeepSeek overrides for all model-call stages only", () => {
-    expect(createDeepSeekStageOverrides()).toEqual({
+  it("migrates legacy stage overrides from 'codex' → 'codex-cli'", () => {
+    expect(normalizeStageOverrides({
       "create.extractor": "deepseek-v4",
+      "create.writer": "deepseek-v4",
+      "review.reviewer": "unknown",
+      "create.verifier": "codex",
+    })).toEqual({
+      "create.extractor": "deepseek-v4",
+      "create.verifier": "codex-cli",
+    });
+  });
+
+  it("creates DeepSeek overrides only for text-only model-call stages", () => {
+    // DeepSeek V4 (preview)는 이미지 입력 미지원 → create.extractor 제외
+    expect(createDeepSeekStageOverrides()).toEqual({
       "create.solver": "deepseek-v4",
       "create.verifier": "deepseek-v4",
       "review.reviewer": "deepseek-v4",
