@@ -44,6 +44,12 @@ outputs/           완성된 HWPX + images/ (생성 그림)
     [6] ngd-exam-checker : HWPX 품질 검수 → 피드백 루프
   ```
 
+#### 신규 흐름 vs legacy 흐름
+
+- **신규 흐름 (코드 기반 orchestrator)**: `ngd-studio/server/stages/orchestrator.ts` (`runStageOrchestrator`)가 stage들을 결정론적으로 실행. `/settings`에서 `create.*` stage override가 하나라도 지정되면 자동 선택 (`shouldUseCodeOrchestrator`).
+- **legacy 흐름 (Claude CLI + skill)**: `/settings`에서 create.* stage override 미지정 또는 `auto` provider일 때 기존 `runLegacyPromptJob` → `ngd-exam-create` 스킬 경로. Claude CLI 구독자는 이 경로로 토큰 추가 과금 없이 사용 가능.
+- **선택 기준**: `/settings` 페이지에서 create.extractor / create.solver / create.verifier 등 stage override 지정 여부. 하나라도 지정 시 → 신규 TS orchestrator; 미지정(또는 전부 `auto`) 시 → legacy Claude CLI 경로.
+
 ### 2. 오검 (오류검수)
 
 - **스킬**: `ngd-exam-review` / **에이전트**: `ngd-exam-reviewer`

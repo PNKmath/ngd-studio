@@ -74,3 +74,35 @@ Stage별 가용성:
 - `child_process.spawn`: `shell: true` 회피, 인자 배열
 - 임시 파일: `os.tmpdir()`
 - Python 스크립트: pathlib, `encoding="utf-8"`
+
+## 완료 보고 (2026-05-17)
+
+Phase 1~10 전체 완료. 아래는 각 phase 커밋 해시 목록:
+
+| Phase | 커밋 해시 | 내용 요약 |
+|-------|-----------|-----------|
+| 1 | `dfb33e1` | 기반 인프라 — provider adapter 인터페이스 |
+| 2 | `082a5fc` | claude-sdk provider 신규 구현 |
+| 3 | `8d84584` | openai-sdk provider 신규 구현 |
+| 4 | `1f09be6` | extractor stage + extractorPrompt.ts |
+| 5 | `f2627bf` | orchestrator.ts — stage 분기 및 병렬 실행 |
+| 6 | `6acec13` | shouldUseCodeOrchestrator 분기 + sse.ts 연결 |
+| 7 | `bf1e1f4` | provider 큐 + Codex CLI 감지 + 대시보드 |
+| 8 | `98e5701` | per-stage timeout/max_tokens/finish_reason 처리 |
+| 9 | `ff450f3` | followup 빈 inputFiles 방지 + resume 명령 시 skill 명시 호출 |
+| 10 | (본 phase 커밋) | docs — legacy skill/agent 폐기 후보 표시 + CLAUDE.md 분기 단락 |
+
+### 후속 작업
+
+- `/create` 페이지 폐기 candidate: `app/create/page.tsx` 삭제 + 라우트 redirect
+- 시나리오 A~E 수동 검증: extractor(claude-sdk), solver(deepseek-v4), verifier(deepseek-v4), builder(deterministic), checker(deterministic) 조합
+- AbortController-SSE cancel 연동 개선: 진행 중 stage의 fetch + 큐된 다음 stage abort
+
+### 폐기 후보 자산
+
+아래 자산은 legacy Claude CLI 경로에서만 사용되며, `/create` 페이지 폐기 후 삭제 예정:
+
+- `.claude/skills/ngd-exam-create/SKILL.md`
+- `.claude/agents/ngd-exam-extractor.md`
+- `.claude/agents/ngd-exam-solver.md`
+- `.claude/agents/ngd-exam-verifier.md`

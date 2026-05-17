@@ -1,13 +1,17 @@
 ---
 phase: 10
 title: 문서 / skill 폐기 후보 표시
-status: pending
+status: completed
 depends_on: [9]
 scope:
   - docs/planning/create-v4-merge/phase-05-deepseek-stage-orchestration.md
   - docs/planning/create-v4-merge/checklist.md
   - .claude/skills/ngd-exam-create/SKILL.md
+  - .claude/agents/ngd-exam-extractor.md
+  - .claude/agents/ngd-exam-solver.md
+  - .claude/agents/ngd-exam-verifier.md
   - CLAUDE.md
+  - docs/planning/stage-runner-rewrite/README.md
 intervention_likely: false
 intervention_reason: ""
 ---
@@ -74,3 +78,32 @@ intervention_reason: ""
 # 문서 변경만이므로 명령 없이 시각적 확인.
 grep -r "폐기 후보" .claude/skills .claude/agents docs/planning
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-17 KST) — completed
+**상태**: completed
+**소요 시간**: 약 5분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+create-v4-merge/phase-05 흡수 알림 + status 갱신, SKILL.md + agent 3종에 폐기 후보 헤더 추가, CLAUDE.md에 신규/legacy 분기 단락 추가, stage-runner-rewrite/README.md에 완료 보고 섹션(Phase 1~10 커밋 해시 + 후속 작업 + 폐기 후보 자산) 추가.
+
+#### 변경 파일
+- `docs/planning/create-v4-merge/phase-05-deepseek-stage-orchestration.md` (수정, +5줄): frontmatter status → completed, 흡수 노트 블록 추가
+- `docs/planning/create-v4-merge/checklist.md` (수정, +1/-1줄): phase-05 행 상태 → completed (stage-runner-rewrite로 흡수)
+- `.claude/skills/ngd-exam-create/SKILL.md` (수정, +5줄): 폐기 후보 헤더 추가
+- `.claude/agents/ngd-exam-extractor.md` (수정, +4줄): 폐기 후보 헤더 + TS 이식 경로 추가
+- `.claude/agents/ngd-exam-solver.md` (수정, +4줄): 폐기 후보 헤더 + TS 이식 경로 추가
+- `.claude/agents/ngd-exam-verifier.md` (수정, +4줄): 폐기 후보 헤더 + TS 이식 경로 추가
+- `CLAUDE.md` (수정, +10줄): `### 1. 시험지 제작` 섹션에 신규/legacy 분기 단락 추가
+- `docs/planning/stage-runner-rewrite/README.md` (수정, +28줄): `## 완료 보고 (2026-05-17)` 섹션 추가 (Phase 1~10 커밋 해시 + 후속 작업 + 폐기 후보 자산)
+
+#### 검증 결과
+- [x] grep "폐기 후보" pattern: 4건 매칭 (.claude/skills 1건 + .claude/agents 3건) — 일관성 확인
+
+#### 추가 발견사항
+없음
+
+#### 질문 / 결정 사항
+없음

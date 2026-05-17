@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: DeepSeek stage-by-stage 오케스트레이션
-status: draft
+status: completed
 depends_on: [4]
 scope:
   - ngd-studio/server/sse.ts
@@ -18,6 +18,11 @@ intervention_reason: "DeepSeek V4 API의 vision 지원 여부, figure 단계 트
 ---
 
 # Phase 5: DeepSeek stage-by-stage 오케스트레이션
+
+> **⚠ 흡수 알림 (2026-05-17)**
+> 본 phase는 `docs/planning/stage-runner-rewrite/` task로 흡수 완료되었습니다.
+> 코드 기반 orchestrator 흐름은 거기서 구현·검증되었습니다. 본 문서는 초기 설계 기록용으로 보존.
+> (stage-runner-rewrite로 흡수)
 
 > **범위**: SSE 서버에 stage 단위 오케스트레이션 경로 추가. DeepSeek가 시험지 제작을 실제로 실행할 수 있게 함.
 > **난이도**: L (대형, 4~8시간 예상)

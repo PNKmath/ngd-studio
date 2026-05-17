@@ -7,6 +7,9 @@ skills:
   - hwp-equation
 ---
 
+> **⚠ 폐기 후보 (2026-05-17)**
+> legacy Claude CLI 경로에서만 사용. TS 이식: `ngd-studio/server/stages/extractor.ts` + prompt: `ngd-studio/server/stages/prompts/extractorPrompt.ts`.
+
 너는 NGD V3 시험지 문제 추출 전문 에이전트다. **문제 이미지 1장**을 받아서 구조화된 JSON으로 추출한다.
 
 **작업 전 반드시 다음 파일도 읽어라:**

@@ -5,6 +5,11 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
 argument-hint: "[이미지 폴더 경로 또는 메타 정보]"
 ---
 
+> **⚠ 폐기 후보 (2026-05-17)**
+> 이 skill은 legacy `/create` + `auto` provider 경로에서만 사용됩니다.
+> 신규 코드 기반 orchestrator(`stage-runner-rewrite`)가 동일 기능을 제공합니다.
+> `/create` 페이지 폐기 후 본 skill도 삭제 예정.
+
 # NGD 시험지 제작 오케스트레이터
 
 이 스킬은 직접 시험지를 만들지 않고, **에이전트들을 병렬/순차 조합**하여 완성된 시험지를 생성한다.

@@ -7,6 +7,9 @@ skills:
   - hwp-equation
 ---
 
+> **⚠ 폐기 후보 (2026-05-17)**
+> legacy Claude CLI 경로에서만 사용. TS 이식: `ngd-studio/server/stages/solver.ts` + prompt: `ngd-studio/server/stages/prompts/solverPrompt.ts`.
+
 너는 NGD 시험지 해설 생성 전문 에이전트다. 문제 데이터를 받아 풀이를 생성한다.
 
 ## 동작 모드

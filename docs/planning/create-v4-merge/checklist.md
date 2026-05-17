@@ -17,7 +17,7 @@ created: 2026-05-17
 | 2 | [phase-02-state-branch-and-running-view.md](./phase-02-state-branch-and-running-view.md) | 14 | 13 | 93% | completed | 61c7e4d |
 | 3 | [phase-03-resume-and-conditional-panels.md](./phase-03-resume-and-conditional-panels.md) | 15 | 13 | 87% | completed | 7f9fadd |
 | 4 | [phase-04-verify-and-regression-check.md](./phase-04-verify-and-regression-check.md) | 8 | 2 | 25% | needs_user | - |
-| 5 | [phase-05-deepseek-stage-orchestration.md](./phase-05-deepseek-stage-orchestration.md) | 12 | 0 | 0% | draft | - |
+| 5 | [phase-05-deepseek-stage-orchestration.md](./phase-05-deepseek-stage-orchestration.md) | 12 | 12 | 100% | completed (stage-runner-rewrite로 흡수) | - |
 | **Total** | | **56** | **0** | **0%** | | |
 
 ## Phase 의존성

@@ -17,13 +17,13 @@ created: 2026-05-17
 | 2 | [phase-02-agent-prompts-to-ts.md](./phase-02-agent-prompts-to-ts.md) | 5 | 5 | 100% | completed | `082a5fc` |
 | 3 | [phase-03-extractor-stage.md](./phase-03-extractor-stage.md) | 7 | 7 | 100% | completed | `8d84584` |
 | 4 | [phase-04-exam-data-builder.md](./phase-04-exam-data-builder.md) | 5 | 5 | 100% | completed | `1f09be6` |
-| 5 | [phase-05-orchestrator-and-resume.md](./phase-05-orchestrator-and-resume.md) | 15 | 0 | 0% | pending | - |
-| 6 | [phase-06-sse-branch.md](./phase-06-sse-branch.md) | 6 | 0 | 0% | pending | - |
+| 5 | [phase-05-orchestrator-and-resume.md](./phase-05-orchestrator-and-resume.md) | 15 | 15 | 100% | completed | `f2627bf` |
+| 6 | [phase-06-sse-branch.md](./phase-06-sse-branch.md) | 6 | 6 | 100% | completed | `6acec13` |
 | 7 | [phase-07-settings-ui-matrix.md](./phase-07-settings-ui-matrix.md) | 9 | 9 | 100% | completed | `bf1e1f4` |
-| 8 | [phase-08-followup-route.md](./phase-08-followup-route.md) | 4 | 0 | 0% | pending | - |
-| 9 | [phase-09-integration-tests.md](./phase-09-integration-tests.md) | 7 | 0 | 0% | pending | - |
-| 10 | [phase-10-docs-and-skill-deprecation.md](./phase-10-docs-and-skill-deprecation.md) | 4 | 0 | 0% | pending | - |
-| **Total** | | **72** | **36** | **50%** | | |
+| 8 | [phase-08-followup-route.md](./phase-08-followup-route.md) | 4 | 4 | 100% | completed | `98e5701` |
+| 9 | [phase-09-integration-tests.md](./phase-09-integration-tests.md) | 7 | 5 | 71% | completed | `ff450f3` |
+| 10 | [phase-10-docs-and-skill-deprecation.md](./phase-10-docs-and-skill-deprecation.md) | 4 | 4 | 100% | completed | `{commit-10}` |
+| **Total** | | **72** | **70** | **97%** | | |
 
 ## Phase 의존성
 
