@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: 이전 작업 재개 + figure/build/followup 패널 포팅
-status: pending
+status: completed
 depends_on: [2]
 scope:
   - ngd-studio/app/create-v4/page.tsx
@@ -143,19 +143,19 @@ import { FollowupChat } from "@/components/shared/FollowupChat";
 
 ## 체크리스트
 
-- [ ] `existingImages` / `resumeFrom` / `showResumeForm` 상태 추가
-- [ ] `existingImages` fetch `useEffect` 추가 (hasJob일 때 skip)
-- [ ] 이전 작업 재개 카드 마크업을 idle 좌측 사이드바에 추가
-- [ ] `handleResume` 함수 추가
-- [ ] `FigureStatus` 타입 + 상태 + 폴링 `useEffect` 추가
-- [ ] `showFigureConfirm` 플래그 추가
-- [ ] `handleConfirmFigure` 함수 추가
-- [ ] figure 확인 패널 마크업을 running/done 우측 영역에 추가
-- [ ] `BuildStatus` 타입 + 상태 + 폴링 `useEffect` 추가
-- [ ] `showBuildStatus` 플래그 추가
-- [ ] build 상태 패널 마크업을 running/done 우측 영역에 추가
-- [ ] `FollowupChat` 임포트 + 조건부 렌더 추가
-- [ ] `npx tsc --noEmit` 통과
+- [x] `existingImages` / `resumeFrom` / `showResumeForm` 상태 추가
+- [x] `existingImages` fetch `useEffect` 추가 (hasJob일 때 skip)
+- [x] 이전 작업 재개 카드 마크업을 idle 좌측 사이드바에 추가
+- [x] `handleResume` 함수 추가
+- [x] `FigureStatus` 타입 + 상태 + 폴링 `useEffect` 추가
+- [x] `showFigureConfirm` 플래그 추가
+- [x] `handleConfirmFigure` 함수 추가
+- [x] figure 확인 패널 마크업을 running/done 우측 영역에 추가
+- [x] `BuildStatus` 타입 + 상태 + 폴링 `useEffect` 추가
+- [x] `showBuildStatus` 플래그 추가
+- [x] build 상태 패널 마크업을 running/done 우측 영역에 추가
+- [x] `FollowupChat` 임포트 + 조건부 렌더 추가
+- [x] `npx tsc --noEmit` 통과
 - [ ] 빌드 성공 시 build status 패널이 나타나는지 수동 확인
 - [ ] resumeFrom=figure 작업 후 figure 확인 패널이 나타나는지 수동 확인 (figure 단계 데이터가 있을 때)
 
@@ -177,3 +177,40 @@ npx tsc --noEmit
 3. resumeFrom=figure 작업 진행 → figure 확인 패널 표시 및 폴링 동작 확인
 4. HWPX 조립 진행 → build 상태 패널 표시 확인
 5. 작업 완료 후 FollowupChat 표시 확인
+
+## 실행 결과
+
+### 1회차 (2026-05-17 00:00 KST) — completed
+**상태**: completed
+**소요 시간**: 약 5분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`/create-v4/page.tsx`에 이전 작업 재개 카드, figure 확인 패널, build 상태 패널, FollowupChat 4가지 기능을 포팅했다.
+`mode` store 구독 추가, `FigureStatus`/`BuildStatus` 타입 추가, 관련 상태·refs·effect·핸들러 구현.
+idle 좌측 사이드바에 재개 카드 삽입, running/done 우측 스크롤 영역 하단에 figure/build/followup 조건부 렌더.
+`npx tsc --noEmit` 오류 없음.
+
+#### 변경 파일
+- `ngd-studio/app/create-v4/page.tsx` (수정, +140/-3줄)
+
+#### 검증 결과
+- [x] `npx tsc --noEmit`: 출력 없음 → pass
+
+#### 추가 발견사항
+없음
+
+#### 질문 / 결정 사항
+수동 확인 항목 2개(build status 패널, figure 확인 패널)는 실제 작업 데이터 없이 자동 검증 불가 — 사용자가 직접 확인 필요.
+
+#### Scope Audit (orchestrator)
+pass — 1 file in scope (`ngd-studio/app/create-v4/page.tsx`), phase-file edits exempt
+
+#### Verification Re-run (orchestrator)
+exit 0 — `npx tsc --noEmit` 통과 (no output)
+
+#### Simplify (orchestrator)
+SIMPLIFIED: 1 / CHANGES: 1 / VERIFY: pass — 자명한 구현 주석 1건 제거 (폴링 헬퍼 통합/스타일 변환은 안전성 이유로 skip)
+
+#### Review (orchestrator)
+VERDICT: pass / ISSUES: 0 — 4가지 기능(재개/figure/build/followup) 모두 스펙대로 포팅, 인용 심볼 실존 확인됨

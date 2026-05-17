@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CropperWorkspace } from "@/components/cropper/CropperWorkspace";
 import { MetaForm, type MetaValue } from "@/components/upload/MetaForm";
 import { parseExamMetaFromFilename } from "@/lib/pdf/filenameMeta";
@@ -12,6 +12,17 @@ import { PipelineView } from "@/components/pipeline/PipelineView";
 import { QuestionResultPanel } from "@/components/results/QuestionResultPanel";
 import { LogStream } from "@/components/log/LogStream";
 import { DownloadButton } from "@/components/shared/DownloadButton";
+import { FollowupChat } from "@/components/shared/FollowupChat";
+
+type FigureStatus = { pending: boolean; done: boolean; success: number[]; failed: number[]; images: string[] };
+type BuildStatus = {
+  pending: boolean;
+  status?: "running" | "retrying" | "fallback" | "success" | "failed";
+  hwpx_path?: string;
+  error?: string;
+  retried?: { problem: number; agent: string }[];
+  fallback?: boolean;
+};
 
 const AUTO_SPLIT_LS_KEY = "cropper.auto-split-on-upload";
 const META_LS_KEY = "create-v4.meta-form";
@@ -48,6 +59,7 @@ export default function CreateV4Page() {
 
   // Store subscriptions
   const status = useJobStore((s) => s.status);
+  const mode = useJobStore((s) => s.mode);
   const stages = useJobStore((s) => s.stages);
   const logs = useJobStore((s) => s.logs);
   const jobId = useJobStore((s) => s.jobId);
@@ -110,6 +122,19 @@ export default function CreateV4Page() {
     });
   }, [v3Meta, hasJob]);
 
+  // 이전 작업 재개 상태
+  const [existingImages, setExistingImages] = useState<{ count: number; hasClean: boolean } | null>(null);
+  const [resumeFrom, setResumeFrom] = useState("extractor");
+  const [showResumeForm, setShowResumeForm] = useState(false);
+
+  // figure 상태 + 폴링
+  const [figureStatus, setFigureStatus] = useState<FigureStatus | null>(null);
+  const figureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // build 상태 + 폴링
+  const [buildStatus, setBuildStatus] = useState<BuildStatus | null>(null);
+  const buildIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [recoveryHint, setRecoveryHint] = useState<string | null>(null);
@@ -121,6 +146,126 @@ export default function CreateV4Page() {
     meta.semester.trim().length > 0 &&
     meta.examType.trim().length > 0 &&
     meta.range.trim().length > 0;
+
+  // 이전 작업 재개 이미지 fetch (진행 중인 작업이 없을 때만)
+  useEffect(() => {
+    if (hasJob) return;
+    fetch("/api/question-images")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.count > 0) setExistingImages({ count: data.count, hasClean: data.hasClean });
+      })
+      .catch(() => {});
+  }, [hasJob]);
+
+  const handleResume = useCallback(async () => {
+    if (!existingImages) return;
+    let cachedMeta: Record<string, unknown> = {};
+    try {
+      const r = await fetch("/api/v3cache-meta");
+      const data = await r.json();
+      if (data.found) cachedMeta = data;
+    } catch { /* ignore */ }
+
+    const jobMeta = {
+      school: (cachedMeta.school as string) || meta.school,
+      grade: (cachedMeta.grade as number) || meta.grade,
+      subject: (cachedMeta.subject as string) || meta.subject,
+      semester: (cachedMeta.semester as string) || meta.semester,
+      examType: (cachedMeta.examType as string) || meta.examType,
+      range: (cachedMeta.range as string) || meta.range,
+      questionCount: existingImages.count,
+      resumeFrom,
+    };
+    setV3Meta({ ...jobMeta });
+    await startJob("resume", { pdf: "" }, jobMeta);
+  }, [existingImages, meta, resumeFrom, startJob, setV3Meta]);
+
+  const canResume = status === "idle" && !!existingImages;
+
+  // figure 확인 패널 표시 여부
+  const showFigureConfirm = isDone
+    && (mode === "resume" || mode === "create")
+    && v3Meta?.resumeFrom === "figure";
+
+  // figure_status.json 폴링
+  useEffect(() => {
+    if (!showFigureConfirm) {
+      if (figureIntervalRef.current) {
+        clearInterval(figureIntervalRef.current);
+        figureIntervalRef.current = null;
+      }
+      queueMicrotask(() => setFigureStatus(null));
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/figure-status");
+        const data: FigureStatus = await r.json();
+        setFigureStatus(data);
+        if (data.done && figureIntervalRef.current) {
+          clearInterval(figureIntervalRef.current);
+          figureIntervalRef.current = null;
+        }
+      } catch { /* ignore */ }
+    };
+
+    poll();
+    figureIntervalRef.current = setInterval(poll, 2000);
+    return () => {
+      if (figureIntervalRef.current) {
+        clearInterval(figureIntervalRef.current);
+        figureIntervalRef.current = null;
+      }
+    };
+  }, [showFigureConfirm]);
+
+  const handleConfirmFigure = useCallback(async () => {
+    if (!v3Meta) return;
+    const jobMeta = { ...v3Meta, resumeFrom: "confirm" };
+    await startJob("resume", { pdf: "" }, jobMeta);
+  }, [v3Meta, startJob]);
+
+  // build 상태 패널 표시 여부
+  const showBuildStatus = (isRunning || isDone) &&
+    (mode === "create" || mode === "resume") &&
+    v3Meta?.resumeFrom !== "figure";
+
+  // build_status.json 폴링
+  useEffect(() => {
+    if (!showBuildStatus) {
+      if (buildIntervalRef.current) {
+        clearInterval(buildIntervalRef.current);
+        buildIntervalRef.current = null;
+      }
+      queueMicrotask(() => setBuildStatus(null));
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/build-status");
+        const data: BuildStatus = await r.json();
+        setBuildStatus(data);
+        if (!data.pending && (data.status === "success" || data.status === "failed")) {
+          if (buildIntervalRef.current) {
+            clearInterval(buildIntervalRef.current);
+            buildIntervalRef.current = null;
+          }
+        }
+      } catch { /* ignore */ }
+    };
+
+    poll();
+    buildIntervalRef.current = setInterval(poll, 2000);
+    return () => {
+      if (buildIntervalRef.current) {
+        clearInterval(buildIntervalRef.current);
+        buildIntervalRef.current = null;
+      }
+    };
+  }, [showBuildStatus]);
 
   const handleExtract = useCallback(
     async (items: { number: number; kind?: "regular" | "essay"; blob: Blob }[]) => {
@@ -135,7 +280,6 @@ export default function CreateV4Page() {
       setSubmitError(null);
       setRecoveryHint(null);
 
-      // 신규 작업 시작: 이전 .v3cache 정리 (create 페이지와 동일)
       await fetch("/api/v3cache-reset", { method: "POST" }).catch(() => {});
 
       const formData = new FormData();
@@ -258,6 +402,49 @@ export default function CreateV4Page() {
               )}
             </Card>
 
+            {existingImages && (
+              <Card className="p-4 space-y-3 border-amber-500/40 bg-amber-500/5">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-amber-600 dark:text-amber-400">이전 작업 재개</h3>
+                  <button
+                    onClick={() => setShowResumeForm((v) => !v)}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {showResumeForm ? "접기" : "펼치기"}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  저장된 이미지 {existingImages.count}개{existingImages.hasClean ? " (정리본 있음)" : ""}
+                </p>
+                {showResumeForm && (
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground">재개 시작 단계</label>
+                      <select
+                        value={resumeFrom}
+                        onChange={(e) => setResumeFrom(e.target.value)}
+                        className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm"
+                      >
+                        {existingImages.hasClean && <option value="extractor">문제 추출 (extractor)</option>}
+                        <option value="solver">해설 생성 (solver)</option>
+                        <option value="verifier">해설 검증 (verifier)</option>
+                        <option value="figure">그림 처리 (figure)</option>
+                        <option value="builder">HWPX 조립 (builder)</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                <Button
+                  onClick={handleResume}
+                  disabled={!canResume}
+                  variant="outline"
+                  className="w-full border-amber-500/60 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                >
+                  재개 ({resumeFrom}부터)
+                </Button>
+              </Card>
+            )}
+
             <PipelineView mode="create" />
           </div>
 
@@ -324,6 +511,97 @@ export default function CreateV4Page() {
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           <QuestionResultPanel />
           <LogStream logs={logs} />
+
+          {/* Figure confirm panel — figure_processor.py 백그라운드 완료 대기 */}
+          {showFigureConfirm && (
+            <Card className="p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">그림 처리 결과 확인</h3>
+                {figureStatus?.done && (
+                  <span className="text-xs text-[var(--color-status-success)]">
+                    완료 {figureStatus.success.length}개
+                    {figureStatus.failed.length > 0 && ` / 실패 ${figureStatus.failed.length}개`}
+                  </span>
+                )}
+              </div>
+
+              {!figureStatus || figureStatus.pending ? (
+                <p className="text-xs text-muted-foreground animate-pulse">그림 처리 중... (백그라운드)</p>
+              ) : figureStatus.done ? (
+                <>
+                  {figureStatus.failed.length > 0 && (
+                    <p className="text-xs text-[var(--color-status-error)]">
+                      실패한 문제: {figureStatus.failed.join(", ")} — 수동 확인 필요
+                    </p>
+                  )}
+                  {figureStatus.images.length > 0 ? (
+                    <div className="grid grid-cols-4 gap-2">
+                      {figureStatus.images.map((imgPath) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={imgPath}
+                          src={`/api/file?path=${imgPath}`}
+                          className="w-full rounded border object-contain bg-white"
+                          alt={imgPath.split("/").pop()}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">그림 없음 (바로 조립 가능)</p>
+                  )}
+                  <Button onClick={handleConfirmFigure} className="w-full">
+                    확인 — HWPX 조립 시작
+                  </Button>
+                </>
+              ) : (
+                <p className="text-xs text-[var(--color-status-error)]">그림 처리 실패 — 로그 확인 필요</p>
+              )}
+            </Card>
+          )}
+
+          {/* Build status panel */}
+          {showBuildStatus && buildStatus && !buildStatus.pending && (
+            <Card className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium">HWPX 조립</h3>
+                <span className={`text-xs font-medium ${
+                  buildStatus.status === "success" ? "text-[var(--color-status-success)]" :
+                  buildStatus.status === "failed" ? "text-[var(--color-status-error)]" :
+                  "text-yellow-500"
+                }`}>
+                  {buildStatus.status === "success" ? "완료" :
+                   buildStatus.status === "failed" ? "실패" :
+                   buildStatus.status === "retrying" ? "재처리 중..." :
+                   buildStatus.status === "fallback" ? "폴백 실행 중..." :
+                   buildStatus.status === "running" ? "조립 중..." : ""}
+                </span>
+              </div>
+
+              {buildStatus.hwpx_path && (
+                <p className="text-xs text-muted-foreground font-mono">{buildStatus.hwpx_path.split("/").pop()}</p>
+              )}
+
+              {buildStatus.retried && buildStatus.retried.length > 0 && (
+                <div className="text-xs text-yellow-600 dark:text-yellow-400 space-y-0.5">
+                  <p className="font-medium">재처리:</p>
+                  {buildStatus.retried.map((r, i) => (
+                    <p key={i}>Q{r.problem} — {r.agent}</p>
+                  ))}
+                </div>
+              )}
+
+              {buildStatus.fallback && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">원본 builder 에이전트로 폴백 실행</p>
+              )}
+
+              {buildStatus.error && (
+                <p className="text-xs text-[var(--color-status-error)] font-mono whitespace-pre-wrap">{buildStatus.error}</p>
+              )}
+            </Card>
+          )}
+
+          {/* Followup chat */}
+          {isDone && !showFigureConfirm && <FollowupChat disabled={isRunning} />}
         </div>
       </div>
     </div>
