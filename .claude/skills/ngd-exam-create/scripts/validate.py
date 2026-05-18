@@ -34,12 +34,19 @@ def validate_hwpx(hwpx_path):
         if r not in names:
             errors.append(f"필수 파일 누락: {r}")
 
-    from lxml import etree
+    try:
+        from lxml import etree
+        parse_xml = etree.fromstring
+        xml_error = etree.XMLSyntaxError
+    except ModuleNotFoundError:
+        import xml.etree.ElementTree as etree
+        parse_xml = etree.fromstring
+        xml_error = etree.ParseError
     xml_files = [n for n in names if n.endswith('.xml') or n.endswith('.hpf')]
     for fname in xml_files:
         try:
-            etree.fromstring(zf.read(fname))
-        except etree.XMLSyntaxError as e:
+            parse_xml(zf.read(fname))
+        except xml_error as e:
             errors.append(f"XML 파싱 오류 [{fname}]: {e}")
 
     if 'Contents/section0.xml' in names:

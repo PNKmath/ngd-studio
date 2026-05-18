@@ -14,7 +14,8 @@ from PIL import Image
 import io
 
 # === Paths ===
-BASE = "/mnt/c/NGD/.claude/skills/ngd-exam-create/base_hwpx"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE = os.path.join(SCRIPT_DIR, ".claude", "skills", "ngd-exam-create", "base_hwpx")
 EXAM_JSON = sys.argv[1] if len(sys.argv) > 1 else "/tmp/exam_data.json"
 OUTPUT_DIR = sys.argv[2] if len(sys.argv) > 2 else "/mnt/c/NGD/outputs"
 
@@ -955,7 +956,7 @@ problem_count = 0
 essay_count = 0
 
 extra_images = []  # List of (bindata_name, file_data) tuples
-extra_image_counter = 3  # image1/2 are reserved (저작권바, 로고)
+extra_image_counter = 9  # image1~8 are reserved by the base template
 
 for prob in problems:
     num = prob["number"]
