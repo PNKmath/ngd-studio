@@ -617,26 +617,13 @@ Bash("python3 figure_processor.py", run_in_background=True)
 
 ### Step 6: Phase 2 — HWPX 조립
 
-`build_hwpx.py` 스크립트를 직접 실행:
+이 단계는 **호스트 시스템(sse.ts)이 deterministic builder runner를 자동 실행**한다. Claude는 직접 build/fix/validate를 호출하지 않는다. exam_data.json 작성 완료 후 종료하면, 호스트가 다음을 순차 실행한다:
 
-```python
-JSON_PATH = "inputs/시험지 제작/.v3cache/exam_data.json"
-OUTPUT_DIR = "outputs"
+1. `python3 build_hwpx.py <exam_data.json> outputs/`
+2. `python3 resources/hwpx_scripts/fix_namespaces.py <hwpx>`
+3. `python3 resources/hwpx_scripts/validate.py --fix <hwpx>`
 
-Bash(f"python3 /mnt/c/NGD/build_hwpx.py {JSON_PATH} {OUTPUT_DIR}")
-```
-
-성공 시 출력에서 `HWPX written: <경로>` 확인 후 후처리:
-
-```python
-# 출력 파일 경로 파악 후
-Bash(f"python3 /mnt/c/NGD/.claude/skills/ngd-exam-create/scripts/fix_namespaces.py <hwpx_path>")
-Bash(f"python3 /mnt/c/NGD/.claude/skills/ngd-exam-create/scripts/validate.py --fix <hwpx_path>")
-```
-
-**실패 시**: 에러 메시지를 그대로 리포트하고 중단. 스크립트 재실행은 동일한 결과가 나오므로 의미 없음.
-
-**확인**: HWPX 파일 생성, 문제 누락 없는지 검증.
+**실패 시**: 호스트가 status=failed를 보고하고 작업을 중단한다. Claude가 재시도하지 않는다.
 
 ### Step 7: Phase 2 — Checker 호출
 
@@ -654,7 +641,7 @@ Agent(subagent_type="ngd-exam-checker", prompt="""
 
 checker FAIL 시:
 - XML 구조 오류 / 수식 오류 → 에러 내용 리포트 (스크립트 재실행 불가, 수동 확인 필요)
-- 내용 누락 / 순서 오류 → exam_data.json 수정 후 Step 6 재실행
+- 내용 누락 / 순서 오류 → exam_data.json 수정 후 종료. 호스트가 deterministic builder를 자동 재실행한다.
 - 수정 후 checker 재호출 (최대 2회)
 
 ---

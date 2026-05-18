@@ -99,9 +99,9 @@ with zipfile.ZipFile(양식지_경로, 'r') as z:
 - ...
 - n행: ₙC₀ ~ ₙCₙ
 
-## 사전 추출된 템플릿 (base_hwpx/)
+## 사전 추출된 템플릿 (resources/hwpx_base/)
 
-양식지에서 추출하여 플레이스홀더가 적용된 XML 템플릿 파일들이 `base_hwpx/`에 준비되어 있다.
+양식지에서 추출하여 플레이스홀더가 적용된 XML 템플릿 파일들이 `resources/hwpx_base/`에 준비되어 있다.
 **양식지에서 실시간 추출하지 말고, 반드시 아래 템플릿 파일을 사용하라.**
 
 ### 표준정규분포표
@@ -164,7 +164,7 @@ with zipfile.ZipFile(양식지_경로, 'r') as z:
 ### 사용 코드 패턴
 
 ```python
-BASE = ".claude/skills/ngd-exam-create/base_hwpx"
+BASE = "resources/hwpx_base"  # 또는 env(NGD_HWPX_BASE) override
 
 # 1. 템플릿 읽기
 with open(f"{BASE}/normal_dist_4rows.xml", "r") as f:

@@ -23,8 +23,8 @@ HWP build 파이프라인(`build_hwpx.py` + `fix_namespaces.py` + `validate.py`)
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
 | 1 | [phase-01-resource-relocation.md](./phase-01-resource-relocation.md) | 5 | 5 | 100% | completed | 00bc41c |
-| 2 | [phase-02-build-hwpx-modularize.md](./phase-02-build-hwpx-modularize.md) | 6 | 6 | 100% | completed | (pending commit) |
-| 3 | [phase-03-skill-doc-cleanup.md](./phase-03-skill-doc-cleanup.md) | 4 | 0 | 0% | pending | - |
+| 2 | [phase-02-build-hwpx-modularize.md](./phase-02-build-hwpx-modularize.md) | 6 | 6 | 100% | completed | 43be499 |
+| 3 | [phase-03-skill-doc-cleanup.md](./phase-03-skill-doc-cleanup.md) | 4 | 4 | 100% | completed | (pending commit) |
 | 4 | [phase-04-sse-orchestrator-llm-removal.md](./phase-04-sse-orchestrator-llm-removal.md) | 5 | 0 | 0% | pending | - |
 | 5 | [phase-05-unit-tests.md](./phase-05-unit-tests.md) | 4 | 0 | 0% | pending | - |
 | 6 | [phase-06-e2e-build-verification.md](./phase-06-e2e-build-verification.md) | 4 | 0 | 0% | pending | - |
