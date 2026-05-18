@@ -184,3 +184,7 @@ SIMPLIFIED: 4 — solver.ts `keys` else-only scope 이동, solverPrompt.ts stale
 #### Review (orchestrator)
 
 VERDICT: pass — 스펙대로 NGD-rich prompt 전환 + legacy 제거 완료, tsc 0 errors, 33/33 pass.
+
+#### Commit
+
+662c60d

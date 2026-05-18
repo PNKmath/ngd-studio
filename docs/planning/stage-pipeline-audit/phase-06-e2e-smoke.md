@@ -239,3 +239,7 @@ exit 0 — `npx tsc --noEmit` 0 errors, `vitest orchestrator.pipeline.test.ts` 5
 #### Review (orchestrator, 2회차)
 
 VERDICT: pass — partial-fail 계약을 toBe("failed")로 조였고, interleaved 시나리오를 module-level barrier Map으로 deterministic 전환. CI-safe.
+
+#### Commit
+
+1847644

@@ -141,6 +141,9 @@ exit 0 — `npx tsc --noEmit` pass. (`## 검증`의 수동 항목은 dev 서버/
 #### Review (orchestrator)
 VERDICT: pass (0 issues). 스펙/체크리스트/구현 일치. tsc pass, enable/disableDeepSeek 외부 참조 없어 회귀 없음.
 
+#### Commit
+`bf1e1f4` — feat(settings): Phase 7 — settings UI 매트릭스 (5종 provider 카드 + stage 드롭다운 + claude/openai 테스트)
+
 ## 영향 범위
 
 - `app/settings/page.tsx` 큰 리뉴얼. 기존 토글 동작은 유지.

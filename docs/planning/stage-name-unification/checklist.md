@@ -13,11 +13,11 @@ created: 2026-05-17
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-canonical-types.md](./phase-01-canonical-types.md) | 4 | 0 | 0% | pending | - |
-| 2 | [phase-02-orchestrator-events.md](./phase-02-orchestrator-events.md) | 5 | 0 | 0% | pending | - |
-| 3 | [phase-03-store-and-ui.md](./phase-03-store-and-ui.md) | 6 | 0 | 0% | pending | - |
-| 4 | [phase-04-integration.md](./phase-04-integration.md) | 4 | 0 | 0% | pending | - |
-| **Total** | | **19** | **0** | **0%** | | |
+| 1 | [phase-01-canonical-types.md](./phase-01-canonical-types.md) | 4 | 4 | 100% | completed | 8ba1f01 |
+| 2 | [phase-02-orchestrator-events.md](./phase-02-orchestrator-events.md) | 5 | 5 | 100% | completed | 0d74aa0 |
+| 3 | [phase-03-store-and-ui.md](./phase-03-store-and-ui.md) | 6 | 6 | 100% | completed | 5455729 |
+| 4 | [phase-04-integration.md](./phase-04-integration.md) | 4 | 2 | 50% | needs_user | - |
+| **Total** | | **19** | **17** | **89%** | | |
 
 ## Phase 의존성
 

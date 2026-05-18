@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: 통합 회귀 + 수동 시나리오 검증
-status: pending
+status: needs_user
 depends_on: [2, 3]
 scope:
   - docs/planning/stage-name-unification/phase-04-integration.md
@@ -78,3 +78,34 @@ npx vitest run --reporter=basic
 
 # 수동 시나리오 A~C는 dev 서버 + 브라우저로 직접 수행
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-18 00:00 KST) — 자동 회귀 완료, 수동 시나리오 후속 필요
+**상태**: needs_user
+**소요 시간**: 약 1분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+자동 회귀(tsc + vitest) 통과 (pre-existing 1건 제외). 수동 시나리오 A~C는 사용자가 dev 서버 + 브라우저로 직접 수행 필요.
+
+#### 변경 파일
+- 없음 (검증 전용 phase)
+
+#### 검증 결과
+- [x] `cd ngd-studio && npx tsc --noEmit` → pass (0 errors)
+- [x] `npx vitest run --reporter=basic` → 220 pass / 1 fail (pre-existing: orchestrator.integration "full flow from extractor review: 3 questions → extraction_review pause, then resume from solver → done" — `legacy builder fallback: HWPX 없음` assertion, Phase 2/3와 무관)
+- [ ] 시나리오 A 수동 확인 — 사용자 직접 수행 필요
+- [ ] 시나리오 B 수동 확인 — 사용자 직접 수행 필요
+
+#### 상세 vitest 결과
+- Test Files: 1 failed | 21 passed (22 total)
+- Tests: 1 failed | 220 passed | 1 skipped (222 total)
+- 실패: `server/stages/__tests__/orchestrator.integration.test.ts:395` — `expected 'legacy builder fallback: HWPX 없음' to be 'extraction_review_pending'`
+- 이 1건은 Phase 2 이전에도 동일하게 실패하는 pre-existing failure로 확인됨
+
+#### 추가 발견사항
+없음
+
+#### 질문 / 결정 사항
+- 수동 시나리오 A~C는 사용자가 dev 서버 + 브라우저로 직접 수행해야 함. 시나리오 결과를 phase-04 파일 `## 실행 결과`에 추가 회차로 기록 권장.

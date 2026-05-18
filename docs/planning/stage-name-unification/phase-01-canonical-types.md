@@ -113,3 +113,18 @@ npx tsc --noEmit
 
 #### 질문 / 결정 사항
 없음
+
+#### Scope Audit (orchestrator)
+pass — 1 file in scope (ngd-studio/lib/pipelineStages.ts)
+
+#### Verification Re-run (orchestrator)
+exit 0 — `cd ngd-studio && npx tsc --noEmit` 통과
+
+#### Simplify (orchestrator)
+SIMPLIFIED: 0 — 파일이 이미 최소화되어 있음
+
+#### Review (orchestrator)
+VERDICT: pass — 스펙·구현 일치, scope 위반 없음, smoke test exit 0
+
+#### Commit
+8ba1f01 — feat(lib): Phase 1 — canonical pipeline stage namespace + 매핑 함수

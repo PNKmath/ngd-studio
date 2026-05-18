@@ -154,3 +154,7 @@ SIMPLIFIED: 1 (page.tsx) — `inferResumeStage` 함수 정의·`deepSeekActive` 
 #### Review (orchestrator)
 
 VERDICT: pass — 사용자 결정사항(이어서/select 제거/auto) 정확 반영, 회귀 위험 없음.
+
+#### Commit
+
+4fd0c88

@@ -133,3 +133,7 @@ SIMPLIFIED: 1 — extractor.ts: 중복된 `choices` 조건부 재할당 3줄 제
 #### Review (orchestrator)
 
 VERDICT: pass — ExtractorPartObject/ExtractorChoice 타입·validator·테스트 모두 스펙 일치, 18/18 통과.
+
+#### Commit
+
+00d1762

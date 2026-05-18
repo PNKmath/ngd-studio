@@ -161,4 +161,4 @@ exit 0 — tsc pass, sse.branch.test 10/10 pass.
 VERDICT: pass (0 issues). 분기 조건·orchestrator 호출·테스트 모두 스펙 일치. branchHelper.ts 분리는 sse.ts side-effect 회피 목적으로 정당.
 
 #### Commit
-`{commit-hash}` — feat(sse): Phase 6 — SSE 분기 (코드 orchestrator vs legacy)
+`6acec13` — feat(sse): Phase 6 — SSE 분기 (코드 orchestrator vs legacy)

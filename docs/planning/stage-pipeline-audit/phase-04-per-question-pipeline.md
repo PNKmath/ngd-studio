@@ -232,3 +232,7 @@ SIMPLIFIED: 2 — orchestrator.ts: pipelineQuestions 필터 4줄→1줄 단순�
 #### Review (orchestrator)
 
 VERDICT: pass — semaphore/counter/partial-fail 모두 스펙 의미와 일치, 22/22 pass.
+
+#### Commit
+
+8e57dad
