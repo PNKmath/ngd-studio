@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import type { CropBox, PdfFlip, PdfRotation } from "@/lib/cropper/types";
 import { autoNumber, normalizePdfRotation, normalizedBboxToCropBox } from "@/lib/cropper/coords";
@@ -108,16 +108,25 @@ interface CropperWorkspaceProps {
   onPdfSelected?: (fileName: string) => void;
 }
 
-export function CropperWorkspace({
-  onExtract,
-  autoSplitOnUpload = false,
-  onPdfSelected,
-}: CropperWorkspaceProps = {}) {
-  // Upload state
-  const [pdfPath, setPdfPath] = useState<string | null>(null);
-  const [pdfMeta, setPdfMeta] = useState<PdfMeta | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+export interface CropperWorkspaceRef {
+  openFilePicker: () => void;
+}
+
+export const CropperWorkspace = forwardRef<CropperWorkspaceRef, CropperWorkspaceProps>(
+  ({ onExtract, autoSplitOnUpload = false, onPdfSelected }, ref) => {
+    // Upload state
+    const [pdfPath, setPdfPath] = useState<string | null>(null);
+    const [pdfMeta, setPdfMeta] = useState<PdfMeta | null>(null);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useImperativeHandle(ref, () => ({
+      openFilePicker: () => {
+        fileInputRef.current?.click();
+      },
+    }));
 
   // Page state
   const [currentPage, setCurrentPage] = useState(0);
@@ -544,22 +553,18 @@ export function CropperWorkspace({
   const currentImageUrl = pageImages.get(currentPage) ?? null;
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground">
+    <div className="flex flex-col h-full overflow-hidden bg-background text-foreground">
       {/* Header */}
-      <header className="flex items-center gap-3 px-4 py-2 border-b shrink-0">
-        {/* Upload */}
-        <label className="cursor-pointer">
-          <input
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={handleFileChange}
-            disabled={uploading}
-          />
-          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded bg-primary text-primary-foreground text-sm font-medium hover:opacity-90">
-            {uploading ? "업로드 중..." : "PDF 열기"}
-          </span>
-        </label>
+      <header className="flex items-center gap-3 px-4 py-2 border-b shrink-0 bg-muted/5">
+        {/* Hidden Upload Input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf"
+          className="hidden"
+          onChange={handleFileChange}
+          disabled={uploading}
+        />
 
         {/* Page navigation */}
         {pdfMeta && (
@@ -816,4 +821,4 @@ export function CropperWorkspace({
       </div>
     </div>
   );
-}
+});

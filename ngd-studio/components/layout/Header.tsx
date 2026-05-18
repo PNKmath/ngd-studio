@@ -2,13 +2,13 @@
 
 import { usePathname } from "next/navigation";
 
-const pageTitles: Record<string, { title: string; breadcrumb?: string[] }> = {
+const pageTitles: Record<string, { title: string }> = {
   "/": { title: "대시보드" },
-  "/create": { title: "시험지 제작", breadcrumb: ["대시보드", "시험지 제작"] },
-  "/create-v4": { title: "PDF 자동크롭", breadcrumb: ["대시보드", "PDF 자동크롭"] },
-  "/review": { title: "오검 (오류검수)", breadcrumb: ["대시보드", "오검"] },
-  "/history": { title: "작업 히스토리", breadcrumb: ["대시보드", "히스토리"] },
-  "/settings": { title: "설정", breadcrumb: ["대시보드", "설정"] },
+  "/create": { title: "시험지 제작" },
+  "/create-v4": { title: "PDF 자동크롭" },
+  "/review": { title: "오검 (오류검수)" },
+  "/history": { title: "작업 히스토리" },
+  "/settings": { title: "설정" },
 };
 
 export function Header() {
@@ -16,19 +16,7 @@ export function Header() {
   const page = pageTitles[pathname] ?? { title: "NGD Studio" };
 
   return (
-    <header className="mb-6">
-      {page.breadcrumb && (
-        <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
-          {page.breadcrumb.map((item, i) => (
-            <span key={item} className="flex items-center gap-1.5">
-              {i > 0 && <span>/</span>}
-              <span className={i === page.breadcrumb!.length - 1 ? "text-foreground" : ""}>
-                {item}
-              </span>
-            </span>
-          ))}
-        </nav>
-      )}
+    <header className="mb-4">
       <h1 className="text-2xl font-semibold">{page.title}</h1>
     </header>
   );
