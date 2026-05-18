@@ -345,26 +345,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         send(resultEvent("success", resultSummary, relativeOutput));
       } else {
         send(stageEvent("builder", "failed", { summary: builderResult.error?.message }));
-        send(logEvent("builder", "deterministic builder 실패로 legacy builder fallback을 실행합니다.", "warn"));
-        const legacyResult = await runLegacyPromptJob({
-          prompt,
-          requestedProvider,
-          resolvedProvider,
-          baseDir: BASE_DIR,
-          mode,
-          jobId,
-          stageKey: primaryStageKey,
-          send,
-          isResponseDestroyed: () => res.destroyed,
-          isClientDisconnected: () => clientDisconnected,
-          setActiveProviderProcess: (proc) => { activeProviderProcess = proc; },
-          activeProcesses,
-        });
-        outputFile = legacyResult.outputFile ?? "";
-        resultSummary = legacyResult.resultSummary ?? "";
-        finalStatus = legacyResult.status;
-        finalProviderMetadata = legacyResult.providerMetadata;
-        providerTelemetry = legacyResult.providerTelemetry;
+        send(resultEvent("failed", builderResult.error?.message ?? "deterministic builder 실패"));
+        finalStatus = "failed";
       }
     } else if (deterministicChecker) {
       send(stageEvent("checker", "running"));
@@ -412,6 +394,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         providerTelemetry = legacyResult.providerTelemetry;
       }
     } else {
+      // skill 실행 (extractor → solver → verifier → figure 까지)
       const legacyResult = await runLegacyPromptJob({
         prompt,
         requestedProvider,
@@ -426,9 +409,33 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         setActiveProviderProcess: (proc) => { activeProviderProcess = proc; },
         activeProcesses,
       });
-      outputFile = legacyResult.outputFile ?? "";
-      resultSummary = legacyResult.resultSummary ?? "";
-      finalStatus = legacyResult.status;
+
+      // skill이 정상 완료 시 호스트가 deterministic builder 자동 실행 (create 모드 한정)
+      if (legacyResult.status === "done" && mode === "create") {
+        send(stageEvent("builder", "running"));
+        send(logEvent("builder", "skill 완료 후 deterministic builder runner를 자동 실행합니다."));
+
+        const builderResult = await runBuilderStage({ baseDir: BASE_DIR });
+        if (builderResult.status === "completed" && builderResult.output) {
+          const relativeOutput = path.relative(BASE_DIR, builderResult.output.hwpxPath);
+          outputFile = relativeOutput;
+          resultSummary = "skill 완료 + deterministic builder 완료";
+          finalStatus = "done";
+          send(progressEvent("builder", 100));
+          send(stageEvent("builder", "done", { summary: resultSummary }));
+          send(fileEvent({ type: "hwpx", name: path.basename(relativeOutput), path: relativeOutput }));
+          send(resultEvent("success", resultSummary, relativeOutput));
+        } else {
+          send(stageEvent("builder", "failed", { summary: builderResult.error?.message }));
+          send(resultEvent("failed", builderResult.error?.message ?? "builder failed"));
+          finalStatus = "failed";
+        }
+      } else {
+        // skill 자체 실패 또는 create 외 모드 — LLM 단계 결과 그대로 사용
+        outputFile = legacyResult.outputFile ?? "";
+        resultSummary = legacyResult.resultSummary ?? "";
+        finalStatus = legacyResult.status;
+      }
       finalProviderMetadata = legacyResult.providerMetadata;
       providerTelemetry = legacyResult.providerTelemetry;
     }

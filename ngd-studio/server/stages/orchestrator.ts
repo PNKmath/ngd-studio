@@ -1,5 +1,5 @@
 import path from "path";
-import { readFile, readdir, stat } from "fs/promises";
+import { readFile } from "fs/promises";
 import type { SSEEvent } from "@/lib/claude";
 import type { AIProviderId } from "@/lib/ai/types";
 import { getProviderAdapter } from "@/lib/ai/registry";
@@ -181,7 +181,7 @@ export async function runStageOrchestrator(
   }
 
   // Determine where to start.
-  const { startStage, targetQuestions } = await determineStartStage(
+  const { startStage } = await determineStartStage(
     input.resumeFrom,
     cache,
     questionNumbers
@@ -611,13 +611,23 @@ export async function runStageOrchestrator(
         send(stageEvent("builder", "done", { summary: resultSummary }));
         send(fileEvent({ type: "hwpx", name: path.basename(relativeOutput), path: relativeOutput }));
       } else {
-        // Builder failed — try legacy CLI fallback.
         send(stageEvent("builder", "failed", { summary: builderResult.error?.message }));
-        send(logEvent("builder", "deterministic builder 실패 — legacy builder fallback으로 전환합니다.", "warn"));
-        const legacyResult = await runLegacyBuilderFallback({ baseDir, send });
-        outputFile = legacyResult.outputFile;
-        resultSummary = legacyResult.resultSummary ?? "builder fallback 완료";
-        if (legacyResult.telemetry) providerTelemetry.push(legacyResult.telemetry);
+        send(logEvent("builder", "deterministic builder 실패. LLM fallback 없이 작업을 중단합니다.", "error"));
+        providerTelemetry.push(
+          createProviderTelemetryEntry({
+            stageKey: undefined,
+            workflowStageKey: "builder",
+            requestedProvider: "auto",
+            resolvedProvider: "claude-cli",
+            attempt: 1,
+            status: "failed",
+            elapsedMs: Date.now() - builderStartedAt,
+            retry: false,
+            errorSummary: builderResult.error?.message?.slice(0, 300),
+          })
+        );
+        await persistTelemetry(input, providerTelemetry, "failed");
+        return failed(providerTelemetry, builderResult.error?.message);
       }
 
       providerTelemetry.push(
@@ -627,7 +637,7 @@ export async function runStageOrchestrator(
           requestedProvider: "auto",
           resolvedProvider: "claude-cli",
           attempt: 1,
-          status: builderResult.status === "completed" ? "success" : "failed",
+          status: "success",
           elapsedMs: Date.now() - builderStartedAt,
           retry: false,
         })
@@ -757,62 +767,6 @@ async function runFigureStage(opts: FigureStageOptions): Promise<boolean> {
   }));
   send(logEvent("figure", `figure_processor.py 실패: ${result.stderr.slice(0, 300)}`, "error"));
   return false;
-}
-
-// ──────────────────────────────────────────────
-// Legacy builder fallback
-// ──────────────────────────────────────────────
-
-interface LegacyBuilderFallbackOptions {
-  baseDir: string;
-  send: (event: SSEEvent) => void;
-}
-
-interface LegacyBuilderFallbackResult {
-  outputFile?: string;
-  resultSummary?: string;
-  telemetry?: ProviderTelemetryEntry;
-}
-
-/**
- * Fallback to scanning outputs/ for the most recently-written HWPX file when
- * the deterministic builder fails. The legacy CLI agent writes files there.
- *
- * (Full runLegacyPromptJob invocation is handled by sse.ts for now;
- *  here we provide a lightweight fallback that reports a warning and
- *  returns whatever the builder may have written previously.)
- */
-async function runLegacyBuilderFallback(
-  opts: LegacyBuilderFallbackOptions
-): Promise<LegacyBuilderFallbackResult> {
-  const { baseDir, send } = opts;
-
-  send(logEvent("builder", "outputs/ 폴더에서 최신 HWPX를 탐색합니다.", "warn"));
-
-  try {
-    const outputsDir = path.join(baseDir, "outputs");
-    const files = await readdir(outputsDir);
-    const hwpxFiles = files.filter((f) => f.endsWith(".hwpx"));
-
-    if (hwpxFiles.length > 0) {
-      let latest = { name: "", mtime: 0 };
-      for (const f of hwpxFiles) {
-        const s = await stat(path.join(outputsDir, f));
-        if (s.mtimeMs > latest.mtime) {
-          latest = { name: f, mtime: s.mtimeMs };
-        }
-      }
-      if (latest.name) {
-        const relPath = path.join("outputs", latest.name);
-        send(fileEvent({ type: "hwpx", name: latest.name, path: relPath }));
-        return { outputFile: relPath, resultSummary: "legacy builder fallback (기존 HWPX 발견)" };
-      }
-    }
-  } catch {
-    // outputs/ might not exist yet.
-  }
-
-  return { resultSummary: "legacy builder fallback: HWPX 없음" };
 }
 
 // ──────────────────────────────────────────────
