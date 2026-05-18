@@ -16,6 +16,7 @@ import { runVerifierStage } from "./verifier";
 import { runBuilderStage } from "./builder";
 import { runCheckerStage } from "./checker";
 import { runStageCommand } from "./commands";
+import { readRuntimeEnv } from "../../lib/server/runtimeEnv";
 import { determineStartStage, shouldRunStage } from "./resumeState";
 import {
   stageEvent,
@@ -726,10 +727,22 @@ async function runFigureStage(opts: FigureStageOptions): Promise<boolean> {
   const args = [scriptPath, examDataPath];
   if (!regenerate) args.push("--no-regen");
 
+  // figure_processor.py는 GEMINI_API_KEY를 process.env에서 읽는다.
+  // sse.ts는 .env.local을 process.env에 자동 로드하지 않으므로 runtimeEnv를 명시적으로 전달.
+  const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
+  if (regenerate && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
+    send(logEvent(
+      "figure",
+      "GEMINI_API_KEY 미설정 — /settings에서 키를 추가하거나 figureRegen을 끄세요 (crop+워터마크만 적용됨).",
+      "warn",
+    ));
+  }
+
   const result = await runStageCommand({
     command: python,
     args,
     cwd: baseDir,
+    env: runtimeEnv as NodeJS.ProcessEnv,
     timeoutMs: 300_000, // 5 minutes for figure generation
   });
 
