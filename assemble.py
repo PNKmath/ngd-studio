@@ -17,7 +17,7 @@ from equation import (
     xml_escape, make_equation_xml, lineseg_params_for_eq, make_lineseg,
     parts_to_run_content, _is_hwp_eq_string,
 )
-from shapes import make_condition_rect, make_empty_box, make_pic_xml, png_to_bmp_bytes
+from shapes import make_condition_rect, make_ganada_table, make_empty_box, make_pic_xml, png_to_bmp_bytes
 from tables import (
     make_data_table_xml, make_increase_decrease_table, make_synthetic_division_table,
     make_choice_table, make_bogi_table, make_proof_table_wrapped,
@@ -380,7 +380,13 @@ def main(exam_json=None, output_dir=None, base_path=None):
             box_para_pr = "0"
 
             if cond_type == "condition":
-                box_xml = make_condition_rect(condition_box, base_path)
+                # (가)(나)(다) 라벨 패턴이면 ganada_table 사용, 그 외는 programmatic rect
+                labels = [it.get("label", "") for it in condition_box.get("items", [])]
+                is_ganada = bool(labels) and all(re.match(r'^\([가-힣]\)$', lbl) for lbl in labels)
+                if is_ganada:
+                    box_xml = make_ganada_table(condition_box, base_path)
+                else:
+                    box_xml = make_condition_rect(condition_box, base_path)
             elif cond_type == "image_choice":
                 box_xml = make_condition_rect(condition_box, base_path)
             elif cond_type == "bogi":

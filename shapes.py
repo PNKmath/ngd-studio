@@ -62,6 +62,64 @@ def make_condition_rect(condition_box, base_path):
     return rect_xml
 
 
+def make_ganada_table(condition_box, base_path):
+    """Generate condition box for (가)/(나)/(다) labeled items using ganada fixture style.
+    Uses condition_rect_template.xml with paraPrIDRef=11 for interior items,
+    matching the styling of ganada_table.xml.
+    """
+    items = condition_box["items"]
+    n_items = len(items)
+    height = n_items * 1600 + 2000
+    center_y = height // 2
+    sca_y = round(height / 12587, 6)
+    rect_id = next_eq_id()
+    zorder = next_zorder()
+    iid = next_inst_id()
+
+    items_content = ""
+    for idx, item in enumerate(items):
+        label = item["label"]
+        vpos = idx * 1600
+        # Interior items (not first and not last) use paraPrIDRef="11"
+        if 0 < idx < n_items - 1:
+            para_pr = "11"
+        else:
+            para_pr = "0"
+
+        # Build content for this item
+        item_run_content = f'<hp:t>{xml_escape(label)} </hp:t>'
+        max_eq = (1000, 1000, 850, 600)
+        for part in item["parts"]:
+            if "eq" in part:
+                item_run_content += make_equation_xml(part["eq"])
+                params = lineseg_params_for_eq(part["eq"])
+                if params[0] > max_eq[0]:
+                    max_eq = params
+            elif "t" in part:
+                item_run_content += f'<hp:t>{xml_escape(part["t"])}</hp:t>'
+
+        items_content += (f'<hp:p id="2147483648" paraPrIDRef="{para_pr}" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
+                         f'<hp:run charPrIDRef="3">{item_run_content}</hp:run>'
+                         f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="{vpos}" '
+                         f'vertsize="{max_eq[0]}" textheight="{max_eq[1]}" baseline="{max_eq[2]}" '
+                         f'spacing="{max_eq[3]}" horzpos="0" horzsize="27736" flags="393216"/>'
+                         f'</hp:linesegarray></hp:p>')
+
+    # Use condition_rect_template.xml as the structural base
+    with open(f"{base_path}/condition_rect_template.xml", "r", encoding="utf-8") as f:
+        template = f.read()
+
+    rect_xml = template.replace("{{RECT_ID}}", str(rect_id))
+    rect_xml = rect_xml.replace("{{ZORDER}}", str(zorder))
+    rect_xml = rect_xml.replace("{{INST_ID}}", str(iid))
+    rect_xml = rect_xml.replace("{{HEIGHT}}", str(height))
+    rect_xml = rect_xml.replace("{{CENTER_Y}}", str(center_y))
+    rect_xml = rect_xml.replace("{{SCA_Y}}", str(sca_y))
+    rect_xml = rect_xml.replace("{{ITEMS_CONTENT}}", items_content)
+
+    return rect_xml
+
+
 def make_empty_box(condition_box, base_path):
     """서술형 빈 답안 박스 (empty_box_template.xml)"""
     height = condition_box.get("height", 5059)

@@ -152,27 +152,47 @@ def make_increase_decrease_table(explanation_table, base_path):
     """증감표 생성
     x값 1개: 양식지 1-x 템플릿 (3행 4열) 사용
     x값 2개: 양식지 2-x 템플릿 (3행 6열) 사용
-    x값 3개 이상: 양식지 borderFill 패턴으로 프로그래매틱 생성
+    x값 3개: 양식지 3x 템플릿 (4행 8열) 사용
+    x값 4~5개: 양식지 4x 템플릿 (5행 12열, x슬롯 5개) 사용
+    x값 6개 이상: 양식지 borderFill 패턴으로 프로그래매틱 생성
     """
     x_values = explanation_table.get("x_values", [])
     rows = explanation_table.get("rows", [])
     n_x = len(x_values)
 
-    # 양식지 템플릿이 있는 케이스 (n_x = 1, 2)
+    # 양식지 템플릿이 있는 케이스 (n_x = 1, 2, 3, 4/5)
+    # n_x=3: increase_decrease_template_3x.xml (4행 8열, 데이터 행 3개)
+    # n_x=4 or n_x=5: increase_decrease_template_4x.xml (5행 12열, 데이터 행 4개, x슬롯 5개)
     if n_x in (1, 2):
         tpl_name = ("increase_decrease_template.xml" if n_x == 1
                     else "increase_decrease_template_2x.xml")
+        tpl_n_data_rows = 2      # 데이터 행 수 (헤더 제외)
+        tpl_n_cols = 2 * n_x + 2  # 1-x→4, 2-x→6
+    elif n_x == 3:
+        tpl_name = "increase_decrease_template_3x.xml"
+        tpl_n_data_rows = 3      # y', y'', y 3행
+        tpl_n_cols = 8           # 2*3+2=8
+    elif n_x in (4, 5):
+        tpl_name = "increase_decrease_template_4x.xml"
+        tpl_n_data_rows = 4      # f'(x), f(x), F''(x), F'(x) 4행
+        tpl_n_cols = 12          # x슬롯 5개 포함
+    else:
+        tpl_name = None
+
+    if tpl_name is not None:
         with open(f"{base_path}/{tpl_name}", encoding="utf-8") as f:
             tbl_xml = f.read()
         tbl_xml = _replace_table_ids(tbl_xml)
         cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
-        n_cols = 2 * n_x + 2  # 1-x→4, 2-x→6
-        # 헤더 row의 x값 셀: cells[2], cells[4], ... (홀수 col idx)
+        n_cols = tpl_n_cols
+        # 헤더 row의 x값 셀: cells[2], cells[4], ... (짝수 col idx 2부터)
         for vi, xv in enumerate(x_values):
-            cells[2 + vi * 2] = _inject_cell_value(cells[2 + vi * 2], str(xv))
-        # 데이터 행: row 0 → cells[n_cols..2n_cols-1], row 1 → cells[2n_cols..3n_cols-1]
-        # 각 데이터 행: cells[base+0]=label(보존), cells[base+1..n_cols-1]=values
-        for ri, row_data in enumerate(rows[:2]):
+            cell_idx = 2 + vi * 2
+            if cell_idx < n_cols:
+                cells[cell_idx] = _inject_cell_value(cells[cell_idx], str(xv))
+        # 데이터 행: row i → cells[(i+1)*n_cols .. (i+2)*n_cols-1]
+        # cells[base+0]=label(보존), cells[base+1..n_cols-1]=values
+        for ri, row_data in enumerate(rows[:tpl_n_data_rows]):
             base = (ri + 1) * n_cols
             n_val_slots = n_cols - 1
             values = row_data.get("values", [])
@@ -181,11 +201,11 @@ def make_increase_decrease_table(explanation_table, base_path):
                     cells[base + 1 + vi] = _inject_cell_value(cells[base + 1 + vi], str(values[vi]))
         hdr = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
         out = hdr
-        for ri in range(3):
+        for ri in range(tpl_n_data_rows + 1):
             out += f'<hp:tr>{"".join(cells[ri * n_cols:(ri + 1) * n_cols])}</hp:tr>'
         return out + '</hp:tbl>'
 
-    # x값 3개 이상 — 양식지 borderFill 패턴으로 프로그래매틱 생성
+    # x값 6개 이상 — 양식지 borderFill 패턴으로 프로그래매틱 생성
     n_val_cols = 2 * n_x + 1  # 값 열 수
     n_cols = 1 + n_val_cols
     n_rows = 1 + len(rows)
@@ -361,14 +381,16 @@ def make_bogi_table(condition_box, base_path):
     items = condition_box["items"]
     n_items = len(items)
 
-    tpl_name = "bogi_table_6items.xml" if n_items > 4 else "bogi_table_3items.xml"
+    if n_items <= 3:
+        tpl_name = "bogi_table_3items.xml"
+    elif n_items == 4:
+        tpl_name = "bogi_table_4items.xml"
+    else:
+        tpl_name = "bogi_table_6items.xml"
     with open(f"{base_path}/{tpl_name}", "r", encoding="utf-8") as f:
         tbl_xml = f.read()
 
-    # Replace table id, equation ids, zOrders
-    tbl_xml = re.sub(r'(<hp:tbl id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', tbl_xml, count=1)
-    tbl_xml = re.sub(r'(<hp:equation\b[^>]+ id=)"[^"]*"', lambda m: f'{m.group(1)}"{next_eq_id()}"', tbl_xml)
-    tbl_xml = re.sub(r'(zOrder=)"[^"]*"', lambda m: f'{m.group(1)}"{next_zorder()}"', tbl_xml)
+    tbl_xml = _replace_table_ids(tbl_xml)
 
     # Inject item content after each label (ㄱ. / ㄴ. / ...)
     labels = ["ㄱ", "ㄴ", "ㄷ", "ㄹ", "ㅁ", "ㅂ"]
