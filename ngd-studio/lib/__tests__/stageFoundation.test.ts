@@ -272,8 +272,8 @@ describe("stage foundation helpers", () => {
   it("resolves builder scripts from the repository root", () => {
     expect(resolveBuilderScripts("/repo")).toEqual({
       buildHwpx: path.join("/repo", "build_hwpx.py"),
-      fixNamespaces: path.join("/repo", ".claude", "skills", "ngd-exam-create", "scripts", "fix_namespaces.py"),
-      validateHwpx: path.join("/repo", ".claude", "skills", "ngd-exam-create", "scripts", "validate.py"),
+      fixNamespaces: path.join("/repo", "resources", "hwpx_scripts", "fix_namespaces.py"),
+      validateHwpx: path.join("/repo", "resources", "hwpx_scripts", "validate.py"),
     });
   });
 

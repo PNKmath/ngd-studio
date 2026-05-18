@@ -221,15 +221,43 @@ vi.mock("../verifier", async (importOriginal) => {
 
 vi.mock("../commands", async (importOriginal) => {
   const real = await importOriginal<typeof import("../commands")>();
+  const { writeFile: fsWriteFile, mkdir: fsMkdir } = await import("fs/promises");
   return {
     ...real,
-    runStageCommand: vi.fn(async () => ({
-      status: "success" as const,
-      exitCode: 0,
-      stdout: "",
-      stderr: "",
-      elapsedMs: 0,
-    })),
+    runStageCommand: vi.fn(async (opts: Parameters<typeof real.runStageCommand>[0]) => {
+      const args = opts.args ?? [];
+      const firstArg = typeof args[0] === "string" ? args[0] : "";
+      // build_hwpx.py: write a fake HWPX file and return stdout with the path
+      if (firstArg.endsWith("build_hwpx.py")) {
+        const outputDir = typeof args[2] === "string" ? args[2] : "";
+        if (outputDir) {
+          await fsMkdir(outputDir, { recursive: true });
+          const hwpxPath = outputDir + "/test_built.hwpx";
+          await fsWriteFile(hwpxPath, "fake-hwpx-content", "utf8");
+          return {
+            command: opts.command,
+            args,
+            status: "success" as const,
+            exitCode: 0,
+            stdout: `HWPX written: ${hwpxPath}\n`,
+            stderr: "",
+            signal: null,
+            elapsedMs: 0,
+          };
+        }
+      }
+      // All other commands (fix_namespaces, validate, figure_processor): return success
+      return {
+        command: opts.command,
+        args,
+        status: "success" as const,
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        signal: null,
+        elapsedMs: 0,
+      };
+    }),
   };
 });
 
