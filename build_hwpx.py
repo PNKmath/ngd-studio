@@ -15,7 +15,8 @@ import io
 
 # === Paths ===
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-BASE = os.path.join(SCRIPT_DIR, ".claude", "skills", "ngd-exam-create", "base_hwpx")
+DEFAULT_BASE = os.path.join(SCRIPT_DIR, "resources", "hwpx_base")
+BASE = os.environ.get("NGD_HWPX_BASE", DEFAULT_BASE)
 EXAM_JSON = sys.argv[1] if len(sys.argv) > 1 else "/tmp/exam_data.json"
 OUTPUT_DIR = sys.argv[2] if len(sys.argv) > 2 else "/mnt/c/NGD/outputs"
 

@@ -144,8 +144,8 @@ export function resolveBuilderScripts(baseDir: string): {
 } {
   return {
     buildHwpx: path.join(baseDir, "build_hwpx.py"),
-    fixNamespaces: path.join(baseDir, ".claude", "skills", "ngd-exam-create", "scripts", "fix_namespaces.py"),
-    validateHwpx: path.join(baseDir, ".claude", "skills", "ngd-exam-create", "scripts", "validate.py"),
+    fixNamespaces: path.join(baseDir, "resources", "hwpx_scripts", "fix_namespaces.py"),
+    validateHwpx: path.join(baseDir, "resources", "hwpx_scripts", "validate.py"),
   };
 }
 
