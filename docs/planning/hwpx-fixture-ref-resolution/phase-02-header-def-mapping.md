@@ -185,3 +185,6 @@ exit 0 — mapper 실행 + mapping.json 생성 + user[11]→our[29] 확인 + map
 
 #### Review (orchestrator)
 VERDICT: pass — 스펙 완전 구현, 4단계 매핑·JSON 구조·알려진 케이스 일치. Minor 경고: `parse_header()`에서 `ref_list=None` None-guard 부재 (현 입력 범위 무해, Phase 3 전 opportunistic 추가 권장).
+
+#### Commit
+442a84e

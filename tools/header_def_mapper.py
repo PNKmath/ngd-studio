@@ -129,7 +129,11 @@ def _tab_signature(tab_elem: ET.Element) -> tuple:
 # ─── 핑거프린트 함수들 ─────────────────────────────────────────────────────
 
 def fingerprint_borderFill(elem: ET.Element) -> tuple:
-    """borderFill 요소에서 매칭 키 추출."""
+    """borderFill 요소에서 매칭 키 추출.
+
+    4-side border (type/width/color) + diagonal (type/width/color) + fillBrush (presence + hatchColor).
+    diagonal width 가 0.1mm vs 0.12mm 처럼 미세하게 다른 경우에도 collision 없이 구분.
+    """
     def border_info(side: str) -> tuple[str, str, str]:
         b = elem.find(p(f"{side}Border"))
         if b is None:
@@ -145,17 +149,31 @@ def fingerprint_borderFill(elem: ET.Element) -> tuple:
     top = border_info("top")
     bottom = border_info("bottom")
 
-    # fillBrush
+    # diagonal — 이 요소의 width 차이가 user[1/3/11] 충돌 원인이었음
+    diag_elem = elem.find(p("diagonal"))
+    if diag_elem is not None:
+        diag_type = diag_elem.get("type", "NONE")
+        diag_width = diag_elem.get("width", "0.1 mm")
+        diag_color = diag_elem.get("color", "#000000")
+    else:
+        diag_type = "NONE"
+        diag_width = "0.1 mm"
+        diag_color = "#000000"
+    diag = (diag_type, diag_width, diag_color)
+
+    # fillBrush — presence flag + hatchColor (faceColor 은 보통 "none" 으로 동일)
+    fill_present = False
     fill_face = "none"
     fill_hatch = "#000000"
     fill_brush = elem.find(c("fillBrush"))
     if fill_brush is not None:
         wb = fill_brush.find(c("winBrush"))
         if wb is not None:
+            fill_present = True
             fill_face = wb.get("faceColor", "none")
             fill_hatch = wb.get("hatchColor", "#000000")
 
-    return (*left, *right, *top, *bottom, fill_face, fill_hatch)
+    return (*left, *right, *top, *bottom, *diag, fill_present, fill_face, fill_hatch)
 
 
 def fingerprint_paraPr(

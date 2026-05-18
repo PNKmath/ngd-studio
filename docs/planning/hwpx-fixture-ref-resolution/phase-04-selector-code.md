@@ -170,3 +170,6 @@ exit 0 — build_hwpx 빌드 성공 + validate exit 0 + bogi 4items 단위테스
 
 #### Review (orchestrator)
 VERDICT: pass — 3종 selector 모두 spec 부합. minor note: `make_ganada_table` 이 `ganada_table.xml` 을 직접 사용하지 않고 `condition_rect_template.xml` 기반 programmatic 생성 + `paraPrIDRef=11` 적용으로 구현. 시각/기능 동등하나 `ganada_table.xml` fixture 잔존 미사용 — Phase 5 시각 검증에서 사용자가 일치 확인 필요.
+
+#### Commit
+6f87102

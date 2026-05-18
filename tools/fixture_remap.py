@@ -39,26 +39,18 @@ LOG_PATH = Path("/tmp/unmapped_fallback.log")
 # Fallback tables (결정된 Unmapped 처리 — spec 정책표 기반)
 # ---------------------------------------------------------------------------
 
-# paraPr unmapped: user[3,4,8] → align=LEFT → our[0] (첫 번째 LEFT)
+# paraPr unmapped (개선된 fingerprint 기준):
+# user[3,4,8,9] 는 이제 fingerprint 가 직접 매핑됨 — 방어 fallback 만 유지
 PARA_FALLBACK: dict[str, str] = {
-    "3": "0",   # align=LEFT → our[0]
-    "4": "0",   # align=LEFT → our[0]
-    "8": "0",   # align=LEFT → our[0]
-    "9": "0",   # align=CENTER 이나 실제 fixtures 참조 안 됨 → our[0] (방어)
+    # 현재 매핑 결과: user[3]→our[6], user[4]→our[5], user[8]→our[12], user[9]→our[13]
+    # (모두 매핑 성공 — 아래는 추후 회귀 방지 방어 fallback)
 }
 
-# charPr unmapped: user[3,7,10,11] 참조됨
-# user[3]  → #FFFFFF (white) → our[4] (#FFFFFF)
-# user[7]  → font=2, #000000  → our[26] (font=2, #000000)
-# user[9]  → #000000 실제 참조 없지만 방어 → our[0]
-# user[10] → #000000, height=1200 → our[0]
-# user[11] → font=1, height=2400 → our[12] (font=1, #000000)
+# charPr unmapped (개선된 fingerprint 기준):
+# user[7] → font=2, height=1400, bold → no exact our match → our[26] (font=2, #000000)
+# (구 unmapped user[3,9,10,11]은 이제 fingerprint 가 직접 매핑됨 — fallback 불필요)
 CHAR_FALLBACK: dict[str, str] = {
-    "3":  "4",   # white text → our[4] (#FFFFFF)
-    "7":  "26",  # font=2 black → our[26]
-    "9":  "0",   # fallback default
-    "10": "0",   # black small → our[0]
-    "11": "12",  # font=1 large → our[12]
+    "7":  "26",  # font=2, bold, height=1400 → our[26] (nearest: font=2, #000000)
 }
 
 # borderFill unmapped: user[5,21,34,35,36,40]
