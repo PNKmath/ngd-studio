@@ -53,6 +53,11 @@ export function useJobRunner() {
       const abortController = new AbortController();
       abortRef.current = abortController;
 
+      // resume 모드에서는 호출자가 캐시 데이터를 questionResults에 미리 채워놓을 수 있다.
+      // reset()이 그걸 비워버리지 않도록 snapshot 후 복원한다.
+      const preloadedQuestionResults =
+        mode === "resume" ? useJobStore.getState().questionResults : null;
+
       store.reset();
       store.setJobId(jobId);
       store.setMode(mode, meta?.resumeFrom);
@@ -60,6 +65,9 @@ export function useJobRunner() {
       // Re-set v3Meta after reset so it persists during job execution
       if (meta && (mode === "create" || mode === "resume")) {
         store.setV3Meta(meta);
+      }
+      if (preloadedQuestionResults && Object.keys(preloadedQuestionResults).length > 0) {
+        useJobStore.setState({ questionResults: preloadedQuestionResults });
       }
 
       // Mark first stage as running
@@ -244,17 +252,23 @@ function handleSSEEvent(event: SSEEvent, store: JobState) {
       break;
     }
     case "question": {
+      // 서버(orchestrator)는 { number, stage, status: "ok"|"failed", data } 로 emit.
+      // 구버전은 { number, phase, content(JSON string) }. 둘 다 처리.
       const num = data.number as number;
-      const phase = data.phase as string;
-      const raw = data.content as string;
-      if (num && phase && raw) {
+      const stage = (data.stage as string | undefined) ?? (data.phase as string | undefined);
+      const status = data.status as string | undefined;
+      if (!num || !stage) break;
+      if (status && status !== "ok") break; // failed면 store에 결과 미반영
+      const payload = (data.data as unknown) ?? (data.content as unknown);
+      if (payload == null) break;
+      if (typeof payload === "string") {
         try {
-          const parsed = JSON.parse(raw);
-          store.updateQuestionResult(num, phase, parsed);
+          store.updateQuestionResult(num, stage, JSON.parse(payload));
         } catch {
-          // malformed JSON — store raw string
-          store.updateQuestionResult(num, phase, { _raw: raw });
+          store.updateQuestionResult(num, stage, { _raw: payload });
         }
+      } else {
+        store.updateQuestionResult(num, stage, payload as Record<string, unknown>);
       }
       break;
     }
