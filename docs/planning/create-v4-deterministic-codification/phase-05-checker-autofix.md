@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: checker auto-fix 모드
-status: pending
+status: completed
 depends_on: [3]
 scope:
   - ngd-studio/server/stages/checker.ts
@@ -86,12 +86,12 @@ async function runCheckerWithAutoFix(input) {
 
 ## 체크리스트
 
-- [ ] `checker.ts`에 `RULES` map + `fix?` field 도입
-- [ ] `fixRunOnEquationsInXml` 구현 (혹은 cache rebuild 방식 채택 시 `normalizeCacheAndRebuild`)
-- [ ] `runCheckerWithAutoFix` wrapper 추가 — 최대 2회 fix 시도
-- [ ] `orchestrator.ts:651` checker stage 호출을 wrapper로 교체
-- [ ] checker.test.ts에 autofix 시나리오 추가
-- [ ] `cd ngd-studio && pnpm test server/stages/__tests__/checker.test.ts` 통과
+- [x] `checker.ts`에 `RULES` map + `fix?` field 도입
+- [x] `fixRunOnEquationsInXml` 구현 (혹은 cache rebuild 방식 채택 시 `normalizeCacheAndRebuild`)
+- [x] `runCheckerWithAutoFix` wrapper 추가 — 최대 2회 fix 시도
+- [x] `orchestrator.ts:651` checker stage 호출을 wrapper로 교체
+- [x] checker.test.ts에 autofix 시나리오 추가
+- [x] `cd ngd-studio && pnpm test server/stages/__tests__/checker.test.ts` 통과
 
 ## 영향 범위
 
@@ -109,3 +109,65 @@ pnpm test server/stages/__tests__/orchestrator.pipeline.test.ts --reporter=basic
 ```
 
 수동: 통수식 포함 임의 HWPX 만들어서 checker fix 적용 → 분리된 HWPX 출력 확인.
+
+---
+
+## 실행 이력
+
+### 1회차 (2026-05-20 08:41 KST) — completed
+
+**상태**: completed
+**소요 시간**: 약 12분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+
+`checker.ts`에 `RULES` map과 `fix?` 핸들러 인터페이스를 도입하고, `equation.run_on`에
+`fixRunOnEquationsInXml`(XML 직접 mutation, `splitTopLevelEqChecker` 내장) fix를 매핑.
+`runCheckerWithAutoFix` wrapper를 추가해 fixable issue가 있으면 XML 패치 → 재검사 최대 2회 반복.
+`orchestrator.ts` checker 호출을 wrapper로 교체하고 autofix 시 telemetry에 `downstreamCorrection` 플래그 기록.
+`checker.test.ts`를 새로 작성해 7개 룰 + fixRunOnEquationsInXml + runCheckerWithAutoFix 시나리오 23개 검증.
+
+#### 변경 파일
+
+- `ngd-studio/server/stages/checker.ts` (수정, +130/-30줄)
+  - `RULES` map, `RuleHandler` 인터페이스, `CheckerAutoFixResult` 인터페이스 추가
+  - `runCheckerWithAutoFix` wrapper (XML mutation 기반 최대 2회 fix 루프)
+  - `fixRunOnEquationsInXml` + `splitTopLevelEqChecker` 추가
+  - `CheckerStageOutput.autofixed` 필드 추가
+- `ngd-studio/server/stages/orchestrator.ts` (수정, +18/-10줄)
+  - `runCheckerWithAutoFix` import + checker 호출 교체
+  - autofix 시 SSE log + telemetry `downstreamCorrection` 기록
+- `ngd-studio/server/stages/__tests__/checker.test.ts` (신규, +280줄)
+  - 7개 룰 개별 테스트, fixRunOnEquationsInXml 6케이스, runCheckerWithAutoFix 6케이스
+
+#### 검증 결과
+
+- [x] `npx tsc --noEmit` → pass (출력 없음)
+- [x] `checker.test.ts` → 23/23 pass
+- [x] `orchestrator.pipeline.test.ts` → 5/5 pass (회귀 없음)
+
+#### 추가 발견사항
+
+- `checkRunOnEquations`(detect)는 모든 `=`를 단순 카운트(보수적)하지만, `fixRunOnEquationsInXml`(fix)는 `LEFT()/RIGHT()` depth-guarding을 적용해 더 정확한 분리를 수행한다. detect와 fix 간 의도적 비대칭 — 검출은 넓게, 수정은 정확하게.
+- `equation.run_on`은 `warning` severity이므로 `ok=true` 경로에서도 fixable issue로 인식해 fix loop를 실행하도록 로직을 재설계했다 (초기 `ok → return early` 방식에서 `fixableIssues 먼저 체크` 방식으로 변경).
+
+#### 질문 / 결정 사항
+
+없음
+
+#### Scope Audit (orchestrator)
+
+pass — checker.ts + orchestrator.ts + __tests__/checker.test.ts(신규) 모두 scope 내.
+
+#### Verification Re-run (orchestrator)
+
+exit 0 — pnpm tsc --noEmit clean, checker.test.ts 23/23, orchestrator.pipeline.test.ts 5/5.
+
+#### Simplify (orchestrator)
+
+1 file, 1 edit — checker.ts에서 `fix` 핸들러와 모순되던 "fix is intentionally omitted" 4-line 주석 제거. 검증 재실행 pass.
+
+#### Review (orchestrator)
+
+pass — A~I 전부 OK. RULES map + fix 핸들러 + autoFix wrapper 스펙 일치, idempotent XML mutation 확인.

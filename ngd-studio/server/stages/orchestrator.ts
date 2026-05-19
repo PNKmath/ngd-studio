@@ -14,7 +14,7 @@ import { runExtractorStage } from "./extractor";
 import { runSolverStage } from "./solver";
 import { runVerifierStage } from "./verifier";
 import { runBuilderStage } from "./builder";
-import { runCheckerStage } from "./checker";
+import { runCheckerWithAutoFix } from "./checker";
 import { runStageCommand } from "./commands";
 import { readRuntimeEnv } from "../../lib/server/runtimeEnv";
 import { determineStartStage, shouldRunStage } from "./resumeState";
@@ -647,7 +647,7 @@ export async function runStageOrchestrator(
       if (checkAborted()) return cancelled(providerTelemetry);
     }
 
-    // ── Stage 6: Checker ───────────────────────
+    // ── Stage 6: Checker (with auto-fix) ──────────
     if (!checkAborted() && shouldRunStage(startStage, "checker")) {
       send(stageEvent("checker", "running"));
       send(progressEvent("checker", 5));
@@ -658,7 +658,14 @@ export async function runStageOrchestrator(
         : "";
 
       const checkerStartedAt = Date.now();
-      const checkerResult = await runCheckerStage({ hwpxPath: hwpxPath || undefined });
+      const { result: checkerResult, autofixed } = await runCheckerWithAutoFix(
+        { hwpxPath: hwpxPath || undefined },
+        2 // max 2 fix attempts
+      );
+
+      if (autofixed) {
+        send(logEvent("checker", "auto-fix 적용됨: 결정적 수정 후 재검사 완료."));
+      }
 
       providerTelemetry.push(
         createProviderTelemetryEntry({
@@ -670,12 +677,13 @@ export async function runStageOrchestrator(
           status: checkerResult.status === "completed" ? "success" : "failed",
           elapsedMs: Date.now() - checkerStartedAt,
           retry: false,
+          ...(autofixed ? { downstreamCorrection: true } : {}),
         })
       );
 
       if (checkerResult.status === "completed" && checkerResult.output) {
         const issueCount = checkerResult.output.issues.length;
-        resultSummary = `checker 완료: ${issueCount} issue(s)`;
+        resultSummary = `checker 완료: ${issueCount} issue(s)${autofixed ? " (auto-fixed)" : ""}`;
         send(progressEvent("checker", 100, { issueCount }));
         send(stageEvent("checker", "done", { summary: resultSummary }));
       } else {
