@@ -12,6 +12,7 @@ export const claudeCliProvider: AIProviderAdapter = {
       cwd: options?.cwd,
       env: options?.env,
       maxTurns: options?.maxTurns,
+      allowedTools: options?.allowedTools,
     });
 
     return {

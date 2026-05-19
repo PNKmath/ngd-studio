@@ -215,7 +215,7 @@ export function detectStageFromTool(toolName: string, input?: Record<string, unk
 
 export function runClaude(
   prompt: string,
-  options?: { maxTurns?: number; cwd?: string; env?: Record<string, string | undefined> }
+  options?: { maxTurns?: number; cwd?: string; env?: Record<string, string | undefined>; allowedTools?: string[] }
 ): { process: ChildProcess; events: AsyncIterable<ClaudeEvent>; exitCode: Promise<number> } {
   const claudeArgs = [
     "-p", prompt,
@@ -224,6 +224,11 @@ export function runClaude(
     "--dangerously-skip-permissions",
     "--max-turns", String(options?.maxTurns ?? 100),
   ];
+
+  // --allowed-tools: restrict which tools the CLI agent may call (e.g. ["Read"] for extractor sandbox)
+  if (options?.allowedTools && options.allowedTools.length > 0) {
+    claudeArgs.push("--allowed-tools", options.allowedTools.join(","));
+  }
 
   const cwd = options?.cwd ?? process.cwd();
   const env = options?.env ? { ...process.env, ...options.env } : process.env;

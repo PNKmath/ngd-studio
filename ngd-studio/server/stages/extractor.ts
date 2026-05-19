@@ -1,6 +1,5 @@
-import { readFile, writeFile } from "fs/promises";
-import path from "path";
-import type { AIProviderAdapter } from "@/lib/ai/types";
+import { writeFile } from "fs/promises";
+import type { AIProviderAdapter, ProviderRunMetadata } from "@/lib/ai/types";
 import { claudeSdkProvider } from "@/lib/ai/providers/claudeSdk";
 import type { StageCache } from "./cache";
 import {
@@ -13,37 +12,6 @@ import {
 import type { ModelStageResult } from "./model";
 import type { ExamMeta } from "./prompts/extractorPrompt";
 import { buildExtractorPrompt } from "./prompts/extractorPrompt";
-
-/**
- * Load the syn_div / Pascal extractor reference document from the project root.
- * Returns empty string if the file is missing (extractor still operates, just without the doc).
- *
- * Path resolution: this file lives at ngd-studio/server/stages/extractor.ts.
- * Going up 3 levels from __dirname (server/stages/ → server/ → ngd-studio/ → project root)
- * lands at the repository root where docs/extractor-reference/ lives.
- *
- * In Next.js / vitest environments __dirname is not always available via ESM import.meta.url,
- * so we use process.cwd() as the primary anchor (Next.js CWD = ngd-studio/ package directory)
- * and fall back to path.resolve to avoid hard-coding separators.
- */
-async function loadExtractorReferenceDoc(): Promise<string> {
-  // process.cwd() under Next.js = ngd-studio/ subdirectory; under vitest = same.
-  // The reference doc lives one level above ngd-studio/ in docs/extractor-reference/.
-  const candidates = [
-    // CWD is ngd-studio/ → parent is project root
-    path.join(process.cwd(), "..", "docs", "extractor-reference", "syn_div_pascal.md"),
-    // CWD is project root directly (some test runners)
-    path.join(process.cwd(), "docs", "extractor-reference", "syn_div_pascal.md"),
-  ];
-  for (const refPath of candidates) {
-    try {
-      return await readFile(refPath, "utf8");
-    } catch {
-      // try next candidate
-    }
-  }
-  return "";
-}
 
 export type { ExamMeta };
 
@@ -81,21 +49,43 @@ export async function runExtractorStage(
   const startedAt = new Date().toISOString();
   const provider = input.provider ?? claudeSdkProvider;
 
-  const referenceDoc = await loadExtractorReferenceDoc();
+  // Agentic extractor requires tool use (Read) to fetch reference docs.
+  // Providers that don't support tools (claude-sdk, openai-sdk, deepseek-v4) cannot run this stage.
+  if (!provider.supportsTools) {
+    return {
+      status: "failed",
+      error: {
+        code: "extractor_provider_unsupported_tools",
+        message: `Provider "${provider.id}" does not support tool use. The extractor requires a tool-capable provider (claude-cli or codex-cli) to read reference documents via the Read tool.`,
+        retryable: false,
+      },
+      provider: {
+        requestedProvider: provider.id,
+        provider: provider.id,
+        modelStageKey: "create.extractor",
+        label: provider.label,
+      },
+      startedAt,
+      completedAt: new Date().toISOString(),
+    };
+  }
 
   const { system, user } = buildExtractorPrompt({
     questionNumber: input.questionNumber,
     imagePathHint: input.imagePath,
     examMeta: input.examMeta,
-    referenceDoc,
   });
 
   const combinedPrompt = system + "\n\n" + user;
 
+  // maxTurns: 5 — enough for: system thinking + Read(ref doc) + JSON output
+  // allowedTools: ["Read"] — sandbox: extractor LLM may only Read files (no Write/Bash/Edit)
   const providerResult = provider.run(combinedPrompt, {
     stageKey: "create.extractor",
     imagePaths: [input.imagePath],
     signal: input.signal,
+    maxTurns: 5,
+    allowedTools: ["Read"],
   });
 
   const { text, exitCode } = await collectProviderText(providerResult);
@@ -254,7 +244,7 @@ export function validateExtractorOutput(value: unknown): ModelOutputValidation<E
 
 function toExtractorValidationFailure(
   failure: ReturnType<typeof validationFailure>,
-  metadata: ReturnType<AIProviderAdapter["run"]>["metadata"],
+  metadata: ProviderRunMetadata,
   startedAt: string
 ): ModelStageResult<ExtractorStageOutput> {
   return {

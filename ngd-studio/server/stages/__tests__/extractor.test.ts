@@ -57,18 +57,23 @@ const VALID_OUTPUT = {
 /**
  * Build a mock AIProviderAdapter that returns the given JSON string (or raw
  * string) as the assistant message, then exits with exitCode.
+ *
+ * supportsTools defaults to true so that runExtractorStage (which requires
+ * tool-capable providers) works in most tests. Pass supportsTools=false to
+ * test the error path.
  */
 function makeMockProvider(
   responseJson: string,
   exitCode = 0,
-  runSpy?: ReturnType<typeof vi.fn>
+  runSpy?: ReturnType<typeof vi.fn>,
+  supportsTools = true
 ): AIProviderAdapter {
   const runFn = runSpy ?? vi.fn();
 
   return {
     id: "claude-sdk",
     label: "Mock Provider",
-    supportsTools: false as const,
+    supportsTools,
     run(prompt: string, options?: ProviderRunOptions) {
       runFn(prompt, options);
 
@@ -479,51 +484,70 @@ describe("validateExtractorOutput — new type tags (Phase 3)", () => {
   });
 });
 
-// ─── Phase 5 (2회차): reference doc injection ─────────────────────────────────
+// ─── Phase 2: agentic extractor — prompt + tool call tests ───────────────────
 
-describe("buildExtractorPrompt — reference doc injection", () => {
-  it("injects reference doc content into system prompt when referenceDoc is provided", () => {
-    const referenceDoc = "# syn_div + Pascal extractor reference\n\nPascal (파스칼 삼각형)\n\n모든 Pascal 셀은 항상 equation";
-    const { system } = buildExtractorPrompt({
-      questionNumber: 1,
-      referenceDoc,
-    });
-    expect(system).toContain("Pascal (파스칼 삼각형)");
-    expect(system).toContain("syn_div + Pascal extractor reference");
-  });
-
-  it("replaces [REF_DOC_SECTION] placeholder with fallback text when referenceDoc is empty", () => {
-    const { system } = buildExtractorPrompt({
-      questionNumber: 2,
-      referenceDoc: "",
-    });
-    // placeholder must be replaced — not left as-is
+describe("buildExtractorPrompt — agentic Read guidance (Phase 2)", () => {
+  it("system prompt does NOT contain [REF_DOC_SECTION] placeholder", () => {
+    const { system } = buildExtractorPrompt({ questionNumber: 1 });
     expect(system).not.toContain("[REF_DOC_SECTION]");
-    expect(system).toContain("reference 문서 미첨부");
   });
 
-  it("replaces [REF_DOC_SECTION] placeholder with fallback text when referenceDoc is omitted", () => {
-    const { system } = buildExtractorPrompt({
-      questionNumber: 3,
-    });
-    expect(system).not.toContain("[REF_DOC_SECTION]");
-    expect(system).toContain("reference 문서 미첨부");
+  it("system prompt instructs LLM to Read docs/extractor-reference/ for syn_div/pascal", () => {
+    const { system } = buildExtractorPrompt({ questionNumber: 1 });
+    expect(system).toContain("docs/extractor-reference/");
+    expect(system).toContain("syn_div_pascal.md");
   });
 
-  it("passes referenceDoc through to prompt in runExtractorStage when doc file exists", async () => {
+  it("system prompt does NOT contain inline reference doc content (no host-inject text)", () => {
+    const { system } = buildExtractorPrompt({ questionNumber: 1 });
+    // The old injected header — must be absent now
+    expect(system).not.toContain("첨부 Reference 문서 (syn_div / Pascal 셀 형식)");
+    expect(system).not.toContain("reference 문서 미첨부");
+  });
+});
+
+describe("runExtractorStage — supportsTools guard (Phase 2)", () => {
+  it("returns extractor_provider_unsupported_tools error when provider.supportsTools=false", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
-    // The real reference doc lives at ../docs/extractor-reference/syn_div_pascal.md
-    // relative to CWD (ngd-studio/). If the file exists, loadExtractorReferenceDoc
-    // will load it and inject its contents into the prompt.
-    const realRefPath = path.join(process.cwd(), "..", "docs", "extractor-reference", "syn_div_pascal.md");
-    let realRefContent = "";
-    try {
-      realRefContent = await readFile(realRefPath, "utf8");
-    } catch {
-      // file not present — test still passes, just verifies no-crash behaviour
-    }
+    // Simulate a non-agentic provider (claude-sdk, openai-sdk, deepseek-v4)
+    const provider = makeMockProvider(JSON.stringify(VALID_OUTPUT), 0, undefined, false);
+
+    const result = await runExtractorStage({
+      questionNumber: 1,
+      imagePath: "/some/q01.png",
+      cache,
+      provider,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("extractor_provider_unsupported_tools");
+    expect(result.error?.retryable).toBe(false);
+  });
+
+  it("succeeds when provider.supportsTools=true (tool-capable provider)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    // supportsTools=true (default in makeMockProvider)
+    const provider = makeMockProvider(JSON.stringify(VALID_OUTPUT));
+
+    const result = await runExtractorStage({
+      questionNumber: 1,
+      imagePath: "/some/q01.png",
+      cache,
+      provider,
+    });
+
+    expect(result.status).toBe("completed");
+  });
+});
+
+describe("runExtractorStage — agentic options (Phase 2)", () => {
+  it("passes maxTurns=5 and allowedTools=['Read'] to provider.run", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
 
     const spy = vi.fn();
     const provider = makeMockProvider(JSON.stringify(VALID_OUTPUT), 0, spy);
@@ -536,16 +560,8 @@ describe("buildExtractorPrompt — reference doc injection", () => {
     });
 
     expect(spy).toHaveBeenCalledOnce();
-    const [combinedPrompt] = spy.mock.calls[0] as [string, ProviderRunOptions];
-
-    if (realRefContent) {
-      // Reference doc was loaded — its content must appear in the prompt
-      expect(combinedPrompt).toContain("Pascal (파스칼 삼각형)");
-      // Placeholder must be replaced
-      expect(combinedPrompt).not.toContain("[REF_DOC_SECTION]");
-    } else {
-      // No reference doc — fallback text must appear
-      expect(combinedPrompt).toContain("reference 문서 미첨부");
-    }
+    const [, options] = spy.mock.calls[0] as [string, ProviderRunOptions];
+    expect(options.maxTurns).toBe(5);
+    expect(options.allowedTools).toEqual(["Read"]);
   });
 });

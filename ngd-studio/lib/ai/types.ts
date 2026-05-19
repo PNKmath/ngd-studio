@@ -17,6 +17,8 @@ export interface ProviderRunOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
   maxTurns?: number;
+  /** Restrict which tools the provider CLI may use. Only respected by tool-capable providers (claude-cli). */
+  allowedTools?: string[];
   mode?: "create" | "resume" | "crop" | "review" | string;
   jobId?: string;
   stageKey?: AIStageKey;
