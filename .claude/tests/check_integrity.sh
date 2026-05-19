@@ -18,16 +18,16 @@ pass "agent 6종 실존"
 
 # 2. V3 SKILL.md 참조 scripts 실존
 for s in fix_namespaces.py validate.py; do
-  f=".claude/skills/ngd-exam-create/scripts/$s"
+  f="resources/hwpx_scripts/$s"
   [ -f "$f" ] || fail "missing script: $f"
 done
 pass "scripts 2종 실존"
 
 # 3. base_hwpx 템플릿 실존
-count=$(ls .claude/skills/ngd-exam-create/base_hwpx/*.xml 2>/dev/null | wc -l)
-[ "$count" -ge 1 ] || fail "base_hwpx 비어있음"
-for t in bogi_table_3items.xml choice_table_5x5.xml header_area_template.xml; do
-  [ -f ".claude/skills/ngd-exam-create/base_hwpx/$t" ] || fail "missing template: $t"
+count=$(ls resources/hwpx_base/*.xml 2>/dev/null | wc -l)
+[ "$count" -ge 1 ] || fail "resources/hwpx_base 비어있음"
+for t in bogi_box_3items.xml choice_grid_2cols.xml header_area_template.xml; do
+  [ -f "resources/hwpx_base/$t" ] || fail "missing template: $t"
 done
 pass "base_hwpx 핵심 템플릿 실존"
 

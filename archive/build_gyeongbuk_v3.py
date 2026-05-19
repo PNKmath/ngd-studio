@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# DEPRECATED — 옛 fixture 이름 사용. 현재 빌드는 build_hwpx.py 를 사용하세요.
+# 본 파일은 과거 기록 참고용으로만 보존됨.
 """
 NGD HWPX Builder v3 — 경북고 2025 2학년 1학기 기말 수학 II 전범위
 19 problems (15 choice + 4 essay)

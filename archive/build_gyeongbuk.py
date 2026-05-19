@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# DEPRECATED — 옛 fixture 이름 사용. 현재 빌드는 build_hwpx.py 를 사용하세요.
+# 본 파일은 과거 기록 참고용으로만 보존됨.
 """
 경북고 수학II 2025년 1학기 기말 HWPX 빌더
 """

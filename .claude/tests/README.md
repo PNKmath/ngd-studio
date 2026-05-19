@@ -20,8 +20,8 @@ bash .claude/tests/check_integrity.sh
 | # | 항목 | 설명 |
 |---|------|------|
 | 1 | **agent 6종 실존** | `ngd-exam-{extractor,solver,verifier,figure,builder,checker}.md` 존재 여부 |
-| 2 | **scripts 2종 실존** | `ngd-exam-create/scripts/fix_namespaces.py`, `validate.py` 존재 여부 |
-| 3 | **base_hwpx 핵심 템플릿** | `bogi_table_3items.xml`, `choice_table_5x5.xml`, `header_area_template.xml` 존재 여부 |
+| 2 | **scripts 2종 실존** | `resources/hwpx_scripts/fix_namespaces.py`, `validate.py` 존재 여부 |
+| 3 | **base_hwpx 핵심 템플릿** | `resources/hwpx_base/` 내 `bogi_box_3items.xml`, `choice_grid_2cols.xml`, `header_area_template.xml` 존재 여부 |
 | 4 | **agent frontmatter** | 모든 `agents/*.md`에 `name:`, `description:` 필드 존재 여부 |
 | 5 | **SKILL.md 절대경로 참조** | 활성 SKILL.md 본문의 `/mnt/c/NGD/.claude/...` 경로 실존 여부 |
 
