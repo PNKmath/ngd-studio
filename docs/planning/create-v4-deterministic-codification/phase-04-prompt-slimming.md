@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: solver/verifier prompt 슬림화
-status: pending
+status: completed
 depends_on: [2, 3]
 scope:
   - ngd-studio/server/stages/prompts/solverPrompt.ts
@@ -78,11 +78,42 @@ verifier prompt도 유사 — 결정적 룰 위반은 normalizer가 잡으므로
 
 ## 체크리스트
 
-- [ ] `solverPrompt.ts`에서 R-01~R-10에 해당하는 자연어 규칙 제거 (10개 항목)
-- [ ] `verifierPrompt.ts`에서 동일 규칙 제거
-- [ ] 의미상 필수 규칙 (sqrt vs root, LEFT/RIGHT 키워드, parts schema, JSON 형식) 유지 확인
-- [ ] `prompts.test.ts` 회귀 — snapshot/keyword assertion 갱신
-- [ ] `cd ngd-studio && pnpm test server/stages/__tests__/prompts.test.ts` 통과
+- [x] `solverPrompt.ts`에서 R-01~R-10에 해당하는 자연어 규칙 제거 (10개 항목)
+- [x] `verifierPrompt.ts`에서 동일 규칙 제거
+- [x] 의미상 필수 규칙 (sqrt vs root, LEFT/RIGHT 키워드, parts schema, JSON 형식) 유지 확인
+- [x] `prompts.test.ts` 회귀 — snapshot/keyword assertion 갱신 (기존 tests가 해당 규칙 키워드 미포함으로 무변경)
+- [x] `cd ngd-studio && pnpm test server/stages/__tests__/prompts.test.ts` 통과
+
+---
+
+## 실행 기록
+
+### 1회차 (2026-05-20 08:38 KST) — completed
+**상태**: completed
+**소요 시간**: 약 5분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+solverPrompt.ts의 R-01~R-10 자연어 규칙 10개(통수식 금지, 연산자 공백, rm체, 순열/조합 패턴, "_"시작 수식 금지, DEG, LEFT/RIGHT 공백, 내적 cdot, 쉼표 뒤 ~, cdots 역따옴표)를 제거하고 "후처리 normalizer가 자동 정규화" 단일 문장으로 대체. verifierPrompt.ts의 서식 규칙 섹션도 동일하게 슬림화. prompts.test.ts는 기존에 해당 키워드 assertion이 없어 변경 불필요.
+
+#### 변경 파일
+- `ngd-studio/server/stages/prompts/solverPrompt.ts` (수정, +8/-20줄)
+- `ngd-studio/server/stages/prompts/verifierPrompt.ts` (수정, +5/-8줄)
+
+#### 검증 결과
+- [x] prompts.test.ts 14개 전부 통과: `pnpm test server/stages/__tests__/prompts.test.ts` → 14 tests passed
+- [x] 의미상 필수 규칙 유지 확인: sqrt vs root N of, LEFT/RIGHT 키워드, parts schema, JSON 형식 모두 유지됨
+- [x] R-01~R-10 제거 확인: 통수식, rm체, DEG, cdot, cdots, 연산자 공백, 순열/조합 패턴 모두 제거됨
+- [x] tsc --noEmit: checker.ts:63 오류는 Phase 5 미완 코드에서 발생하는 기존 에러이며 이 phase 변경과 무관
+
+#### 추가 발견사항
+- solver 시스템 프롬프트 약 ~600 tokens → ~250 tokens으로 감소 (10개 규칙 항목 + 설명 제거)
+- verifier 시스템 프롬프트에서 서식 규칙 3개 항목 제거, 수학/논리 집중 문구 추가
+
+#### 질문 / 결정 사항
+없음
+
+---
 
 ## 영향 범위
 
@@ -99,3 +130,19 @@ pnpm test server/stages/__tests__/prompts.test.ts --reporter=basic
 ```
 
 수동 회귀: 임의 문제 1-2개로 solver 실행 → 출력 parts가 정규화 후 동일 품질인지 확인. Phase 7에서 자동화.
+
+#### Scope Audit (orchestrator)
+
+pass — solverPrompt.ts + verifierPrompt.ts 모두 scope 내 (prompts.test.ts 무변경 정상).
+
+#### Verification Re-run (orchestrator)
+
+exit 0 — pnpm tsc --noEmit 0 errors, prompts.test.ts 14/14 pass.
+
+#### Simplify (orchestrator)
+
+0 files — 양 파일 이미 minimal, 안전한 수정 없음. 템플릿 리터럴 변환은 포매팅 only로 스킵.
+
+#### Review (orchestrator)
+
+pass — A~I 전부 OK. R-01~R-10 자연어 규칙 제거 + normalizer 위임, 의미 필수 규칙 유지.
