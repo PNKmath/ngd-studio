@@ -311,48 +311,280 @@ def make_increase_decrease_table(explanation_table, base_path):
 
 
 def make_synthetic_division_table(explanation_table, base_path):
-    """조립제법 표 생성 — 양식지 템플릿 기반 (10행×5열)"""
-    divisor = explanation_table.get("divisor", "")
-    coefficients = explanation_table.get("coefficients", [])
-    result = explanation_table.get("result", [])
+    """조립제법 표 생성 — 레거시 alias. make_syn_div_table으로 위임."""
+    return make_syn_div_table(explanation_table, base_path)
 
-    # 곱셈 행 계산: multiplied[i] = divisor × result[i-1]
-    try:
-        d = float(divisor)
-        multiplied = [""] + [str(d * float(r)) for r in result[:-1]]
-        multiplied = [m.rstrip("0").rstrip(".") if "." in m else m for m in multiplied]
-    except (ValueError, TypeError):
-        multiplied = [""] * (len(coefficients))
 
-    n = max(len(coefficients), 5)
-    row0 = [divisor] + list(coefficients[:n-1])
-    row1 = [""] + list(multiplied[1:n])
-    row3 = [""] + list(result[:n-1])
+def make_syn_div_table(data, base_path):
+    """조립제법 가변 생성기.
 
-    rows_data = [
-        row0,   # idx 0: 계수
-        row1,   # idx 1: 곱셈
-        [],     # idx 2: thin separator (비워둠)
-        row3,   # idx 3: 결과
-    ]
+    data 형식:
+      {
+        "type": "synthetic_division",
+        "degree": <int>,          # 최고차 (선택; 없으면 rows 크기로 결정)
+        "n_rows": <int>,          # 행 수 (선택; 없으면 len(rows))
+        "n_cols": <int>,          # 열 수 (선택; 없으면 len(rows[0]))
+        "rows": [["v00","v01",...], ...]  # 2D 배열 (각 셀 값, 수식 문자열)
+      }
 
-    with open(f"{base_path}/synthetic_division_template.xml", encoding="utf-8") as f:
-        tbl_xml = f.read()
+    rows가 없거나 비어있으면 "divisor"/"coefficients"/"result" 필드(레거시)를 이용해
+    자동으로 rows를 구성한다.
+    """
+    rows_2d = data.get("rows")
 
-    tbl_xml = _replace_table_ids(tbl_xml)
-    cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
+    # --- 레거시 필드 폴백 ---
+    if not rows_2d:
+        divisor = data.get("divisor", "")
+        coefficients = data.get("coefficients", [])
+        result = data.get("result", [])
 
-    for ri, row_vals in enumerate(rows_data):
-        for ci, val in enumerate(row_vals[:5]):
-            cell_idx = ri * 5 + ci
+        try:
+            d = float(divisor)
+            multiplied = [""] + [str(d * float(r)) for r in result[:-1]]
+            multiplied = [m.rstrip("0").rstrip(".") if "." in m else m for m in multiplied]
+        except (ValueError, TypeError):
+            multiplied = [""] * len(coefficients)
+
+        n_cols = max(len(coefficients) + 1, 5)
+        row0 = [divisor] + list(coefficients[:n_cols - 1])
+        row1 = multiplied[:n_cols]
+        row2 = [""] * n_cols          # thin separator 행
+        row3 = [""] + list(result[:n_cols - 1])
+        # row0/row1/row2/row3 각 n_cols 맞추기
+        def _pad(r, n):
+            return list(r) + [""] * max(0, n - len(r))
+        rows_2d = [_pad(row0, n_cols), _pad(row1, n_cols), _pad(row2, n_cols), _pad(row3, n_cols)]
+
+    if not rows_2d:
+        return ""
+
+    n_rows = data.get("n_rows") or len(rows_2d)
+    n_cols = data.get("n_cols") or (len(rows_2d[0]) if rows_2d else 5)
+
+    # 표 전체 너비 계산 (양식지 기준: 총 18350, 각 셀 3670)
+    CELL_W = 3670
+    CELL_H_NORMAL = 1849     # 일반 데이터 행 높이
+    CELL_H_SEP = 383         # 구분선 행 높이 (3번째 행 etc.)
+    total_w = CELL_W * n_cols
+    total_h = 0
+
+    # borderFillIDRef 패턴 (synthetic_division_template_1.xml 기반)
+    # row 0: col0→55, col1→56, col2+→18
+    # row 1: col0→55, col1→57, col2+→58
+    # row 2 (sep): col0→18, col1+→59
+    # row 3+: col0→18, rest→18
+    def _bfr(ri, ci, n_r, n_c):
+        if ri == 0:
+            if ci == 0: return "55"
+            if ci == 1: return "56"
+            return "18"
+        if ri == 1:
+            if ci == 0: return "55"
+            if ci == 1: return "57"
+            return "58"
+        if ri == 2:
+            if ci == 0: return "18"
+            return "59"
+        # row 3+
+        if ci == 0: return "18"
+        if ri == n_r - 1 and ci == n_c - 2: return "55"
+        if ri == n_r - 1 and ci == n_c - 1: return "57"
+        return "18"
+
+    trs = []
+    for ri in range(n_rows):
+        row_vals = rows_2d[ri] if ri < len(rows_2d) else []
+        # 구분선 행 높이: row 2 (index 2)
+        is_sep = (ri == 2) and all(not v for v in row_vals)
+        cell_h = CELL_H_SEP if is_sep else CELL_H_NORMAL
+        total_h += cell_h
+
+        cells_xml = ""
+        for ci in range(n_cols):
+            val = row_vals[ci] if ci < len(row_vals) else ""
+            bfr = _bfr(ri, ci, n_rows, n_cols)
+            cell = (
+                f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0"'
+                f' borderFillIDRef="{bfr}">'
+                f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER"'
+                f' linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0"'
+                f' hasTextRef="0" hasNumRef="0">'
+                f'<hp:p id="2147483648" paraPrIDRef="10" styleIDRef="0"'
+                f' pageBreak="0" columnBreak="0" merged="0">'
+                f'<hp:run charPrIDRef="3"/>'
+                f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"'
+                f' vertsize="1000" textheight="1000" baseline="850" spacing="600"'
+                f' horzpos="0" horzsize="{CELL_W - 2}" flags="393216"/></hp:linesegarray>'
+                f'</hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{ci}" rowAddr="{ri}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+                f'<hp:cellSz width="{CELL_W}" height="{cell_h}"/>'
+                f'<hp:cellMargin left="510" right="510" top="141" bottom="141"/>'
+                f'</hp:tc>'
+            )
             if val:
-                cells[cell_idx] = _inject_cell_value(cells[cell_idx], str(val))
+                cell = _inject_cell_value(cell, str(val))
+            cells_xml += cell
+        trs.append(f'<hp:tr>{cells_xml}</hp:tr>')
 
-    header = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
-    trs = ""
-    for ri in range(10):
-        trs += f'<hp:tr>{"".join(cells[ri*5:(ri+1)*5])}</hp:tr>'
-    return header + trs + '</hp:tbl>'
+    tbl_id = next_eq_id()
+    zo = next_zorder()
+    return (
+        f'<hp:tbl id="{tbl_id}" zOrder="{zo}" numberingType="TABLE"'
+        f' textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None"'
+        f' pageBreak="CELL" repeatHeader="1" rowCnt="{n_rows}" colCnt="{n_cols}"'
+        f' cellSpacing="0" borderFillIDRef="4" noAdjust="0">'
+        f'<hp:sz width="{total_w}" widthRelTo="ABSOLUTE" height="{total_h}" heightRelTo="ABSOLUTE" protect="0"/>'
+        f'<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0"'
+        f' holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT"'
+        f' vertOffset="0" horzOffset="0"/>'
+        f'<hp:outMargin left="0" right="0" top="284" bottom="284"/>'
+        f'<hp:inMargin left="140" right="140" top="140" bottom="140"/>'
+        f'{"".join(trs)}</hp:tbl>'
+    )
+
+
+def make_pascal_table(data, base_path):
+    """파스칼 삼각형 가변 생성기.
+
+    data 형식:
+      {
+        "type": "pascal",
+        "n_rows": <int>,                          # 행 수 (0행 포함)
+        "cells": [["1"], ["1","1"], ...]           # 각 행의 셀 값 list
+      }
+
+    각 행은 r+1개 셀 (0행=1셀, 1행=2셀, ...).
+    가운데 정렬: 최대 n_rows개 열을 기준으로, 각 행 좌우에 빈 셀(colSpan)을 패딩.
+
+    colCnt = n_rows (짝수 맞춤: n_rows가 홀수면 +1)
+    각 데이터 셀은 colSpan=1, 빈 패딩 셀은 colSpan을 필요에 따라 조정.
+    """
+    n_rows = data.get("n_rows", 0)
+    cells_data = data.get("cells", [])
+
+    if n_rows == 0 or not cells_data:
+        return ""
+
+    # 홀수 colCnt로 만들기 위해 최대 데이터 셀 수 = n_rows 셀 (마지막 행)
+    # 단순 레이아웃: colCnt = n_rows * 2 - 1 (각 데이터 셀 2슬롯, 사이 1슬롯)
+    # 더 간단한 방법: colCnt = n_rows (각 행에서 빈 공간을 colSpan으로)
+    # Pascal_triangle_1.xml 분석: 5행 기준 colCnt=18=2*(n-1)+2? → 5행: 2*4+2+8빈=18
+    # 실제로는 매우 복잡한 span 구조. 대신 균일 그리드 사용.
+    # 균일 그리드: colCnt = n_rows, 각 행 r에서 (n_rows - (r+1))//2 빈 셀 좌우로
+
+    # colCnt = n_rows (최대 행의 셀 수와 동일)
+    col_cnt = n_rows
+
+    CELL_W = 2374
+    CELL_H = 2131
+    total_w = CELL_W * col_cnt
+    total_h = CELL_H * n_rows
+
+    trs = []
+    for ri in range(n_rows):
+        row_vals = cells_data[ri] if ri < len(cells_data) else []
+        n_data = ri + 1  # 이 행의 데이터 셀 수
+
+        # 빈 패딩 슬롯 수
+        total_slots = col_cnt
+        n_pad_each = (total_slots - n_data) // 2
+        n_left_pad = n_pad_each
+        n_right_pad = total_slots - n_data - n_left_pad
+
+        cells_xml = ""
+        col = 0
+
+        # 왼쪽 패딩 셀들
+        for _ in range(n_left_pad):
+            cells_xml += (
+                f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0"'
+                f' borderFillIDRef="1">'
+                f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER"'
+                f' linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0"'
+                f' hasTextRef="0" hasNumRef="0">'
+                f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0"'
+                f' pageBreak="0" columnBreak="0" merged="0">'
+                f'<hp:run charPrIDRef="1"/>'
+                f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"'
+                f' vertsize="1000" textheight="1000" baseline="850" spacing="600"'
+                f' horzpos="0" horzsize="{CELL_W - 2}" flags="393216"/></hp:linesegarray>'
+                f'</hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{ri}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+                f'<hp:cellSz width="{CELL_W}" height="{CELL_H}"/>'
+                f'<hp:cellMargin left="510" right="510" top="141" bottom="141"/>'
+                f'</hp:tc>'
+            )
+            col += 1
+
+        # 데이터 셀들
+        for di in range(n_data):
+            val = row_vals[di] if di < len(row_vals) else ""
+            cell = (
+                f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0"'
+                f' borderFillIDRef="1">'
+                f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER"'
+                f' linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0"'
+                f' hasTextRef="0" hasNumRef="0">'
+                f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0"'
+                f' pageBreak="0" columnBreak="0" merged="0">'
+                f'<hp:run charPrIDRef="1"/>'
+                f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"'
+                f' vertsize="1000" textheight="1000" baseline="850" spacing="600"'
+                f' horzpos="0" horzsize="{CELL_W - 2}" flags="393216"/></hp:linesegarray>'
+                f'</hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{ri}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+                f'<hp:cellSz width="{CELL_W}" height="{CELL_H}"/>'
+                f'<hp:cellMargin left="510" right="510" top="141" bottom="141"/>'
+                f'</hp:tc>'
+            )
+            if val:
+                cell = _inject_cell_value(cell, str(val))
+            cells_xml += cell
+            col += 1
+
+        # 오른쪽 패딩 셀들
+        for _ in range(n_right_pad):
+            cells_xml += (
+                f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0"'
+                f' borderFillIDRef="1">'
+                f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER"'
+                f' linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0"'
+                f' hasTextRef="0" hasNumRef="0">'
+                f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0"'
+                f' pageBreak="0" columnBreak="0" merged="0">'
+                f'<hp:run charPrIDRef="1"/>'
+                f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"'
+                f' vertsize="1000" textheight="1000" baseline="850" spacing="600"'
+                f' horzpos="0" horzsize="{CELL_W - 2}" flags="393216"/></hp:linesegarray>'
+                f'</hp:p></hp:subList>'
+                f'<hp:cellAddr colAddr="{col}" rowAddr="{ri}"/>'
+                f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+                f'<hp:cellSz width="{CELL_W}" height="{CELL_H}"/>'
+                f'<hp:cellMargin left="510" right="510" top="141" bottom="141"/>'
+                f'</hp:tc>'
+            )
+            col += 1
+
+        trs.append(f'<hp:tr>{cells_xml}</hp:tr>')
+
+    tbl_id = next_eq_id()
+    zo = next_zorder()
+    return (
+        f'<hp:tbl id="{tbl_id}" zOrder="{zo}" numberingType="TABLE"'
+        f' textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES" lock="0" dropcapstyle="None"'
+        f' pageBreak="CELL" repeatHeader="1" rowCnt="{n_rows}" colCnt="{col_cnt}"'
+        f' cellSpacing="0" borderFillIDRef="4" noAdjust="0">'
+        f'<hp:sz width="{total_w}" widthRelTo="ABSOLUTE" height="{total_h}" heightRelTo="ABSOLUTE" protect="0"/>'
+        f'<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1" allowOverlap="0"'
+        f' holdAnchorAndSO="0" vertRelTo="PARA" horzRelTo="PARA" vertAlign="TOP" horzAlign="LEFT"'
+        f' vertOffset="0" horzOffset="0"/>'
+        f'<hp:outMargin left="0" right="0" top="284" bottom="284"/>'
+        f'<hp:inMargin left="140" right="140" top="140" bottom="140"/>'
+        f'{"".join(trs)}</hp:tbl>'
+    )
 
 
 CHOICE_TABLE_MAP = {

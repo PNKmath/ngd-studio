@@ -262,18 +262,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     FIXTURES_18 = [
-        # 신규 11개 (813f736, 이름 갱신 2026-05-19)
+        # Phase 4 이후 잔존 fixture (syn_div/Pascal/ganada 삭제됨)
         "bogi_box_4items.xml",
-        "ganada_table.xml",
         "inc_dec_3x.xml",
         "inc_dec_4x.xml",
-        "synthetic_division_template_1.xml",
-        "synthetic_division_template_2.xml",
-        "synthetic_division_template_3.xml",
-        "synthetic_division_template_4.xml",
-        "Pascal_triangle_1.xml",
-        "Pascal_triangle_2.xml",
-        "Pascal_triangle_3.xml",
         # 기존 7개 (이름 갱신 2026-05-19)
         "pq_proposition_table_5x5.xml",
         "choice_image_5options.xml",

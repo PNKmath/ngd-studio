@@ -19,7 +19,8 @@ from equation import (
 )
 from shapes import make_condition_rect, make_ganada_table, make_empty_box, make_pic_xml, png_to_bmp_bytes
 from tables import (
-    make_data_table_xml, make_increase_decrease_table, make_synthetic_division_table,
+    make_data_table_xml, make_increase_decrease_table,
+    make_synthetic_division_table, make_syn_div_table, make_pascal_table,
     make_choice_table, make_bogi_table, make_proof_table_wrapped,
 )
 
@@ -210,7 +211,9 @@ def make_endnote(number, answer, explanation_parts, prob_type="choice", explanat
         if et_type == "increase_decrease":
             tbl_xml = make_increase_decrease_table(explanation_table, base_path)
         elif et_type == "synthetic_division":
-            tbl_xml = make_synthetic_division_table(explanation_table, base_path)
+            tbl_xml = make_syn_div_table(explanation_table, base_path)
+        elif et_type == "pascal":
+            tbl_xml = make_pascal_table(explanation_table, base_path)
         if tbl_xml:
             expl_xml += (f'<hp:p id="0" paraPrIDRef="3" styleIDRef="0" pageBreak="0" columnBreak="0" merged="0">'
                         f'<hp:run charPrIDRef="1">{tbl_xml}<hp:t/></hp:run>'
