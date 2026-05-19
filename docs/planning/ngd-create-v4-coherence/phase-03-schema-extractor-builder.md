@@ -1,11 +1,12 @@
 ---
 phase: 3
 title: extractor 메타데이터 스키마 정의 + extractor.ts + builder 정합화
-status: pending
+status: completed
 depends_on: [2]
 scope:
   - docs/planning/ngd-create-v4-coherence/schema.md
   - ngd-studio/server/stages/extractor.ts
+  - ngd-studio/server/stages/prompts/
   - ngd-studio/server/stages/__tests__/
   - tables.py
   - shapes.py
@@ -77,12 +78,12 @@ intervention_reason: ""
 
 ## 체크리스트
 
-- [ ] `schema.md` 신규 — fixture 종류별 입력 dict 명세
-- [ ] `extractor.ts` 의 출력 type tag + 필드 추가 (LLM 프롬프트 갱신 포함)
-- [ ] `extractor.test.ts` 단위 테스트 추가 — 각 type 별 합성 입력 출력 검증
-- [ ] builder maker 함수 정합화 — schema.md 명세대로 입력 받기
-- [ ] assemble.py dispatch — type tag → maker 매핑 명확화
-- [ ] 빌드 + validate 통과 (회귀 없음 확인)
+- [x] `schema.md` 신규 — fixture 종류별 입력 dict 명세
+- [x] `extractor.ts` 의 출력 type tag + 필드 추가 (LLM 프롬프트 갱신 포함)
+- [x] `extractor.test.ts` 단위 테스트 추가 — 각 type 별 합성 입력 출력 검증
+- [x] builder maker 함수 정합화 — schema.md 명세대로 입력 받기
+- [x] assemble.py dispatch — type tag → maker 매핑 명확화
+- [x] 빌드 + validate 통과 (회귀 없음 확인)
 
 ## 영향 범위
 
@@ -117,3 +118,49 @@ print('proposition OK')
 ```
 
 검증 통과 조건: tsc + Python 빌드 + 단위 테스트 모두 통과 + 새 maker 함수 호출 가능.
+
+#### Scope Audit (orchestrator)
+pass — schema.md, extractor.test.ts, extractorPrompt.ts, tables.py 모두 scope 내 (orchestrator가 `prompts/` 디렉터리 scope 추가).
+
+#### Verification Re-run (orchestrator)
+exit 0 — tsc, vitest 27/27, Python build, validate 모두 통과.
+
+#### Review (orchestrator)
+VERDICT: pass — schema.md / CHOICE_TABLE_MAP 호환 키 / extractorPrompt 갱신 모두 정합. downstream(solver/verifier) condition_box/table_type 미소비 확인. validateExtractorOutput이 permissive한 것은 설계 의도.
+
+## 실행 결과
+
+### 1회차 (2026-05-19) — completed
+
+**환경**: macOS, ngd-studio/ngd-studio (pnpm), Python 3
+
+**수행 내역**:
+
+1. **schema.md 신규 작성** (`docs/planning/ngd-create-v4-coherence/schema.md`)
+   - 모든 fixture 별 입력 dict 명세, selector 조건, placeholder 위치 문서화
+   - syn_div/Pascal 계열은 Phase 4 제외 명시
+   - `CHOICE_TABLE_MAP` 신규/호환 키 매핑 표 포함
+   - `assemble.py` dispatch 매핑 표 포함
+
+2. **CHOICE_TABLE_MAP 갱신** (`tables.py`)
+   - 신규 키 4개 추가: `"proposition"`, `"choice_image"`, `"choice_grid_2cols"`, `"choice_grid_3cols"`
+   - 옛 키 4개 호환 유지: `"5x5"`, `"9x4"`, `"6x3"`, `"6x4"` (deprecated 주석)
+
+3. **extractorPrompt.ts 갱신** (`ngd-studio/server/stages/prompts/extractorPrompt.ts`)
+   - `condition_box.type`에 `"choice_table"` 명시 추가
+   - `table_type` 서브 필드 신규 명세: `"proposition" | "choice_image" | "choice_grid_2cols" | "choice_grid_3cols"`
+   - 각 type별 사용 지침 한글 설명 추가
+
+4. **extractor.test.ts 단위 테스트 추가** (`ngd-studio/server/stages/__tests__/extractor.test.ts`)
+   - 9개 신규 테스트: bogi, proposition, choice_image, choice_grid_2cols, choice_grid_3cols, increase_decrease, normal_dist, probability, backward compat(5x5)
+   - 기존 18개 + 신규 9개 = **총 27개** 전통과
+
+5. **assemble.py dispatch**: 기존 dispatch 구조 검토 — 이미 모든 `cond_type` 분기가 명확함. `make_choice_table`이 `CHOICE_TABLE_MAP`을 사용하므로 추가 수정 불필요.
+
+**downstream 영향 검토**: solver/verifier/orchestrator는 `condition_box.type`, `table_type` 필드를 읽지 않음 (확인: grep 0건). Python builder만 해당 필드를 소비. 안전.
+
+**검증 결과**:
+- `tsc --noEmit`: **pass** (exit 0)
+- `vitest run extractor.test.ts`: **27/27 pass** (exit 0)
+- Python builder 회귀: **pass** (19문제 빌드, exit 0)
+- `validate.py --fix`: **HWPX 검증 통과** (exit 0)

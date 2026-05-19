@@ -324,3 +324,155 @@ describe("validateExtractorOutput", () => {
     expect((result as { ok: false; message: string }).message).toContain("parts");
   });
 });
+
+// ─── Phase 3: new type tag validation ────────────────────────────────────────
+
+describe("validateExtractorOutput — new type tags (Phase 3)", () => {
+  /** bogi type — condition_box with type="bogi" */
+  it("passes for bogi condition_box with 3 items", () => {
+    const input = {
+      ...VALID_OUTPUT,
+      condition_box: {
+        type: "bogi",
+        items: [
+          { parts: [{ t: "ㄱ. 항목1" }] },
+          { parts: [{ eq: "x > 0" }] },
+          { parts: [{ t: "ㄷ. 항목3" }] },
+        ],
+      },
+    };
+    const result = validateExtractorOutput(input);
+    expect(result.ok).toBe(true);
+  });
+
+  /** proposition type — choice_table with table_type="proposition" */
+  it("passes for choice_table with table_type=proposition (5x5 명제 테이블)", () => {
+    const input = {
+      ...VALID_OUTPUT,
+      condition_box: {
+        type: "choice_table",
+        table_type: "proposition",
+        rows: [
+          ["h1", "c1"], ["h2", "c2"], ["h3", "c3"], ["h4", "c4"], ["h5", "c5"],
+        ],
+      },
+    };
+    const result = validateExtractorOutput(input);
+    expect(result.ok).toBe(true);
+  });
+
+  /** choice_image type — choice_table with table_type="choice_image" */
+  it("passes for choice_table with table_type=choice_image (그림 5선지)", () => {
+    const input = {
+      ...VALID_OUTPUT,
+      condition_box: {
+        type: "choice_table",
+        table_type: "choice_image",
+        rows: [],
+      },
+    };
+    const result = validateExtractorOutput(input);
+    expect(result.ok).toBe(true);
+  });
+
+  /** choice_grid_2cols — (가)(나) 2열 선지 */
+  it("passes for choice_table with table_type=choice_grid_2cols", () => {
+    const input = {
+      ...VALID_OUTPUT,
+      condition_box: {
+        type: "choice_table",
+        table_type: "choice_grid_2cols",
+        rows: [
+          ["", "(가)", "(나)"],
+          ["①", "v1", "v2"],
+          ["②", "v3", "v4"],
+          ["③", "v5", "v6"],
+          ["④", "v7", "v8"],
+          ["⑤", "v9", "v10"],
+        ],
+      },
+    };
+    const result = validateExtractorOutput(input);
+    expect(result.ok).toBe(true);
+  });
+
+  /** choice_grid_3cols — (가)(나)(다) 3열 선지 */
+  it("passes for choice_table with table_type=choice_grid_3cols", () => {
+    const input = {
+      ...VALID_OUTPUT,
+      condition_box: {
+        type: "choice_table",
+        table_type: "choice_grid_3cols",
+        rows: [
+          ["", "(가)", "(나)", "(다)"],
+          ["①", "v1", "v2", "v3"],
+          ["②", "v4", "v5", "v6"],
+        ],
+      },
+    };
+    const result = validateExtractorOutput(input);
+    expect(result.ok).toBe(true);
+  });
+
+  /** increase_decrease — explanation_table */
+  it("passes for increase_decrease explanation_table", () => {
+    const input = {
+      ...VALID_OUTPUT,
+      explanation_table: {
+        type: "increase_decrease",
+        x_values: ["a", "b"],
+        rows: [
+          { label: "f prime(x)", values: ["+", "0", "-"] },
+          { label: "f(x)", values: ["NEARROW", "극대", "SEARROW"] },
+        ],
+      },
+    };
+    const result = validateExtractorOutput(input);
+    expect(result.ok).toBe(true);
+  });
+
+  /** normal_dist — data_table */
+  it("passes for normal_dist data_table with row_parts", () => {
+    const input = {
+      ...VALID_OUTPUT,
+      data_table: {
+        type: "normal_dist",
+        row_parts: [
+          [[{ eq: "1.0" }], [{ eq: "0.3413" }]],
+          [[{ eq: "1.5" }], [{ eq: "0.4332" }]],
+          [[{ eq: "2.0" }], [{ eq: "0.4772" }]],
+        ],
+      },
+    };
+    const result = validateExtractorOutput(input);
+    expect(result.ok).toBe(true);
+  });
+
+  /** probability — data_table */
+  it("passes for probability data_table with header_parts and row_parts", () => {
+    const input = {
+      ...VALID_OUTPUT,
+      data_table: {
+        type: "probability",
+        header_parts: [[{ eq: "0" }], [{ eq: "1" }], [{ eq: "2" }]],
+        row_parts: [[{ eq: "1 over 3" }], [{ eq: "1 over 3" }], [{ eq: "1 over 3" }]],
+      },
+    };
+    const result = validateExtractorOutput(input);
+    expect(result.ok).toBe(true);
+  });
+
+  /** backward compat — old table_type "5x5" still accepted */
+  it("passes for choice_table with legacy table_type=5x5 (backward compat)", () => {
+    const input = {
+      ...VALID_OUTPUT,
+      condition_box: {
+        type: "choice_table",
+        table_type: "5x5",
+        rows: [["h1", "c1"], ["h2", "c2"], ["h3", "c3"], ["h4", "c4"], ["h5", "c5"]],
+      },
+    };
+    const result = validateExtractorOutput(input);
+    expect(result.ok).toBe(true);
+  });
+});

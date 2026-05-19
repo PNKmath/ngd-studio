@@ -356,6 +356,12 @@ def make_synthetic_division_table(explanation_table, base_path):
 
 
 CHOICE_TABLE_MAP = {
+    # 신규 type tag (schema.md 명세 기준)
+    "proposition": "pq_proposition_table_5x5.xml",
+    "choice_image": "choice_image_5options.xml",
+    "choice_grid_2cols": "choice_grid_2cols.xml",
+    "choice_grid_3cols": "choice_grid_3cols.xml",
+    # 호환 (옛 키 — deprecated, Phase 5 이후 제거 예정)
     "5x5": "pq_proposition_table_5x5.xml",
     "9x4": "choice_image_5options.xml",
     "6x3": "choice_grid_2cols.xml",
