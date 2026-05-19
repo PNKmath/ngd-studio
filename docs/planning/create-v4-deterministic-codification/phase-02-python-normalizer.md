@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: Python normalizer — equation.py safety net
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - equation.py
@@ -144,14 +144,14 @@ def test_idempotent(fixture_path):
 
 ## 체크리스트
 
-- [ ] `equation.py`에 `normalize_parts(parts)` + 헬퍼 함수 8개 (R-01~R-10에 대응) 구현
-- [ ] `_split_top_level_eq` depth tracking — `{}`, `LEFT(/RIGHT)`, 백틱 내부 모두 처리
-- [ ] `parts_to_run_content` 진입 첫 줄에 `parts = normalize_parts(parts)` 삽입
-- [ ] `pyproject.toml`에 minimal pytest 설정 추가 (`testpaths`, `python_files`)
-- [ ] `tests/test_parts_normalizer.py` — Phase 1 fixture 전체를 parametrize로 검증
-- [ ] idempotency 테스트: 모든 fixture에 대해 `normalize(normalize(x)) == normalize(x)`
-- [ ] `python3 -m pytest tests/test_parts_normalizer.py -v` 전부 pass
-- [ ] 기존 `build_hwpx.py` 회귀: 임의 cache fixture로 build 실행 시 HWPX 정상 생성 (validate.py --fix exit 0)
+- [x] `equation.py`에 `normalize_parts(parts)` + 헬퍼 함수 8개 (R-01~R-10에 대응) 구현
+- [x] `_split_top_level_eq` depth tracking — `{}`, `LEFT(/RIGHT)`, 백틱 내부 모두 처리
+- [x] `parts_to_run_content` 진입 첫 줄에 `parts = normalize_parts(parts)` 삽입
+- [x] `pyproject.toml`에 minimal pytest 설정 추가 (`testpaths`, `python_files`)
+- [x] `tests/test_parts_normalizer.py` — Phase 1 fixture 전체를 parametrize로 검증
+- [x] idempotency 테스트: 모든 fixture에 대해 `normalize(normalize(x)) == normalize(x)`
+- [x] `python3 -m pytest tests/test_parts_normalizer.py -v` 전부 pass
+- [x] 기존 `build_hwpx.py` 회귀: 임의 cache fixture로 build 실행 시 HWPX 정상 생성 (validate.py --fix exit 0)
 
 ## 영향 범위
 
@@ -175,3 +175,46 @@ python3 build_hwpx.py outputs/<sample>/exam_data.json /tmp/build1
 python3 build_hwpx.py outputs/<sample>/exam_data.json /tmp/build2
 diff -r /tmp/build1 /tmp/build2  # empty
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-20 08:30 KST) — completed
+
+**상태**: completed
+**소요 시간**: 약 15분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`equation.py`에 `normalize_parts` + 헬퍼 함수 10개(R-01~R-10) 구현. `parts_to_run_content` 진입 시 자동 호출. `pyproject.toml` 및 `tests/test_parts_normalizer.py` 신규 생성. Phase 1 fixture 28개 × 2 suite = 56 테스트 전부 pass. 기존 build 회귀 없음, section0.xml 두 번 빌드 identical 확인.
+
+#### 변경 파일
+- `/Users/junhyukpark/ngd/ngd-studio/equation.py` (수정, 약 +280줄): normalize_parts 함수군 추가, parts_to_run_content 진입부에 normalize_parts 삽입
+- `/Users/junhyukpark/ngd/ngd-studio/pyproject.toml` (신규, +3줄): minimal pytest 설정
+- `/Users/junhyukpark/ngd/ngd-studio/tests/test_parts_normalizer.py` (신규, +56줄): parametrized fixture 테스트 + idempotency 테스트
+
+#### 검증 결과
+- [x] unit test: `python3 -m pytest tests/test_parts_normalizer.py -v` → 56 passed in 0.03s
+- [x] 회귀: `build_hwpx.py` + `fix_namespaces.py` + `validate.py --fix` → "HWPX 검증 통과"
+- [x] idempotency build: 두 번 빌드 후 section0.xml diff → IDENTICAL
+
+#### 추가 발견사항
+R-01 split 로직은 "2번째 이후 최상위 `=`에서 분리" (첫 번째 `=`는 chunk 0에 포함). R-09는 partial 규칙 특성상 숫자 뒤에 오는 단위만 변환(변수 오탐 방지). R-10은 `{}` + `()` 양쪽 depth 추적으로 지수·괄호 내부 보호.
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+
+pass — equation.py + pyproject.toml + tests/test_parts_normalizer.py 모두 scope 내. (Phase 2/3 batch에서 session_id 공유로 hook 로그 직접 격리 불가 → git diff 기반 파일 단위 확인.)
+
+#### Verification Re-run (orchestrator)
+
+exit 0 — `python3 -m pytest tests/test_parts_normalizer.py` 56 passed (build_hwpx 회귀/idempotency는 worker 기록 인정).
+
+#### Simplify (orchestrator)
+
+2 files, 5 edits — equation.py `_operator_spaces()` 래퍼 인라인화 + `_normalize_part` 중복 분기 병합 + `_replace` 데드 ternary 정리, test 파일 index.json 중복 가드 제거. 검증 재실행 pass.
+
+#### Review (orchestrator)
+
+pass — A~I 전부 OK. 56 passed/0.03s, idempotency 확인, scope 준수.
