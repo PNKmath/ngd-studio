@@ -131,21 +131,22 @@ with zipfile.ZipFile(양식지_경로, 'r') as z:
 
 ### 선지 테이블 (①②③④⑤)
 
-| 템플릿 파일 | 구조 | 용도 |
-|------------|------|------|
-| `choice_table_5x5.xml` | 5행x5열 | 기본 5선지 |
-| `choice_table_6x3.xml` | 6행x3열 | (가)(나) 빈칸 선지 |
-| `choice_table_6x4.xml` | 6행x4열 | (가)(나) 값 선지 |
-| `choice_table_9x4.xml` | 9행x4열 | (가)(나)(다) 값 선지 |
+| 템플릿 파일 | type tag | 용도 |
+|------------|---------|------|
+| `pq_proposition_table_5x5.xml` | `proposition` (5x5) | p:/가정/q:/결론 5명제 |
+| `choice_image_5options.xml` | `choice_image` (9x4) | 그림 5선지 + 이미지 placeholder |
+| `choice_grid_2cols.xml` | `choice_grid_2cols` (6x3) | (가)(나) 2열 선지 |
+| `choice_grid_3cols.xml` | `choice_grid_3cols` (6x4) | (가)(나)(다) 3열 선지 |
 
-**사용법**: 선지 유형에 따라 적절한 템플릿 선택. 각 선지 내용 셀에 수식/텍스트 삽입.
+**사용법**: 선지 유형에 따라 적절한 템플릿 선택. type tag 별 셀 명세는 `docs/extractor-reference/` 참조.
 
 ### 보기 테이블 (ㄱ,ㄴ,ㄷ)
 
 | 템플릿 파일 | 항목 수 |
 |------------|--------|
-| `bogi_table_3items.xml` | 3항 (ㄱ,ㄴ,ㄷ) |
-| `bogi_table_6items.xml` | 6항 (ㄱ~ㅂ) |
+| `bogi_box_3items.xml` | 3항 (ㄱ,ㄴ,ㄷ) |
+| `bogi_box_4items.xml` | 4항 (ㄱ,ㄴ,ㄷ,ㄹ) |
+| `bogi_box_6items.xml` | 6항 (ㄱ~ㅂ) |
 
 ### 증명 테이블
 
