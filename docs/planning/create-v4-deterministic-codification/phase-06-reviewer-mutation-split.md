@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: reviewer mutation 분리
-status: pending
+status: completed
 depends_on: []
 scope:
   - .claude/agents/ngd-exam-reviewer.md
@@ -85,12 +85,12 @@ async function runReviewStage(input) {
 
 ## 체크리스트
 
-- [ ] `ngd-studio/server/review/mutation.ts` — `zipReplaceHwpxSection`, `applyReviewMutations` 구현
-- [ ] `ngd-studio/server/review/reviewTable.ts` — `writeFixedReviewTableEntries`, `runAddReviewTable` wrapper
-- [ ] `ngd-studio/server/review/postprocess.ts` — `runReviewPostprocess`
-- [ ] `.claude/agents/ngd-exam-reviewer.md` — issue draft 생성만 하도록 재작성 + 출력 schema 정의
-- [ ] `ngd-studio/server/stages/reviewRunner.ts` — draft → mutation → table → postprocess orchestration
-- [ ] `server/review/__tests__/mutation.test.ts` — fixture HWPX로 mutation 정확성 검증
+- [x] `ngd-studio/server/review/mutation.ts` — `zipReplaceHwpxSection`, `applyReviewMutations` 구현
+- [x] `ngd-studio/server/review/reviewTable.ts` — `writeFixedReviewTableEntries`, `runAddReviewTable` wrapper
+- [x] `ngd-studio/server/review/postprocess.ts` — `runReviewPostprocess`
+- [x] `.claude/agents/ngd-exam-reviewer.md` — issue draft 생성만 하도록 재작성 + 출력 schema 정의
+- [x] `ngd-studio/server/stages/reviewRunner.ts` — draft → mutation → table → postprocess orchestration
+- [x] `server/review/__tests__/mutation.test.ts` — fixture HWPX로 mutation 정확성 검증
 - [ ] 기존 오검 fixture 1개로 e2e: draft → mutation → 결과 HWPX가 기존 reviewer 출력과 동일/우월
 
 ## 영향 범위
@@ -112,3 +112,59 @@ python3 resources/hwpx_scripts/validate.py <reviewed.hwpx> --fix
 ```
 
 **사용자 확인 포인트**: 기존 reviewer agent가 했던 mutation 케이스 중 새 모듈로 옮기기 모호한 것(예: LLM이 ad-hoc XML 생성하던 케이스)이 있다면 사용자와 함께 결정.
+
+---
+
+## 실행 기록
+
+### 1회차 (2026-05-20 08:51 KST) — completed
+
+**상태**: completed
+**소요 시간**: 약 12분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+
+`server/review/` 신규 디렉터리에 mutation/reviewTable/postprocess 3개 모듈 + reviewRunner orchestrator를 생성했다. ngd-exam-reviewer.md를 issue-draft-only로 재작성하고, JSZip 기반 fixture HWPX로 8개 단위 테스트를 작성하여 전부 통과했다. tsc --noEmit도 0 오류. e2e(실제 HWPX 파일)는 오검 실운영 시 수동 검증 필요.
+
+#### 변경 파일
+
+- `ngd-studio/server/review/mutation.ts` (신규, +148줄) — `zipReplaceHwpxSection`, `applyReviewMutations`
+- `ngd-studio/server/review/reviewTable.ts` (신규, +175줄) — `writeFixedReviewTableEntries`, `runAddReviewTable`
+- `ngd-studio/server/review/postprocess.ts` (신규, +82줄) — `runReviewPostprocess`
+- `ngd-studio/server/stages/reviewRunner.ts` (신규, +122줄) — LLM → mutation → table → postprocess orchestrator
+- `ngd-studio/server/review/__tests__/mutation.test.ts` (신규, +178줄) — 8개 단위 테스트
+- `.claude/agents/ngd-exam-reviewer.md` (수정) — issue draft 전용으로 재작성, `Write/Edit` 도구 제거
+- `ngd-studio/vitest.config.ts` (수정) — `server/review/__tests__/` include 추가
+
+#### 검증 결과
+
+- [x] `npx tsc --noEmit`: 0 오류 (exit 0)
+- [x] `npx vitest run server/review/__tests__/mutation.test.ts --reporter=basic`: 8/8 통과 (30ms)
+- [x] 기존 테스트 회귀 없음: 412 passed (2 pre-existing failures: live API + orchestrator timeout)
+
+#### 추가 발견사항
+
+- e2e 항목(체크리스트 7번째)은 실제 오검 HWPX fixture가 없어 자동 검증 불가. 첫 오검 실운영 시 `reviewRunner`를 호출하고 `validate.py` exit 0 확인으로 대체한다.
+- `writeFixedReviewTableEntries`의 3rd-cell 탐색 로직은 정규식 대신 단순 indexOf 계산을 사용하므로 idempotent하고 XML 파서 불필요.
+
+#### 질문 / 결정 사항
+
+- reviewer agent가 "어떻게든 처리"했던 케이스(LLM이 ad-hoc XML 블록 전체를 생성하던 경우)는 `suggested_fix`에 XML fragment 전체를 담는 것으로 처리 가능하나, 첫 실운영에서 케이스별로 검증 권장.
+- `runAddReviewTable`의 scriptPath default는 `__dirname` 기반 repo-root 추론을 사용. 빌드 번들 시 경로가 달라질 수 있으므로 UI 오검 페이지에서 호출 시 `scriptPath`를 명시적으로 주입하도록 처리 필요.
+
+#### Scope Audit (orchestrator)
+
+pass (사용자 사전 승인) — frontmatter scope에 추가로 spec body §설계 명시 파일(postprocess.ts, reviewRunner.ts) + vitest.config.ts include 1줄 수정 포함. 사용자 확인 절차로 정당화.
+
+#### Verification Re-run (orchestrator)
+
+exit 0 — pnpm tsc --noEmit 0 errors, server/review/__tests__/mutation.test.ts 8/8 pass.
+
+#### Simplify (orchestrator)
+
+3 files, 5 edits — mutation.ts(err 추출 평탄화), reviewTable.ts(option chain), reviewRunner.ts(Set 타입 단순화), postprocess.ts(미사용 resolveReviewPostprocessScripts 인라인화). 검증 재실행 pass.
+
+#### Review (orchestrator)
+
+pass — A~I 전부 OK. e2e 7번 항목은 fixture 부재로 수동 검증 정당, scope 확장은 사용자 승인. 1개 비-차단 노트: buildFixedTableEntries의 문제번호 "확인" 하드코딩은 ReviewIssueDraft 인터페이스 한계로 차기 iteration 이슈.
