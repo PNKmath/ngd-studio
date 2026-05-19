@@ -79,13 +79,15 @@ export async function runExtractorStage(
   const combinedPrompt = system + "\n\n" + user;
 
   // maxTurns: 5 — enough for: system thinking + Read(ref doc) + JSON output
-  // allowedTools: ["Read"] — sandbox: extractor LLM may only Read files (no Write/Bash/Edit)
+  // allowedTools: read-only set (Read/Grep/Glob). Bash/Write/Edit blocked — extractor
+  // must not modify files or execute shell. Grep/Glob enable fixture discovery when
+  // type tag is ambiguous (e.g., listing docs/extractor-reference/ to find matching type).
   const providerResult = provider.run(combinedPrompt, {
     stageKey: "create.extractor",
     imagePaths: [input.imagePath],
     signal: input.signal,
     maxTurns: 5,
-    allowedTools: ["Read"],
+    allowedTools: ["Read", "Grep", "Glob"],
   });
 
   const { text, exitCode } = await collectProviderText(providerResult);

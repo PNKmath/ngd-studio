@@ -545,7 +545,7 @@ describe("runExtractorStage — supportsTools guard (Phase 2)", () => {
 });
 
 describe("runExtractorStage — agentic options (Phase 2)", () => {
-  it("passes maxTurns=5 and allowedTools=['Read'] to provider.run", async () => {
+  it("passes maxTurns=5 and read-only allowedTools (Read/Grep/Glob) to provider.run", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
@@ -562,6 +562,6 @@ describe("runExtractorStage — agentic options (Phase 2)", () => {
     expect(spy).toHaveBeenCalledOnce();
     const [, options] = spy.mock.calls[0] as [string, ProviderRunOptions];
     expect(options.maxTurns).toBe(5);
-    expect(options.allowedTools).toEqual(["Read"]);
+    expect(options.allowedTools).toEqual(["Read", "Grep", "Glob"]);
   });
 });
