@@ -144,7 +144,12 @@ def fix_hwpx(hwpx_path):
                                 if int(m2.group(1)) != actual_col or int(m2.group(2)) != ri:
                                     changed = True
                                 r = f'<hp:cellAddr colAddr="{actual_col}" rowAddr="{ri}"'
-                                ci += 1
+                                # 현재 cellAddr 뒤의 cellSpan 에서 colSpan 추출 → ci 를 colSpan 만큼 증가.
+                                # cellSpan 은 같은 cell 안의 cellAddr 직후에 위치.
+                                rest = m2.string[m2.end():]
+                                next_span_m = re.search(r'<hp:cellSpan colSpan="(\d+)" rowSpan="\d+"', rest)
+                                col_span = int(next_span_m.group(1)) if next_span_m else 1
+                                ci += col_span
                                 return r
                             # First pass: fix cellAddr, then extract spans
                             fixed_tc = re.sub(r'<hp:cellAddr colAddr="(\d+)" rowAddr="(\d+)"', fa, tc)

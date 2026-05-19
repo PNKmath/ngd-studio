@@ -488,9 +488,10 @@ def main(exam_json=None, output_dir=None, base_path=None):
         prv_lines.append(line[:80])
     prv_text = "\n".join(prv_lines[:20])
 
-    # === Output filename ===
+    # === Output filename (with _ver{YYYYMMDD-HHMMSS} suffix) ===
+    ver_suffix = datetime.now().strftime("_ver%Y%m%d-%H%M%S")
     if "filename_base" in info:
-        filename = info["filename_base"] + ".hwpx"
+        filename = info["filename_base"] + ver_suffix + ".hwpx"
     else:
         code = info.get("code", "00000")
         year = info.get("year", "?")
@@ -501,7 +502,7 @@ def main(exam_json=None, output_dir=None, base_path=None):
         school = info.get("school", "")
         subject_code = info.get("subject_code", info.get("subject", ""))
         range_str = info.get("range", "").replace(" ~ ", "~")
-        filename = f"[{code}][고][{year}][{grade}-{sem_num}-{exam_code}][{region}][{school}][{subject_code}][{range_str}][{code}].hwpx"
+        filename = f"[{code}][고][{year}][{grade}-{sem_num}-{exam_code}][{region}][{school}][{subject_code}][{range_str}][{code}]{ver_suffix}.hwpx"
 
     output_path = os.path.join(output_dir, filename)
     os.makedirs(output_dir, exist_ok=True)
