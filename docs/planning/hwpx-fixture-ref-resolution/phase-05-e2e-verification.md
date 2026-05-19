@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: E2E 검증 + showcase round-trip
-status: needs_user
+status: completed
 depends_on: [4]
 scope:
   - tools/build_template_showcase.py

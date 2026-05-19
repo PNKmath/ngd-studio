@@ -28,7 +28,7 @@ HWPX build 파이프라인의 LLM 의존성은 직전 작업(`hwpx-build-llm-rem
 | 3 | [phase-03-fixture-ref-remap.md](./phase-03-fixture-ref-remap.md) | 7 | 7 | 100% | completed | 1742aaf |
 | 4 | [phase-04-selector-code.md](./phase-04-selector-code.md) | 4 | 4 | 100% | completed | 6f87102 |
 | 5 | [phase-05-e2e-verification.md](./phase-05-e2e-verification.md) | 5 | 5 | 100% | completed | 03b9eea |
-| **Total** | | **26** | **21** | **81%** | | |
+| **Total** | | **26** | **26** | **100%** | | |
 
 ## Phase 의존성
 
