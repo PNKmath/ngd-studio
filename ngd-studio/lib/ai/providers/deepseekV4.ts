@@ -196,6 +196,7 @@ async function* runDeepSeek(prompt: string, options: ProviderRunOptions | undefi
 export const deepseekV4Provider: AIProviderAdapter = {
   id: "deepseek-v4",
   label: "DeepSeek V4 API",
+  supportsTools: false,
   run(prompt: string, options?: ProviderRunOptions): ProviderRunResult {
     let resolveExitCode: (code: number) => void = () => undefined;
     let closed = false;

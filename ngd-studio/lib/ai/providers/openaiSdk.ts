@@ -111,6 +111,7 @@ async function* runOpenaiSdk(
 export const openaiSdkProvider: AIProviderAdapter = {
   id: "openai-sdk",
   label: "OpenAI SDK",
+  supportsTools: false,
   run(prompt: string, options?: ProviderRunOptions): ProviderRunResult {
     let resolveExitCode: (code: number) => void = () => undefined;
     let closed = false;

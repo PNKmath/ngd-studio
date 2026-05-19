@@ -86,6 +86,7 @@ function makeMockProvider(
   return {
     id,
     label: `Mock(${id})`,
+    supportsTools: false as const,
     run(_prompt: string, _options?: ProviderRunOptions) {
       async function* events() {
         yield {

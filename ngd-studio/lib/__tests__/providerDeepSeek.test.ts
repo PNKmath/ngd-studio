@@ -159,6 +159,7 @@ describe("DeepSeek V4 provider", () => {
         provider: {
           id: "deepseek-v4",
           label: "DeepSeek V4",
+          supportsTools: false as const,
           run() {
             return {
               process: {} as never,
@@ -208,6 +209,7 @@ describe("DeepSeek V4 provider", () => {
         provider: {
           id: "deepseek-v4",
           label: "DeepSeek V4",
+          supportsTools: false as const,
           run() {
             return {
               process: {} as never,
@@ -296,6 +298,7 @@ describe("DeepSeek V4 provider", () => {
         provider: {
           id: "deepseek-v4",
           label: "DeepSeek V4",
+          supportsTools: false as const,
           run() {
             return {
               process: {} as never,

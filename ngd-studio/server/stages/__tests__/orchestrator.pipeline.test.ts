@@ -93,6 +93,7 @@ function makeMockProvider(
   return {
     id,
     label: `Mock(${id})`,
+    supportsTools: false as const,
     run(_prompt: string, _options?: ProviderRunOptions) {
       async function* events() {
         if (delayMs > 0) {
@@ -137,6 +138,7 @@ function makeFailProvider(opts: { id?: AIProviderAdapter["id"] } = {}): AIProvid
   return {
     id,
     label: `FailMock(${id})`,
+    supportsTools: false as const,
     run(_prompt: string, _options?: ProviderRunOptions) {
       async function* events() {
         yield { type: "result" as const, subtype: "error" as const, result: "provider failed" };

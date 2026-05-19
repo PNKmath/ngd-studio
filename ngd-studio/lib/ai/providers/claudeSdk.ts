@@ -122,6 +122,7 @@ async function* runClaudeSdk(
 export const claudeSdkProvider: AIProviderAdapter = {
   id: "claude-sdk",
   label: "Claude SDK",
+  supportsTools: false,
   run(prompt: string, options?: ProviderRunOptions): ProviderRunResult {
     let resolveExitCode: (code: number) => void = () => undefined;
     let closed = false;

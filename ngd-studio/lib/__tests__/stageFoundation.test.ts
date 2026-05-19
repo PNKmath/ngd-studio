@@ -110,6 +110,7 @@ describe("stage foundation helpers", () => {
     const provider = createStageModelProvider({
       id: "deepseek-v4",
       label: "DeepSeek V4",
+      supportsTools: false as const,
       run(prompt, options) {
         runCalls.push({ prompt, stageKey: options?.stageKey });
         return {

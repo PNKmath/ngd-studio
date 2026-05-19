@@ -167,6 +167,7 @@ const CODEX_IDLE_TIMEOUT_MS = parseInt(process.env.CODEX_IDLE_TIMEOUT_MS ?? "180
 export const codexCliProvider: AIProviderAdapter = {
   id: "codex-cli",
   label: "Codex CLI",
+  supportsTools: true,
   run(prompt: string, options?: ProviderRunOptions): ProviderRunResult {
     const cwd = options?.cwd ?? process.cwd();
     const args = buildCodexExecArgs(prompt, cwd, options?.imagePaths);

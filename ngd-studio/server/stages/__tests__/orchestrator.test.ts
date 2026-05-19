@@ -76,6 +76,7 @@ function makeMockProvider(
   return {
     id,
     label: "Mock",
+    supportsTools: false as const,
     run(_prompt: string, _options?: ProviderRunOptions) {
       const text = typeof responseJson === "string" ? responseJson : JSON.stringify(responseJson);
 
@@ -309,6 +310,7 @@ describe("runStageOrchestrator", () => {
     const signalCapturingProvider: AIProviderAdapter = {
       id: "claude-sdk",
       label: "SignalCapture",
+      supportsTools: false,
       run(_prompt: string, options?: ProviderRunOptions) {
         capturedSignals.push(options?.signal);
         // Return a valid (non-aborted) response so the stage completes.

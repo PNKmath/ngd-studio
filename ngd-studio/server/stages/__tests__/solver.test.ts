@@ -51,6 +51,7 @@ function makeMockProvider(
   return {
     id: "claude-sdk",
     label: "Mock Provider",
+    supportsTools: false as const,
     run(prompt: string, options?: ProviderRunOptions) {
       runFn(prompt, options);
 
