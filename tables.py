@@ -3,6 +3,21 @@
 NGD HWPX Builder — Table template XML generation
 
 Import direction: ids → equation → shapes → tables → assemble → build_hwpx
+
+=== Generator 함수 셀 라우팅 컨벤션 (NGD V4 후속) ===
+
+새 가변 표 generator 추가 시, 각 셀 주입(`_inject_cell_value`) 시점에 다음 중 하나를
+명시 결정하고 인자 또는 주석(`# heuristic` / `# force_equation` / `# force_text`)으로 표기:
+
+1. force_equation=True  → 셀이 항상 수식 (양식지가 HYhwpEQ 폰트로 렌더링하는 경우).
+                          예: syn_div(조립제법), pascal(이항계수)
+2. force_text=True      → 셀이 항상 일반 텍스트 (라벨, 한글 단어 등 수식 폰트 불필요).
+3. (둘 다 명시 안 함) → heuristic 분기 (변수/특수문자 있으면 equation, 없으면 text).
+                         예: inc_dec 부호·x값, choice_table 선지, normal_dist/probability 수치
+
+[주의] heuristic 의존은 "정수 셀이 자동 text 됨" 같은 시각 회귀의 직접 원인이 된 적 있음
+(ngd-create-v4-coherence Phase 5 3회차 참조). 정책이 모호한 경우 force_equation/force_text를
+명시하는 것이 안전.
 """
 
 import re
@@ -19,29 +34,44 @@ def _replace_table_ids(xml):
     return xml
 
 
-def _inject_cell_value(cell_xml, value, force_equation=False):
+def _inject_cell_value(cell_xml, value, force_equation=False, *, force_text=False):
     """셀(빈 셀 또는 이미 채워진 셀)에 값(텍스트 or 수식)을 삽입.
 
     기존: self-closing run(<hp:run charPrIDRef="N"/>)만 매칭 → 채워진 셀 덮어쓰기 불가.
     개선: self-closing run 없으면 내용 있는 run(<hp:run ...>...</hp:run>)도 교체.
-    force_equation=True 면 값에 영문/특수문자가 없어도 항상 equation 으로 렌더링
-    (syn_div 처럼 모든 셀이 수식이어야 하는 표용).
+
+    routing 정책 (mutually exclusive):
+      force_equation=True  → 항상 equation (HYhwpEQ 폰트; 단순 정수도 수식 폰트 렌더링).
+      force_text=True      → 항상 일반 텍스트 (xml_escape 후 <hp:t> 삽입).
+      둘 다 False          → heuristic (변수/특수문자 있으면 equation, 없으면 text).
+
+    주의: force_equation 과 force_text 동시 True 는 오류.
     """
+    if force_equation and force_text:
+        raise ValueError("force_equation 과 force_text 동시 True 불가")
+
     if not value:
         return cell_xml
 
     arrow_map = {"NEARROW": "NEARROW", "SEARROW": "SEARROW"}
     if value in arrow_map:
+        # 화살표는 항상 equation (특수 수식 심볼)
         eq_xml = make_equation_xml(arrow_map[value])
         params = lineseg_params_for_eq(arrow_map[value])
         run = f'<hp:run charPrIDRef="1">{eq_xml}<hp:t/></hp:run>'
         ls = make_lineseg(0, params[0], params[1], params[2], params[3])
+    elif force_text:
+        # force_text: 항상 일반 텍스트
+        run = f'<hp:run charPrIDRef="1"><hp:t>{xml_escape(value)}</hp:t></hp:run>'
+        ls = make_lineseg(0, 1000, 1000, 850, 600)
     elif force_equation or re.search(r'[a-zA-Z_{}^\\`]', value):
+        # force_equation 또는 heuristic → equation
         eq_xml = make_equation_xml(value)
         params = lineseg_params_for_eq(value)
         run = f'<hp:run charPrIDRef="1">{eq_xml}<hp:t/></hp:run>'
         ls = make_lineseg(0, params[0], params[1], params[2], params[3])
     else:
+        # heuristic → text (특수문자 없는 순수 숫자/기호)
         run = f'<hp:run charPrIDRef="1"><hp:t>{xml_escape(value)}</hp:t></hp:run>'
         ls = make_lineseg(0, 1000, 1000, 850, 600)
 
@@ -101,9 +131,10 @@ def make_data_table_xml(data_table, base_path):
             z_val = "".join(part.get("eq", part.get("t", "")) for part in row[0]) if len(row) >= 1 else ""
             p_val = "".join(part.get("eq", part.get("t", "")) for part in row[1]) if len(row) >= 2 else ""
             if z_val:
-                cells[z_idx] = _inject_cell_value(cells[z_idx], z_val)
+                # normal_dist: z값·P값 모두 heuristic — 순수 숫자는 text, 변수 포함 시 equation
+                cells[z_idx] = _inject_cell_value(cells[z_idx], z_val)  # heuristic
             if p_val:
-                cells[p_idx] = _inject_cell_value(cells[p_idx], p_val)
+                cells[p_idx] = _inject_cell_value(cells[p_idx], p_val)  # heuristic
 
         # 재조립: 제목 1셀 + 헤더 2셀 + 데이터 행(Z, P) × template_rows
         header_tag = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
@@ -145,11 +176,13 @@ def make_data_table_xml(data_table, base_path):
 
         for i, hp in enumerate(header_parts[:n_data]):
             val = extract_val(hp) if isinstance(hp, list) else str(hp)
-            cells[1 + i] = _inject_cell_value(cells[1 + i], val)
+            # probability: x헤더 값 — 숫자 또는 변수, heuristic 분기 적절
+            cells[1 + i] = _inject_cell_value(cells[1 + i], val)  # heuristic
 
         for i, pp in enumerate(prob_row[:n_data]):
             val = extract_val(pp) if isinstance(pp, list) else str(pp)
-            cells[n_total + 1 + i] = _inject_cell_value(cells[n_total + 1 + i], val)
+            # probability: P값 — 분수/소수, 변수 포함 가능, heuristic 분기 적절
+            cells[n_total + 1 + i] = _inject_cell_value(cells[n_total + 1 + i], val)  # heuristic
 
         # 재조립 (2행)
         header_tag = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
@@ -198,19 +231,21 @@ def make_increase_decrease_table(explanation_table, base_path):
         cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
         n_cols = tpl_n_cols
         # 헤더 row의 x값 셀: cells[2], cells[4], ... (짝수 col idx 2부터)
+        # routing: heuristic — x값은 변수/수식 문자열 포함 가능 (예: "a", "x", "1")
         for vi, xv in enumerate(x_values):
             cell_idx = 2 + vi * 2
             if cell_idx < n_cols:
-                cells[cell_idx] = _inject_cell_value(cells[cell_idx], str(xv))
+                cells[cell_idx] = _inject_cell_value(cells[cell_idx], str(xv))  # heuristic
         # 데이터 행: row i → cells[(i+1)*n_cols .. (i+2)*n_cols-1]
         # cells[base+0]=label(보존), cells[base+1..n_cols-1]=values
+        # routing: heuristic — 부호(+, -, 0)는 text, 변수(f'(x) 등)는 equation으로 자동 분기
         for ri, row_data in enumerate(rows[:tpl_n_data_rows]):
             base = (ri + 1) * n_cols
             n_val_slots = n_cols - 1
             values = row_data.get("values", [])
             for vi in range(n_val_slots):
                 if vi < len(values):
-                    cells[base + 1 + vi] = _inject_cell_value(cells[base + 1 + vi], str(values[vi]))
+                    cells[base + 1 + vi] = _inject_cell_value(cells[base + 1 + vi], str(values[vi]))  # heuristic
         hdr = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
         out = hdr
         for ri in range(tpl_n_data_rows + 1):
@@ -484,91 +519,51 @@ def make_pascal_table(data, base_path):
     total_w = CELL_W * col_cnt
     total_h = CELL_H * n_rows
 
+    def _pascal_cell(col, ri, val=""):
+        cell = (
+            f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0"'
+            f' borderFillIDRef="1">'
+            f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER"'
+            f' linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0"'
+            f' hasTextRef="0" hasNumRef="0">'
+            f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0"'
+            f' pageBreak="0" columnBreak="0" merged="0">'
+            f'<hp:run charPrIDRef="1"/>'
+            f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"'
+            f' vertsize="1000" textheight="1000" baseline="850" spacing="600"'
+            f' horzpos="0" horzsize="{CELL_W - 2}" flags="393216"/></hp:linesegarray>'
+            f'</hp:p></hp:subList>'
+            f'<hp:cellAddr colAddr="{col}" rowAddr="{ri}"/>'
+            f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
+            f'<hp:cellSz width="{CELL_W}" height="{CELL_H}"/>'
+            f'<hp:cellMargin left="510" right="510" top="141" bottom="141"/>'
+            f'</hp:tc>'
+        )
+        if val:
+            # pascal: 이항계수는 항상 equation (HYhwpEQ 폰트 렌더링 필요)
+            cell = _inject_cell_value(cell, str(val), force_equation=True)
+        return cell
+
     trs = []
     for ri in range(n_rows):
         row_vals = cells_data[ri] if ri < len(cells_data) else []
         n_data = ri + 1  # 이 행의 데이터 셀 수
 
         # 빈 패딩 슬롯 수
-        total_slots = col_cnt
-        n_pad_each = (total_slots - n_data) // 2
-        n_left_pad = n_pad_each
-        n_right_pad = total_slots - n_data - n_left_pad
+        n_left_pad = (col_cnt - n_data) // 2
+        n_right_pad = col_cnt - n_data - n_left_pad
 
-        cells_xml = ""
         col = 0
-
-        # 왼쪽 패딩 셀들
+        cells_xml = ""
         for _ in range(n_left_pad):
-            cells_xml += (
-                f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0"'
-                f' borderFillIDRef="1">'
-                f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER"'
-                f' linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0"'
-                f' hasTextRef="0" hasNumRef="0">'
-                f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0"'
-                f' pageBreak="0" columnBreak="0" merged="0">'
-                f'<hp:run charPrIDRef="1"/>'
-                f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"'
-                f' vertsize="1000" textheight="1000" baseline="850" spacing="600"'
-                f' horzpos="0" horzsize="{CELL_W - 2}" flags="393216"/></hp:linesegarray>'
-                f'</hp:p></hp:subList>'
-                f'<hp:cellAddr colAddr="{col}" rowAddr="{ri}"/>'
-                f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
-                f'<hp:cellSz width="{CELL_W}" height="{CELL_H}"/>'
-                f'<hp:cellMargin left="510" right="510" top="141" bottom="141"/>'
-                f'</hp:tc>'
-            )
+            cells_xml += _pascal_cell(col, ri)
             col += 1
-
-        # 데이터 셀들
         for di in range(n_data):
             val = row_vals[di] if di < len(row_vals) else ""
-            cell = (
-                f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0"'
-                f' borderFillIDRef="1">'
-                f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER"'
-                f' linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0"'
-                f' hasTextRef="0" hasNumRef="0">'
-                f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0"'
-                f' pageBreak="0" columnBreak="0" merged="0">'
-                f'<hp:run charPrIDRef="1"/>'
-                f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"'
-                f' vertsize="1000" textheight="1000" baseline="850" spacing="600"'
-                f' horzpos="0" horzsize="{CELL_W - 2}" flags="393216"/></hp:linesegarray>'
-                f'</hp:p></hp:subList>'
-                f'<hp:cellAddr colAddr="{col}" rowAddr="{ri}"/>'
-                f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
-                f'<hp:cellSz width="{CELL_W}" height="{CELL_H}"/>'
-                f'<hp:cellMargin left="510" right="510" top="141" bottom="141"/>'
-                f'</hp:tc>'
-            )
-            if val:
-                cell = _inject_cell_value(cell, str(val))
-            cells_xml += cell
+            cells_xml += _pascal_cell(col, ri, val)
             col += 1
-
-        # 오른쪽 패딩 셀들
         for _ in range(n_right_pad):
-            cells_xml += (
-                f'<hp:tc name="" header="0" hasMargin="0" protect="0" editable="0" dirty="0"'
-                f' borderFillIDRef="1">'
-                f'<hp:subList id="" textDirection="HORIZONTAL" lineWrap="BREAK" vertAlign="CENTER"'
-                f' linkListIDRef="0" linkListNextIDRef="0" textWidth="0" textHeight="0"'
-                f' hasTextRef="0" hasNumRef="0">'
-                f'<hp:p id="2147483648" paraPrIDRef="3" styleIDRef="0"'
-                f' pageBreak="0" columnBreak="0" merged="0">'
-                f'<hp:run charPrIDRef="1"/>'
-                f'<hp:linesegarray><hp:lineseg textpos="0" vertpos="0"'
-                f' vertsize="1000" textheight="1000" baseline="850" spacing="600"'
-                f' horzpos="0" horzsize="{CELL_W - 2}" flags="393216"/></hp:linesegarray>'
-                f'</hp:p></hp:subList>'
-                f'<hp:cellAddr colAddr="{col}" rowAddr="{ri}"/>'
-                f'<hp:cellSpan colSpan="1" rowSpan="1"/>'
-                f'<hp:cellSz width="{CELL_W}" height="{CELL_H}"/>'
-                f'<hp:cellMargin left="510" right="510" top="141" bottom="141"/>'
-                f'</hp:tc>'
-            )
+            cells_xml += _pascal_cell(col, ri)
             col += 1
 
         trs.append(f'<hp:tr>{cells_xml}</hp:tr>')
@@ -637,7 +632,8 @@ def make_choice_table(condition_box, base_path):
         if row < len(rows_data) and col < len(rows_data[row]):
             val = rows_data[row][col]
             if val:
-                return _inject_cell_value(cell, str(val))
+                # choice_table: 셀 내용이 선지 텍스트 또는 수식 혼합 — heuristic 분기 적절
+                return _inject_cell_value(cell, str(val))  # heuristic
         return cell
 
     return re.sub(r'<hp:tc\b.*?</hp:tc>', _sub_cell, tbl_xml, flags=re.DOTALL)
