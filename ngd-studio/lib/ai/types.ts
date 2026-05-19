@@ -47,9 +47,10 @@ export interface ProviderRunResult {
 export interface AIProviderAdapter {
   id: ResolvedAIProviderId;
   label: string;
-  /** true if this provider natively supports tool use (Read/Write/Bash etc.) via its CLI agent loop.
-   * claude-cli and codex-cli have native Read tool access and can run agentic extractor flows.
-   * claude-sdk, openai-sdk, deepseek-v4 are single-turn API calls — no tool use (for now). */
+  /** true if this provider can run an agentic tool-use loop (Read/Grep/Glob) for extractor flows.
+   * claude-cli / codex-cli: native CLI agent loop.
+   * claude-sdk / openai-sdk: host-side tool execution loop (sandbox: docs/extractor-reference/).
+   * deepseek-v4: single-turn API call — no tool use. */
   supportsTools: boolean;
   run(prompt: string, options?: ProviderRunOptions): ProviderRunResult;
 }
