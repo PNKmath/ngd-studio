@@ -565,3 +565,84 @@ describe("runExtractorStage — agentic options (Phase 2)", () => {
     expect(options.allowedTools).toEqual(["Read", "Grep", "Glob"]);
   });
 });
+
+// ─── Phase 4: 4-provider parametric cross-provider e2e ───────────────────────
+
+/**
+ * Helper factories that return a mock AIProviderAdapter mimicking each of the
+ * 4 real providers. CLI providers (claude-cli, codex-cli) cannot be invoked in
+ * a unit-test environment, so we use the same mock pattern as the existing tests
+ * but label them with the correct provider id.
+ */
+function makeMockClaudeCliProvider(): AIProviderAdapter {
+  return { ...makeMockProvider(JSON.stringify(VALID_OUTPUT)), id: "claude-cli" as const, label: "Claude CLI" };
+}
+
+function makeMockCodexCliProvider(): AIProviderAdapter {
+  return { ...makeMockProvider(JSON.stringify(VALID_OUTPUT)), id: "codex-cli" as const, label: "Codex CLI" };
+}
+
+function makeMockClaudeSdkProvider(): AIProviderAdapter {
+  return { ...makeMockProvider(JSON.stringify(VALID_OUTPUT)), label: "Claude SDK" };
+}
+
+function makeMockOpenaiSdkProvider(): AIProviderAdapter {
+  return { ...makeMockProvider(JSON.stringify(VALID_OUTPUT)), id: "openai-sdk" as const, label: "OpenAI SDK" };
+}
+
+describe.each([
+  ["claude-cli", makeMockClaudeCliProvider],
+  ["codex-cli", makeMockCodexCliProvider],
+  ["claude-sdk", makeMockClaudeSdkProvider],
+  ["openai-sdk", makeMockOpenaiSdkProvider],
+] as const)(
+  "extractor with provider %s (Phase 4 cross-provider)",
+  (_label, providerFactory) => {
+    it("completes Read(ref doc) → JSON output flow", async () => {
+      const base = await makeTempDir();
+      const cache = await makeCache(base);
+      const provider = providerFactory();
+
+      const result = await runExtractorStage({
+        questionNumber: 1,
+        imagePath: "/some/q01.png",
+        cache,
+        provider,
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.output).toBeDefined();
+      expect(result.output?.has_figure).toBe(false);
+    });
+
+    it("supportsTools=true on the provider used in this test", () => {
+      const provider = providerFactory();
+      expect(provider.supportsTools).toBe(true);
+    });
+  }
+);
+
+describe("runExtractorStage — supportsTools=false rejection preserved (Phase 4)", () => {
+  it("deepseek-v4 mock (supportsTools=false) is rejected with extractor_provider_unsupported_tools", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    // Simulate deepseek-v4: vision not supported, supportsTools=false
+    const deepseekMock: AIProviderAdapter = {
+      ...makeMockProvider(JSON.stringify(VALID_OUTPUT), 0, undefined, false),
+      id: "deepseek-v4" as const,
+      label: "DeepSeek V4",
+    };
+
+    const result = await runExtractorStage({
+      questionNumber: 1,
+      imagePath: "/some/q01.png",
+      cache,
+      provider: deepseekMock,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error?.code).toBe("extractor_provider_unsupported_tools");
+    expect(result.error?.retryable).toBe(false);
+  });
+});

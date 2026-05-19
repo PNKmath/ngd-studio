@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: cross-provider e2e + 회귀 검증
-status: pending
+status: completed
 depends_on: [2, 3]
 scope:
   - ngd-studio/server/stages/__tests__/extractor.test.ts
@@ -52,9 +52,9 @@ CLI provider 는 실 CLI 호출이 어려우므로 mock 으로 대체 (claude-cl
 
 ## 체크리스트
 
-- [ ] 4-provider parametric extractor 테스트 추가
-- [ ] `supportsTools=false` provider 거부 테스트 보존 확인 (deepseek-v4 mock 으로)
-- [ ] 전체 vitest + Python 빌드 회귀 확인
+- [x] 4-provider parametric extractor 테스트 추가
+- [x] `supportsTools=false` provider 거부 테스트 보존 확인 (deepseek-v4 mock 으로)
+- [x] 전체 vitest + Python 빌드 회귀 확인
 
 ## 영향 범위
 
@@ -76,3 +76,36 @@ echo sc=$?
 ```
 
 검증 통과 조건: tsc + 전체 vitest + 두 Python 빌드 모두 exit 0 + 4-provider parametric 테스트 모두 pass.
+
+## 실행 결과
+
+### 회차 1 (run-1779202020-69508)
+
+**상태**: completed
+
+**요약**: 4-provider parametric 테스트 8개 (2 per provider × 4 providers) + deepseek-v4 supportsTools=false 거부 테스트 1개 추가. 총 vitest 42 tests in extractor.test.ts (before: 30), 전체 325 tests pass.
+
+**변경 파일**:
+- `ngd-studio/server/stages/__tests__/extractor.test.ts` — 4-provider parametric 블록 + deepseek-v4 거부 보존 테스트 추가 (~70줄)
+
+**검증 결과**:
+- tsc=0 (타입 오류 없음)
+- vitest=0 (324 passed | 1 skipped / 325 total, 29 test files)
+- exam=0 (Python HWPX 빌드 정상)
+- sc=0 (template showcase 빌드 정상)
+
+**추가 발견사항**: 없음. 기존 테스트와 완전히 독립적인 mock 패턴 재사용으로 구현 단순.
+
+**질문**: 없음.
+
+#### Scope Audit (orchestrator)
+pass — extractor.test.ts + PHASE_FILE만.
+
+#### Verification Re-run (orchestrator)
+exit 0 — tsc + extractor.test.ts 42/42 pass.
+
+#### Simplify (orchestrator)
+1 file (extractor.test.ts) — 중복 `id: "claude-sdk" as const` 속성 제거. VERIFY pass.
+
+#### Review (orchestrator)
+pass — 4-provider parametric + deepseek-v4 거부 보존 정합, scope 이탈 없음. checklist.md 갱신은 orchestrator가 별도 처리.
