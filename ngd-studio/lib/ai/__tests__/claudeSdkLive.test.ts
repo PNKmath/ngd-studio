@@ -32,6 +32,11 @@ describeLive("claude-sdk live tool use", () => {
       }
       const exit = await result.exitCode;
 
+      if (exit !== 0) {
+        const last = events.at(-1);
+        console.error("claude-sdk live failed:", JSON.stringify(last));
+      }
+
       expect(exit).toBe(0);
 
       const toolUseEvents = events.filter(
