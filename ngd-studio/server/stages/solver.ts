@@ -12,6 +12,7 @@ import {
 } from "./modelHarness";
 import type { ModelStageResult, ModelStageRunner } from "./model";
 import { buildSolverPrompt } from "./prompts/solverPrompt";
+import { normalizeParts } from "@/lib/parts/normalize";
 
 export type SolverExplanationPart =
   | { t: string }
@@ -82,16 +83,21 @@ export async function runSolverStage(input: SolverStageInput): Promise<ModelStag
     return toSolverValidationFailure(validationFailure("solver_validation_failed", validation.message, validation.details), providerResult.metadata, startedAt);
   }
 
+  const normalized: SolverStageOutput = {
+    ...validation.output,
+    explanation_parts: normalizeParts(validation.output.explanation_parts) as SolverExplanationPart[],
+  };
+
   await input.cache.ensureCacheDir();
   const outputPath = input.cache.solverResultPath(input.questionNumber);
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(validation.output, null, 2)}\n`, "utf8");
+  await writeFile(outputPath, `${JSON.stringify(normalized, null, 2)}\n`, "utf8");
 
   return {
     status: "completed",
-    output: validation.output,
+    output: normalized,
     files: [{ path: outputPath, kind: "cache", label: "Solver result", mimeType: "application/json" }],
-    validation: { ok: true, output: validation.output },
+    validation: { ok: true, output: normalized },
     provider: {
       requestedProvider: providerResult.metadata.requestedProvider,
       provider: providerResult.metadata.provider,

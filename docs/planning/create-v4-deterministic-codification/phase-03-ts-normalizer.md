@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: TS normalizer — solver/verifier 출력 정규화
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - ngd-studio/lib/parts/normalize.ts
@@ -126,13 +126,13 @@ Phase 2와 Phase 3은 같은 fixture set으로 검증되므로, 두 구현이 fi
 
 ## 체크리스트
 
-- [ ] `ngd-studio/lib/parts/normalize.ts` 작성 — `normalizeParts(parts)` + 헬퍼 8개 (R-01~R-10)
-- [ ] `splitTopLevelEq` depth tracking — Phase 2와 알고리즘 동일
-- [ ] `solver.ts`에서 `writeFile` 직전 `normalizeParts` 호출 (`explanation_parts` 대상)
-- [ ] `verifier.ts`에서 동일 처리 (출력 schema에 parts 있는 경우)
-- [ ] `lib/parts/__tests__/normalize.test.ts` — fixture 전체 parametrize + idempotency
-- [ ] `cd ngd-studio && pnpm tsc --noEmit` 통과
-- [ ] `cd ngd-studio && pnpm test lib/parts` 전부 pass
+- [x] `ngd-studio/lib/parts/normalize.ts` 작성 — `normalizeParts(parts)` + 헬퍼 8개 (R-01~R-10)
+- [x] `splitTopLevelEq` depth tracking — Phase 2와 알고리즘 동일
+- [x] `solver.ts`에서 `writeFile` 직전 `normalizeParts` 호출 (`explanation_parts` 대상)
+- [x] `verifier.ts`에서 동일 처리 (출력 schema에 parts 없음 — skip 적용)
+- [x] `lib/parts/__tests__/normalize.test.ts` — fixture 전체 parametrize + idempotency
+- [x] `cd ngd-studio && pnpm tsc --noEmit` 통과
+- [x] `cd ngd-studio && pnpm test lib/parts` 전부 pass
 
 ## 영향 범위
 
@@ -155,3 +155,49 @@ Phase 2와 동치성 확인:
 # 같은 fixture로 양 언어 출력 비교 (스크립트로)
 node -e "..."  # Phase 7에서 자동화
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-20 08:28 KST) — completed
+
+**상태**: completed
+**소요 시간**: 약 20분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`lib/parts/normalize.ts` 신규 작성 — R-01~R-10 헬퍼 8개 포함. `splitTopLevelEq`는 두 번째 이상 top-level `=` 에서 split (첫 번째 `=`는 첫 세그먼트에 포함), LEFT()/RIGHT() 및 {} 및 backtick depth tracking 구현. R-10은 `()` 괄호 내부도 보호(fixture IDEMPOTENT-02 기반). R-09는 숫자 뒤 단위만 처리하는 보수적 구현. solver.ts에 `normalizeParts` 통합 완료. verifier.ts는 출력에 parts 필드 없으므로 skip.
+
+#### 변경 파일
+- `ngd-studio/lib/parts/normalize.ts` (신규, +290줄)
+- `ngd-studio/lib/parts/__tests__/normalize.test.ts` (신규, +38줄)
+- `ngd-studio/server/stages/solver.ts` (수정, +8줄)
+
+#### 검증 결과
+- [x] `pnpm tsc --noEmit` → pass (0 errors)
+- [x] `normalize.test.ts` → 56/56 pass (28 fixture + 28 idempotency)
+- [x] `solver.test.ts` → 15/15 pass
+- [x] `verifier.test.ts` → 18/18 pass
+
+#### 추가 발견사항
+- R-10 operator spacing에서 `()` 괄호 내부도 보호해야 fixture 통과 가능 — rule-taxonomy 명세에는 `{}` 만 언급되어 있으나 fixture(IDEMPOTENT-02)가 `(x+1)^2` 내부 `+` 불변을 요구함.
+- R-09는 "partial" 규칙으로, 숫자 직후 단위 패턴만 처리. 변수명(`m`, `g`, `s` 등)과 혼동 방지.
+- verifier 출력에 `explanation_parts` 없음 확인 — 변경 불필요.
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+
+pass — ngd-studio/lib/parts/normalize.ts(신규) + lib/parts/__tests__/normalize.test.ts(신규) + server/stages/solver.ts(수정) 모두 scope 내. verifier.ts는 스펙상 변경 불요로 무수정.
+
+#### Verification Re-run (orchestrator)
+
+exit 0 — `pnpm tsc --noEmit` 0 errors, normalize.test.ts 56/56, solver.test.ts 15/15, verifier.test.ts 18/18 (89/89).
+
+#### Simplify (orchestrator)
+
+1 file, 2 edits — normalize.ts: normalizePart 중복 return 분기 병합 + fixPermutationCombination 미사용 지역변수 명시적 무시(`_match`/`_nGroup`/`_rGroup`). 검증 재실행 pass.
+
+#### Review (orchestrator)
+
+pass — A~I 전부 OK. R-09 text-side는 fixture가 eq-only이므로 동치성 범위 내 정당.

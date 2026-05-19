@@ -218,3 +218,7 @@ exit 0 — `python3 -m pytest tests/test_parts_normalizer.py` 56 passed (build_h
 #### Review (orchestrator)
 
 pass — A~I 전부 OK. 56 passed/0.03s, idempotency 확인, scope 준수.
+
+#### Commit
+
+`4b74446` — feat(equation): Phase 2 — Python normalizer (R-01~R-10) + pytest fixture suite
