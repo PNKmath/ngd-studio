@@ -34,11 +34,11 @@ created: 2026-05-19
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-host-tool-module.md](./phase-01-host-tool-module.md) | 5 | 0 | 0% | pending | - |
-| 2 | [phase-02-claude-sdk-agentic.md](./phase-02-claude-sdk-agentic.md) | 5 | 0 | 0% | pending | - |
-| 3 | [phase-03-openai-sdk-agentic.md](./phase-03-openai-sdk-agentic.md) | 5 | 0 | 0% | pending | - |
-| 4 | [phase-04-cross-provider-e2e.md](./phase-04-cross-provider-e2e.md) | 3 | 0 | 0% | pending | - |
-| **Total** | | **18** | **0** | **0%** | | |
+| 1 | [phase-01-host-tool-module.md](./phase-01-host-tool-module.md) | 5 | 5 | 100% | completed | 753f4b3 |
+| 2 | [phase-02-claude-sdk-agentic.md](./phase-02-claude-sdk-agentic.md) | 5 | 5 | 100% | completed | 95b18a0 |
+| 3 | [phase-03-openai-sdk-agentic.md](./phase-03-openai-sdk-agentic.md) | 5 | 5 | 100% | completed | fb3c6da |
+| 4 | [phase-04-cross-provider-e2e.md](./phase-04-cross-provider-e2e.md) | 3 | 3 | 100% | completed | 564faa0 |
+| **Total** | | **18** | **18** | **100%** | | |
 
 ## Phase 의존성
 

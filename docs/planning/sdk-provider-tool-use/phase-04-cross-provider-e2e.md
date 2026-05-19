@@ -109,3 +109,6 @@ exit 0 — tsc + extractor.test.ts 42/42 pass.
 
 #### Review (orchestrator)
 pass — 4-provider parametric + deepseek-v4 거부 보존 정합, scope 이탈 없음. checklist.md 갱신은 orchestrator가 별도 처리.
+
+#### Commit
+`564faa0` test(ai): Phase 4 — 4-provider parametric cross-provider e2e 테스트 추가
