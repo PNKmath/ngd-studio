@@ -205,6 +205,32 @@ open "outputs/[고][2026][1학기][강북고][수학 II]_fix_ver_final.hwpx"  # 
 **STATUS: needs_user** — 코드 fix 완료 + 빌드/validate exit 0. 사용자가 한컴오피스에서 9x4/6x3/6x4 choice_table 시각 확인 필요.
 - 신규 파일: `outputs/_TEMPLATE_SHOWCASE_ver20260519-090201.hwpx`
 
+### 4회차 (showcase choice_table 예시 데이터 재구성) — needs_user
+
+**실행일**: 2026-05-19
+**run_id**: run-1779116264-26908
+**원인**: 사용자 보고 — showcase 의 choice_table 예시 데이터가 fixture 의미와 불일치 (5x5 에 라벨 중복 주입, 6x3/6x4 헤더 행에 데이터 주입 시도, 9x4 에 rowSpan 무시한 배열 전달)
+
+#### 패치 내용
+
+1. **`tools/build_template_showcase.py` — choice_table 예시 데이터 4종 재작성**
+   - `ct5x5`: col=0 ①~⑤ fixture 라벨 보존 → row별 `["", 명제, 역, 이, 대우]` 구조로 변경
+   - `ct6x3`: row 0 헤더 행 빈 값으로 skip → `["", "", ""]` + row 1~5에 `["", "데이터 N-1", "데이터 N-2"]`
+   - `ct6x4`: 동일 패턴 — row 0 헤더 skip, row 1~5 에 col 1~3 데이터
+   - `ct9x4`: col=0/2 원문자 fixture 보존 → rowSpan=3 placeholder col=1(row 0,3,6), col=3(row 0,3) 에만 텍스트 ("그림①" ~ "그림⑤")
+
+#### 검증 결과
+
+| 항목 | 결과 | 비고 |
+|------|------|------|
+| build_template_showcase.py | exit 0 | `_TEMPLATE_SHOWCASE_ver20260519-092706.hwpx` |
+| 5x5 C 섹션 — ①⑤ 라벨 보존 | **PASS** | `['①', '②', '참', '거짓', ...]` |
+| 6x3 C 섹션 — (가)(나) 헤더 + ①⑤ 라벨 보존 | **PASS** | `['(가)', '(나)', '①', '데이터 1-1', ...]` |
+| 9x4 C 섹션 — ①②③④⑤ 원문자 보존 | **PASS** | `['①', '그림①', '②', '그림②', ...]` |
+
+**STATUS: needs_user** — 데이터 재구성 완료 + 자동 검증 PASS. 사용자가 한컴오피스에서 choice_table 4종 시각 확인 필요.
+- 신규 파일: `outputs/_TEMPLATE_SHOWCASE_ver20260519-092706.hwpx`
+
 ## 영향 범위
 
 - `tools/build_template_showcase.py` 만 수정 (스코프 밖 변경 없음)

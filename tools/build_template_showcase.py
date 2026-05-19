@@ -213,14 +213,15 @@ def section_c_substituted():
     paras.append(make_empty_para())
 
     # choice_table — 5x5
+    # 명제 템플릿 — col=0 의 ①~⑤ 라벨 fixture 보존, col=1~4 만 채움
     ct5x5 = {
         "table_type": "5x5",
         "rows": [
-            ["①", "1", "2", "3", "4"],
-            ["②", "a", "b", "c", "d"],
-            ["③", "x", "y", "z", "w"],
-            ["④", "p", "q", "r", "s"],
-            ["⑤", "α", "β", "γ", "δ"],
+            ["", "명제: p → q", "역: q → p", "이: ~p → ~q", "대우: ~q → ~p"],
+            ["", "참", "거짓", "거짓", "참"],
+            ["", "거짓", "참", "참", "거짓"],
+            ["", "참", "참", "참", "참"],
+            ["", "거짓", "거짓", "거짓", "거짓"],
         ],
     }
     paras.append(item_label("make_choice_table — 5x5"))
@@ -228,27 +229,55 @@ def section_c_substituted():
     paras.append(make_empty_para())
 
     # choice_table — 6x3
+    # 헤더 1행 + 1열 라벨 fixture 보존. row=1~5, col=1~2 만 채움.
     ct6x3 = {
         "table_type": "6x3",
-        "rows": [["①", "A", "B"]] + [[str(i+1), "x", "y"] for i in range(5)],
+        "rows": [
+            ["", "", ""],                                     # row 0: 헤더 보존 (모두 빈 값으로 skip)
+            ["", "데이터 1-1", "데이터 1-2"],
+            ["", "데이터 2-1", "데이터 2-2"],
+            ["", "데이터 3-1", "데이터 3-2"],
+            ["", "데이터 4-1", "데이터 4-2"],
+            ["", "데이터 5-1", "데이터 5-2"],
+        ],
     }
     paras.append(item_label("make_choice_table — 6x3"))
     paras.append(wrap_in_para(make_choice_table(ct6x3, BASE)))
     paras.append(make_empty_para())
 
     # choice_table — 6x4
+    # 헤더 1행 + 1열 라벨 보존. row=1~5, col=1~3 만 채움.
     ct6x4 = {
         "table_type": "6x4",
-        "rows": [["①", "A", "B", "C"]] + [[str(i+1), "x", "y", "z"] for i in range(5)],
+        "rows": [
+            ["", "", "", ""],
+            ["", "데이터 1-A", "데이터 1-B", "데이터 1-C"],
+            ["", "데이터 2-A", "데이터 2-B", "데이터 2-C"],
+            ["", "데이터 3-A", "데이터 3-B", "데이터 3-C"],
+            ["", "데이터 4-A", "데이터 4-B", "데이터 4-C"],
+            ["", "데이터 5-A", "데이터 5-B", "데이터 5-C"],
+        ],
     }
     paras.append(item_label("make_choice_table — 6x4"))
     paras.append(wrap_in_para(make_choice_table(ct6x4, BASE)))
     paras.append(make_empty_para())
 
     # choice_table — 9x4
+    # col=0/col=2 의 원문자 fixture 보존. col=1/col=3 (rowSpan=3 이미지 placeholder) 에만 텍스트.
+    # 보기 5개 — ① col=1 row=0, ② col=3 row=0, ③ col=1 row=3, ④ col=3 row=3, ⑤ col=1 row=6 (⑤ 짝 없음).
     ct9x4 = {
         "table_type": "9x4",
-        "rows": [["①", "1", "2", "3"]] + [[str(i+1), "p", "q", "r"] for i in range(8)],
+        "rows": [
+            ["", "그림①", "", "그림②"],
+            ["", "", "", ""],
+            ["", "", "", ""],
+            ["", "그림③", "", "그림④"],
+            ["", "", "", ""],
+            ["", "", "", ""],
+            ["", "그림⑤", "", ""],
+            ["", "", "", ""],
+            ["", "", "", ""],
+        ],
     }
     paras.append(item_label("make_choice_table — 9x4"))
     paras.append(wrap_in_para(make_choice_table(ct9x4, BASE)))
