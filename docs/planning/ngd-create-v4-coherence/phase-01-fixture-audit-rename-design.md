@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: fixture audit + rename 명명 결정
-status: pending
+status: completed
 depends_on: []
 scope:
   - docs/planning/ngd-create-v4-coherence/fixture_audit.md
@@ -78,11 +78,11 @@ phase 시작 시 worker 가 사용자와 한 번에:
 
 ## 체크리스트
 
-- [ ] `fixture_audit.md` 신규 — 28개 fixture 의 용도 / cell 구조 / placeholder 분류
-- [ ] `rename_map.md` 초안 — 의미 기반 새 이름 제안
-- [ ] 사용자와 함께 각 rename 결정 — rename_map.md 에 확정 표기
-- [ ] 영향받는 호출부 grep — 새 이름이 기존 코드 어디 어디에 영향 미치는지 사전 파악
-- [ ] Phase 2 worker 가 rename 적용 시 필요한 메타 (호출부 목록 + 일괄 sed 패턴) 까지 rename_map.md 에 첨부
+- [x] `fixture_audit.md` 신규 — 29개 fixture 의 용도 / cell 구조 / placeholder 분류 (실제 29개임을 확인)
+- [x] `rename_map.md` 초안 — 의미 기반 새 이름 제안
+- [x] 사용자와 함께 각 rename 결정 — rename_map.md 에 확정 표기
+- [x] 영향받는 호출부 grep — 새 이름이 기존 코드 어디 어디에 영향 미치는지 사전 파악 (rename_map.md 호출부 섹션 참조)
+- [x] Phase 2 worker 가 rename 적용 시 필요한 메타 (호출부 목록 + 일괄 sed 패턴) 까지 rename_map.md 에 첨부
 
 ## 영향 범위
 
@@ -103,3 +103,73 @@ grep -cE "결정:|유지|→" docs/planning/ngd-create-v4-coherence/rename_map.m
 ```
 
 검증 통과 조건: 두 파일 모두 존재 + audit 28개 항목 + rename_map 각 항목 결정 표기.
+
+## 실행 결과
+
+### 1회차 (2026-05-19, run-1779154035-63374)
+
+**수행 내용**:
+- `resources/hwpx_base/` 전체 XML 목록 파악: 34개 총 XML, 인프라 5개 제외하면 **29개 fixture** (phase 계획의 "28개"보다 1개 많음 — `proof_table_template.xml` 포함됨을 확인)
+- 29개 fixture 전체 Read + rowCnt/colCnt/cellSpan/박힘텍스트 분석
+- `tables.py`, `shapes.py`, `assemble.py` 호출부 grep 완료
+- `fixture_audit.md` 작성 (352줄 / `##` 헤딩 30개 — 29 fixture + 요약표)
+- `rename_map.md` 작성 (146줄 / 29개 fixture 제안 + 호출부 grep 결과 + sed 패턴 초안)
+
+**검증 결과**:
+```
+두 파일 모두 존재: ✓
+fixture_audit.md: 352줄, ## 헤딩 30개 (29 fixture + 요약표 1)
+rename_map.md: 146줄, 제안:/유지/대기 매칭 56건
+```
+
+**중단 이유**: 체크리스트 3번 "사용자와 함께 각 rename 결정" — 사용자 입력 필요. rename_map.md의 미결 질문 8개 참조.
+
+**완료**: 1,2,4,5번 (4/5 항목) — 3번만 사용자 결정 대기.
+
+**주목할 발견**:
+- `choice_table_5x5.xml`이 이름과 달리 **명제(p:/q:) 전용** — 가장 오해 유발 가능성 높음
+- `ganada_table.xml`은 실제로 rect(도형)이며, `make_ganada_table`이 이를 직접 읽지 않고 `condition_rect_template.xml`을 structural base로 사용 — rename/제거해도 코드 무영향
+- `synthetic_division_template_1~4` + `Pascal_triangle_1~3`은 `fixture_remap.py`에만 참조, builder 미연결
+- `increase_decrease_template_4x.xml`이 파일 크기 초과(31679 tokens)로 전체 Read 불가 — 기본 구조는 colCnt grep으로 확인 (5행 12열)
+
+---
+
+### 2회차 (2026-05-19) — completed
+
+**수행 내용**: 사용자 결정 8건 반영 → rename_map.md 확정. syn_div/pascal 은 Phase 4 가변 생성기로 전환 결정.
+
+**세부 반영**:
+- bogi_table_3/4/6items → `bogi_box_3/4/6items.xml`
+- choice_table_5x5 → `pq_proposition_table_5x5.xml` (치수 + 의미 동시 표현)
+- choice_table_9x4 → `choice_image_5options.xml`
+- choice_table_6x3 → `choice_grid_2cols.xml`
+- choice_table_6x4 → `choice_grid_3cols.xml`
+- increase_decrease_template/2x/3x/4x → `inc_dec_1x/2x/3x/4x.xml`
+- synthetic_division_template + _1~4: `deprecated, Phase 4에서 제거` (make_syn_div 가변 생성기 전환)
+- Pascal_triangle_1~3: `deprecated, Phase 4에서 제거` (make_pascal_triangle 가변 생성기 전환)
+- ganada_table.xml: `삭제` (코드 무참조 확인됨)
+- 나머지 (condition_rect, empty_box, proof_table, normal_dist_*, prob_dist_*): `유지`
+
+**변경 파일**:
+- `rename_map.md` — 전체 갱신 (결정 열 확정, 미결 질문 섹션 삭제, sed 패턴 갱신, 헤더 상태 갱신)
+- `phase-01-fixture-audit-rename-design.md` — 체크리스트 3번 [x], 상태 completed
+
+**검증 결과**:
+```
+두 파일 모두 존재: ✓
+fixture_audit.md: 352줄, ## 헤딩 30개 (29 fixture + 요약표 1) ✓
+rename_map.md: 132줄, 결정:/유지/→ 매칭 49건 ✓
+```
+
+**추가 발견사항**: Phase 4 스펙은 orchestrator가 별도로 갱신 예정 (가변 생성기 make_syn_div / make_pascal_triangle 방향).
+
+**질문 / 결정 사항**: 없음 — 모든 미결 항목 확정 완료.
+
+#### Scope Audit (orchestrator)
+pass — 3 files in scope (fixture_audit.md, rename_map.md, phase-01-*.md self).
+
+#### Verification Re-run (orchestrator)
+exit 0 — 두 파일 존재 + audit 30 ## 헤딩 + rename_map 49 결정 매칭 모두 통과.
+
+#### Review (orchestrator)
+VERDICT: pass — 사용자 결정 8건 정확 반영, 체크리스트 5/5 정합, scope 위반 없음.
