@@ -1,0 +1,16 @@
+{
+  "id": "R-07-basic",
+  "rule_ids": ["R-07"],
+  "description": "leading _ 로 시작하는 eq 필드 경고 케이스",
+  "input": {
+    "parts": [
+      {"eq": "_n"}
+    ]
+  },
+  "expected": {
+    "parts": [
+      {"eq": "_n"}
+    ]
+  },
+  "notes": "R-07은 partial codifiable. 단독 leading _ 케이스는 컨텍스트 없이 자동 변환 불가. 이 fixture는 패턴 감지 목적 (변환하면 안 됨, 대신 flag). R-08 패턴(nCr)에 속하지 않는 경우."
+}
