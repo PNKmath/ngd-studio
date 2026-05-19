@@ -216,3 +216,6 @@ pass — 1회차: PHASE_FILE + tables.py + tools/build_template_showcase.py (모
 
 #### Review (orchestrator)
 1회차 VERDICT: fix_required — fixture_remap.py FIXTURES_18 + CHOICE_TABLE_MAP fallback 지적. 2회차 fix 적용 후 두 이슈 모두 해결 확인.
+
+#### Commit
+7b034bc — refactor(builder): Phase 2 — fixture rename + 호출부 동기화

@@ -128,6 +128,9 @@ exit 0 — tsc, vitest 27/27, Python build, validate 모두 통과.
 #### Review (orchestrator)
 VERDICT: pass — schema.md / CHOICE_TABLE_MAP 호환 키 / extractorPrompt 갱신 모두 정합. downstream(solver/verifier) condition_box/table_type 미소비 확인. validateExtractorOutput이 permissive한 것은 설계 의도.
 
+#### Commit
+3922b91 — feat(schema): Phase 3 — extractor/builder type tag 정합
+
 ## 실행 결과
 
 ### 1회차 (2026-05-19) — completed

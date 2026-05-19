@@ -173,3 +173,6 @@ exit 0 — 두 파일 존재 + audit 30 ## 헤딩 + rename_map 49 결정 매칭 
 
 #### Review (orchestrator)
 VERDICT: pass — 사용자 결정 8건 정확 반영, 체크리스트 5/5 정합, scope 위반 없음.
+
+#### Commit
+c06eef4 — docs(planning): Phase 1 — fixture audit + rename 확정

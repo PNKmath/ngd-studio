@@ -40,6 +40,7 @@ from shapes import (  # noqa: E402
 from tables import (  # noqa: E402
     make_bogi_table, make_choice_table, make_data_table_xml,
     make_increase_decrease_table, make_synthetic_division_table,
+    make_syn_div_table, make_pascal_table,
     make_proof_table_wrapped, _replace_table_ids,
 )
 
@@ -387,15 +388,177 @@ def section_c_substituted():
     paras.append(wrap_in_para(make_increase_decrease_table(inc_dec_4x, BASE)))
     paras.append(make_empty_para())
 
-    # synthetic_division
-    syn_div = {
+    # synthetic_division (레거시 alias)
+    syn_div_legacy = {
         "divisor": "2",
         "coefficients": ["1", "-3", "0", "4"],
         "result": ["1", "-1", "-2", "0"],
     }
-    paras.append(item_label("make_synthetic_division_table — 조립제법"))
-    paras.append(wrap_in_para(make_synthetic_division_table(syn_div, BASE)))
+    paras.append(item_label("make_synthetic_division_table — 조립제법 (레거시)"))
+    paras.append(wrap_in_para(make_synthetic_division_table(syn_div_legacy, BASE)))
     paras.append(make_empty_para())
+
+    # ── 신규 type tag 기반 make_choice_table 호출 ──────────────────────────
+
+    # proposition (pq_proposition_table_5x5.xml) — 명제 가정/결론 5행
+    ct_proposition = {
+        "table_type": "proposition",
+        "rows": [
+            ["", "", "x > 0",          "", "x^2 > 0"],
+            ["", "", "n 이 짝수",      "", "n^2 이 짝수"],
+            ["", "", "ab = 0",         "", "a = 0 또는 b = 0"],
+            ["", "", "x > 1",          "", "x > 0"],
+            ["", "", "유리수",         "", "분수로 표현 가능"],
+        ],
+    }
+    paras.append(item_label("make_choice_table — proposition (pq_proposition_table_5x5.xml)"))
+    paras.append(wrap_in_para(make_choice_table(ct_proposition, BASE)))
+    paras.append(make_empty_para())
+
+    # choice_image (choice_image_5options.xml) — 그림 선지 5개
+    ct_choice_image = {
+        "table_type": "choice_image",
+        "rows": [
+            ["", "그림①", "", "그림②"],
+            ["", "", "", ""],
+            ["", "", "", ""],
+            ["", "그림③", "", "그림④"],
+            ["", "", "", ""],
+            ["", "", "", ""],
+            ["", "그림⑤", "", ""],
+            ["", "", "", ""],
+            ["", "", "", ""],
+        ],
+    }
+    paras.append(item_label("make_choice_table — choice_image (choice_image_5options.xml)"))
+    paras.append(wrap_in_para(make_choice_table(ct_choice_image, BASE)))
+    paras.append(make_empty_para())
+
+    # choice_grid_2cols (choice_grid_2cols.xml) — 2열 그리드
+    ct_grid_2cols = {
+        "table_type": "choice_grid_2cols",
+        "rows": [
+            ["", "", ""],
+            ["", "그리드2-1-A", "그리드2-1-B"],
+            ["", "그리드2-2-A", "그리드2-2-B"],
+            ["", "그리드2-3-A", "그리드2-3-B"],
+            ["", "그리드2-4-A", "그리드2-4-B"],
+            ["", "그리드2-5-A", "그리드2-5-B"],
+        ],
+    }
+    paras.append(item_label("make_choice_table — choice_grid_2cols (choice_grid_2cols.xml)"))
+    paras.append(wrap_in_para(make_choice_table(ct_grid_2cols, BASE)))
+    paras.append(make_empty_para())
+
+    # choice_grid_3cols (choice_grid_3cols.xml) — 3열 그리드
+    ct_grid_3cols = {
+        "table_type": "choice_grid_3cols",
+        "rows": [
+            ["", "", "", ""],
+            ["", "그리드3-1-A", "그리드3-1-B", "그리드3-1-C"],
+            ["", "그리드3-2-A", "그리드3-2-B", "그리드3-2-C"],
+            ["", "그리드3-3-A", "그리드3-3-B", "그리드3-3-C"],
+            ["", "그리드3-4-A", "그리드3-4-B", "그리드3-4-C"],
+            ["", "그리드3-5-A", "그리드3-5-B", "그리드3-5-C"],
+        ],
+    }
+    paras.append(item_label("make_choice_table — choice_grid_3cols (choice_grid_3cols.xml)"))
+    paras.append(wrap_in_para(make_choice_table(ct_grid_3cols, BASE)))
+    paras.append(make_empty_para())
+
+    # ── make_syn_div_table — 신규 가변 조립제법 (equation dict 형식 입력) ──────
+
+    def _resolve_cell(cell):
+        """reference doc 명세 형식의 셀 dict 를 generator 가 기대하는 문자열로 변환.
+
+        {"type":"equation","script":"x^2"} → "x^2"   (equation 경로)
+        {"type":"text","value":"-3"}       → "-3"     (text 경로)
+        str/int 등 기존 형식              → str(cell)  (하위 호환)
+        """
+        if isinstance(cell, dict):
+            if cell.get("type") == "equation":
+                return cell.get("script", "")
+            if cell.get("type") == "text":
+                return cell.get("value", "")
+        return str(cell)
+
+    # deg=3: x^3 - 2x^2 + 3x - 4 를 (x-1) 로 나누기 — equation dict 혼합
+    syn_deg3_cells = [
+        # row 0: 나눗수 + 계수 (나눗수 "1" 은 text, 계수는 부호 있는 정수 → text)
+        [{"type":"text","value":"1"}, {"type":"text","value":"1"}, {"type":"text","value":"-2"}, {"type":"text","value":"3"}, {"type":"text","value":"-4"}],
+        # row 1: 곱셈 행
+        [{"type":"text","value":""}, {"type":"text","value":"1"}, {"type":"text","value":"-1"}, {"type":"text","value":"2"}, {"type":"text","value":""}],
+        # row 2: 구분선 (빈 행)
+        [{"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}],
+        # row 3: 결과 행
+        [{"type":"text","value":""}, {"type":"text","value":"1"}, {"type":"text","value":"-1"}, {"type":"text","value":"2"}, {"type":"text","value":"-2"}],
+    ]
+
+    # deg=4: 계수 일부에 equation 포함 (k+1 등)
+    syn_deg4_cells = [
+        [{"type":"text","value":"2"}, {"type":"equation","script":"k + 1"}, {"type":"text","value":"-3"}, {"type":"text","value":"0"}, {"type":"text","value":"4"}, {"type":"text","value":"-2"}],
+        [{"type":"text","value":""}, {"type":"text","value":"2"}, {"type":"equation","script":"2k + 6"}, {"type":"text","value":"-6"}, {"type":"text","value":"4"}, {"type":"text","value":""}],
+        [{"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}],
+        [{"type":"text","value":""}, {"type":"equation","script":"k + 3"}, {"type":"text","value":"3"}, {"type":"text","value":"-6"}, {"type":"text","value":"2"}, {"type":"text","value":"-2"}],
+        [{"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}, {"type":"text","value":""}],
+    ]
+
+    # deg=5: 순수 정수 계수
+    syn_deg5_cells = [
+        [{"type":"text","value":"3"}] + [{"type":"text","value":str(v)} for v in [1, -2, 0, 3, -1, 6]],
+        [{"type":"text","value":""}] + [{"type":"text","value":str(v)} for v in [3, 3, 9, 27, 78]],
+        [{"type":"text","value":""}] * 7,
+        [{"type":"text","value":""}] + [{"type":"text","value":str(v)} for v in [1, 1, 3, 9, 26, 84]],
+        [{"type":"text","value":""}] * 7,
+        [{"type":"text","value":""}] * 7,
+    ]
+
+    # deg=6: 순수 정수 계수
+    syn_deg6_cells = [
+        [{"type":"text","value":"-1"}] + [{"type":"text","value":str(v)} for v in [1, 0, -3, 2, 0, -1, 4]],
+        [{"type":"text","value":""}] + [{"type":"text","value":str(v)} for v in [-1, 1, 2, -4, 4, -3]],
+        [{"type":"text","value":""}] * 8,
+        [{"type":"text","value":""}] + [{"type":"text","value":str(v)} for v in [1, -1, -2, 4, -4, 3]],
+        [{"type":"text","value":""}] * 8,
+        [{"type":"text","value":""}] * 8,
+        [{"type":"text","value":""}] * 8,
+    ]
+
+    for deg, raw_cells in [(3, syn_deg3_cells), (4, syn_deg4_cells), (5, syn_deg5_cells), (6, syn_deg6_cells)]:
+        n_rows_d = len(raw_cells)
+        n_cols_d = max(len(r) for r in raw_cells)
+        # 셀 dict → 문자열 변환 (generator 가 기대하는 형식)
+        rows_2d = [[_resolve_cell(c) for c in row] for row in raw_cells]
+        syn_data = {
+            "type": "synthetic_division",
+            "degree": deg,
+            "n_rows": n_rows_d,
+            "n_cols": n_cols_d,
+            "rows": rows_2d,
+        }
+        paras.append(item_label(f"make_syn_div_table — deg={deg} (equation dict 입력, {n_rows_d}행×{n_cols_d}열)"))
+        paras.append(wrap_in_para(make_syn_div_table(syn_data, BASE)))
+        paras.append(make_empty_para())
+
+    # ── make_pascal_table — 신규 파스칼 삼각형 (equation dict 형식 입력) ─────
+
+    for n_rows in [5, 7, 9]:
+        # reference doc 명세 형식: 각 셀을 equation dict 로 구성 ({} _{r} rm C _{c})
+        cells_dicts = [
+            [{"type": "equation", "script": f"{{}} _{{r}} rm C _{{c}}".replace("{r}", str(r)).replace("{c}", str(c))}
+             for c in range(r + 1)]
+            for r in range(n_rows)
+        ]
+        # dict → 스크립트 문자열 변환
+        cells_resolved = [[_resolve_cell(cell) for cell in row] for row in cells_dicts]
+        pascal_data = {
+            "type": "pascal",
+            "n_rows": n_rows,
+            "cells": cells_resolved,
+        }
+        paras.append(item_label(f"make_pascal_table — n_rows={n_rows} (equation dict 입력, binomial 표기)"))
+        paras.append(wrap_in_para(make_pascal_table(pascal_data, BASE)))
+        paras.append(make_empty_para())
 
     return paras
 

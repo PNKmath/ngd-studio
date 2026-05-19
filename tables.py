@@ -19,11 +19,13 @@ def _replace_table_ids(xml):
     return xml
 
 
-def _inject_cell_value(cell_xml, value):
+def _inject_cell_value(cell_xml, value, force_equation=False):
     """셀(빈 셀 또는 이미 채워진 셀)에 값(텍스트 or 수식)을 삽입.
 
     기존: self-closing run(<hp:run charPrIDRef="N"/>)만 매칭 → 채워진 셀 덮어쓰기 불가.
     개선: self-closing run 없으면 내용 있는 run(<hp:run ...>...</hp:run>)도 교체.
+    force_equation=True 면 값에 영문/특수문자가 없어도 항상 equation 으로 렌더링
+    (syn_div 처럼 모든 셀이 수식이어야 하는 표용).
     """
     if not value:
         return cell_xml
@@ -34,7 +36,7 @@ def _inject_cell_value(cell_xml, value):
         params = lineseg_params_for_eq(arrow_map[value])
         run = f'<hp:run charPrIDRef="1">{eq_xml}<hp:t/></hp:run>'
         ls = make_lineseg(0, params[0], params[1], params[2], params[3])
-    elif re.search(r'[a-zA-Z_{}^\\`]', value):
+    elif force_equation or re.search(r'[a-zA-Z_{}^\\`]', value):
         eq_xml = make_equation_xml(value)
         params = lineseg_params_for_eq(value)
         run = f'<hp:run charPrIDRef="1">{eq_xml}<hp:t/></hp:run>'
@@ -423,7 +425,8 @@ def make_syn_div_table(data, base_path):
                 f'</hp:tc>'
             )
             if val:
-                cell = _inject_cell_value(cell, str(val))
+                # syn_div 의 모든 셀은 항상 equation 으로 렌더링 (단순 정수도 수식 폰트)
+                cell = _inject_cell_value(cell, str(val), force_equation=True)
             cells_xml += cell
         trs.append(f'<hp:tr>{cells_xml}</hp:tr>')
 

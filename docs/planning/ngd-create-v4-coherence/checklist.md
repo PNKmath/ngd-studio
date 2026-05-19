@@ -23,12 +23,12 @@ created: 2026-05-19
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-fixture-audit-rename-design.md](./phase-01-fixture-audit-rename-design.md) | 5 | 5 | 100% | completed | (Phase 1 commit) |
-| 2 | [phase-02-fixture-rename-apply.md](./phase-02-fixture-rename-apply.md) | 5 | 0 | 0% | pending | - |
-| 3 | [phase-03-schema-extractor-builder.md](./phase-03-schema-extractor-builder.md) | 6 | 0 | 0% | pending | - |
-| 4 | [phase-04-syn-div-pascal-integration.md](./phase-04-syn-div-pascal-integration.md) | 8 | 0 | 0% | pending | - |
-| 5 | [phase-05-e2e-verification.md](./phase-05-e2e-verification.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **29** | **5** | **17%** | | |
+| 1 | [phase-01-fixture-audit-rename-design.md](./phase-01-fixture-audit-rename-design.md) | 5 | 5 | 100% | completed | c06eef4 |
+| 2 | [phase-02-fixture-rename-apply.md](./phase-02-fixture-rename-apply.md) | 5 | 5 | 100% | completed | 7b034bc |
+| 3 | [phase-03-schema-extractor-builder.md](./phase-03-schema-extractor-builder.md) | 6 | 6 | 100% | completed | 3922b91 |
+| 4 | [phase-04-syn-div-pascal-integration.md](./phase-04-syn-div-pascal-integration.md) | 8 | 8 | 100% | completed | 49d4126 |
+| 5 | [phase-05-e2e-verification.md](./phase-05-e2e-verification.md) | 10 | 10 | 100% | completed | (Phase 5 commit) |
+| **Total** | | **34** | **34** | **100%** | | |
 
 ## Phase 의존성
 

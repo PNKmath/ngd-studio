@@ -3,6 +3,7 @@ import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runExtractorStage, validateExtractorOutput } from "../extractor";
+import { buildExtractorPrompt } from "../prompts/extractorPrompt";
 import { FileBackedStageCache } from "../cache";
 import type { AIProviderAdapter, ProviderRunOptions } from "@/lib/ai/types";
 
@@ -474,5 +475,76 @@ describe("validateExtractorOutput — new type tags (Phase 3)", () => {
     };
     const result = validateExtractorOutput(input);
     expect(result.ok).toBe(true);
+  });
+});
+
+// ─── Phase 5 (2회차): reference doc injection ─────────────────────────────────
+
+describe("buildExtractorPrompt — reference doc injection", () => {
+  it("injects reference doc content into system prompt when referenceDoc is provided", () => {
+    const referenceDoc = "# syn_div + Pascal extractor reference\n\nPascal (파스칼 삼각형)\n\n모든 Pascal 셀은 항상 equation";
+    const { system } = buildExtractorPrompt({
+      questionNumber: 1,
+      referenceDoc,
+    });
+    expect(system).toContain("Pascal (파스칼 삼각형)");
+    expect(system).toContain("syn_div + Pascal extractor reference");
+  });
+
+  it("replaces [REF_DOC_SECTION] placeholder with fallback text when referenceDoc is empty", () => {
+    const { system } = buildExtractorPrompt({
+      questionNumber: 2,
+      referenceDoc: "",
+    });
+    // placeholder must be replaced — not left as-is
+    expect(system).not.toContain("[REF_DOC_SECTION]");
+    expect(system).toContain("reference 문서 미첨부");
+  });
+
+  it("replaces [REF_DOC_SECTION] placeholder with fallback text when referenceDoc is omitted", () => {
+    const { system } = buildExtractorPrompt({
+      questionNumber: 3,
+    });
+    expect(system).not.toContain("[REF_DOC_SECTION]");
+    expect(system).toContain("reference 문서 미첨부");
+  });
+
+  it("passes referenceDoc through to prompt in runExtractorStage when doc file exists", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    // The real reference doc lives at ../docs/extractor-reference/syn_div_pascal.md
+    // relative to CWD (ngd-studio/). If the file exists, loadExtractorReferenceDoc
+    // will load it and inject its contents into the prompt.
+    const realRefPath = path.join(process.cwd(), "..", "docs", "extractor-reference", "syn_div_pascal.md");
+    let realRefContent = "";
+    try {
+      realRefContent = await readFile(realRefPath, "utf8");
+    } catch {
+      // file not present — test still passes, just verifies no-crash behaviour
+    }
+
+    const spy = vi.fn();
+    const provider = makeMockProvider(JSON.stringify(VALID_OUTPUT), 0, spy);
+
+    await runExtractorStage({
+      questionNumber: 1,
+      imagePath: "/some/q01.png",
+      cache,
+      provider,
+    });
+
+    expect(spy).toHaveBeenCalledOnce();
+    const [combinedPrompt] = spy.mock.calls[0] as [string, ProviderRunOptions];
+
+    if (realRefContent) {
+      // Reference doc was loaded — its content must appear in the prompt
+      expect(combinedPrompt).toContain("Pascal (파스칼 삼각형)");
+      // Placeholder must be replaced
+      expect(combinedPrompt).not.toContain("[REF_DOC_SECTION]");
+    } else {
+      // No reference doc — fallback text must appear
+      expect(combinedPrompt).toContain("reference 문서 미첨부");
+    }
   });
 });

@@ -177,3 +177,4 @@ exit 0 — 가변 생성기 호출 OK, 9개 삭제 + 2개 신설 확인, Python 
 VERDICT: pass — 8/8 체크리스트 충족, XML escape 안전, dispatch 정합. **Minor note**: 셀 템플릿 2개 파일은 generator에서 read되지 않고 inline 재현됨 (참조 문서 역할). Phase 5 시각검증 시 inline 구조가 양식지와 일치하는지 사용자 확인 필요.
 
 #### Commit
+49d4126 — refactor(builder): Phase 4 — syn_div+Pascal 가변 생성기 전환
