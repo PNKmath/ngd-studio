@@ -15,12 +15,12 @@ describe("AIProviderAdapter.supportsTools capability flag", () => {
     expect(codexCliProvider.supportsTools).toBe(true);
   });
 
-  it("claude-sdk has supportsTools=false (single-turn API, no tool loop yet)", () => {
-    expect(claudeSdkProvider.supportsTools).toBe(false);
+  it("claude-sdk has supportsTools=true (agentic loop with Read/Grep/Glob host tools)", () => {
+    expect(claudeSdkProvider.supportsTools).toBe(true);
   });
 
-  it("openai-sdk has supportsTools=false (single-turn API, no tool loop yet)", () => {
-    expect(openaiSdkProvider.supportsTools).toBe(false);
+  it("openai-sdk has supportsTools=true (agentic loop with Read/Grep/Glob host tools)", () => {
+    expect(openaiSdkProvider.supportsTools).toBe(true);
   });
 
   it("deepseek-v4 has supportsTools=false (vision not supported, no tool loop)", () => {
