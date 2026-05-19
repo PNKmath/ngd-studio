@@ -189,7 +189,7 @@ def section_c_substituted():
     paras.append(wrap_in_para(make_bogi_table(bogi3, BASE)))
     paras.append(make_empty_para())
 
-    # bogi_table 4 items (bogi_table_4items.xml)
+    # bogi_box 4 items (bogi_box_4items.xml)
     bogi4 = {
         "items": [
             {"parts": [{"t": "샘플 ㄱ 텍스트"}]},
@@ -198,7 +198,7 @@ def section_c_substituted():
             {"parts": [{"t": "샘플 ㄹ"}, {"eq": "a+b=c"}]},
         ]
     }
-    paras.append(item_label("make_bogi_table — 4 items (bogi_table_4items.xml)"))
+    paras.append(item_label("make_bogi_table — 4 items (bogi_box_4items.xml)"))
     paras.append(wrap_in_para(make_bogi_table(bogi4, BASE)))
     paras.append(make_empty_para())
 
@@ -360,7 +360,7 @@ def section_c_substituted():
     paras.append(wrap_in_para(make_increase_decrease_table(inc_dec_2x, BASE)))
     paras.append(make_empty_para())
 
-    # increase_decrease (3-x: 8 cols — increase_decrease_template_3x.xml)
+    # increase_decrease (3-x: 8 cols — inc_dec_3x.xml)
     inc_dec_3x = {
         "x_values": ["-1", "1", "3"],
         "rows": [
@@ -369,11 +369,11 @@ def section_c_substituted():
             {"values": ["+", "0", "-", "0", "+", "0", "-"]},
         ],
     }
-    paras.append(item_label("make_increase_decrease_table — 3-x (increase_decrease_template_3x.xml)"))
+    paras.append(item_label("make_increase_decrease_table — 3-x (inc_dec_3x.xml)"))
     paras.append(wrap_in_para(make_increase_decrease_table(inc_dec_3x, BASE)))
     paras.append(make_empty_para())
 
-    # increase_decrease (4-x: 12 cols — increase_decrease_template_4x.xml)
+    # increase_decrease (4-x: 12 cols — inc_dec_4x.xml)
     inc_dec_4x = {
         "x_values": ["-2", "-1", "1", "3"],
         "rows": [
@@ -383,7 +383,7 @@ def section_c_substituted():
             {"values": ["↘", "극소", "↗", "극대", "↘", "극소", "↗", "극대", "↘"]},
         ],
     }
-    paras.append(item_label("make_increase_decrease_table — 4-x (increase_decrease_template_4x.xml)"))
+    paras.append(item_label("make_increase_decrease_table — 4-x (inc_dec_4x.xml)"))
     paras.append(wrap_in_para(make_increase_decrease_table(inc_dec_4x, BASE)))
     paras.append(make_empty_para())
 

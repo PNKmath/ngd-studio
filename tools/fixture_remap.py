@@ -262,11 +262,11 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
     FIXTURES_18 = [
-        # 신규 11개 (813f736)
-        "bogi_table_4items.xml",
+        # 신규 11개 (813f736, 이름 갱신 2026-05-19)
+        "bogi_box_4items.xml",
         "ganada_table.xml",
-        "increase_decrease_template_3x.xml",
-        "increase_decrease_template_4x.xml",
+        "inc_dec_3x.xml",
+        "inc_dec_4x.xml",
         "synthetic_division_template_1.xml",
         "synthetic_division_template_2.xml",
         "synthetic_division_template_3.xml",
@@ -274,9 +274,9 @@ def main() -> None:
         "Pascal_triangle_1.xml",
         "Pascal_triangle_2.xml",
         "Pascal_triangle_3.xml",
-        # 기존 7개
-        "choice_table_5x5.xml",
-        "choice_table_9x4.xml",
+        # 기존 7개 (이름 갱신 2026-05-19)
+        "pq_proposition_table_5x5.xml",
+        "choice_image_5options.xml",
         "empty_box_template.xml",
         "prob_dist_5cols.xml",
         "prob_dist_6cols.xml",

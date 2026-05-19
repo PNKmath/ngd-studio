@@ -171,19 +171,19 @@ def make_increase_decrease_table(explanation_table, base_path):
     n_x = len(x_values)
 
     # 양식지 템플릿이 있는 케이스 (n_x = 1, 2, 3, 4/5)
-    # n_x=3: increase_decrease_template_3x.xml (4행 8열, 데이터 행 3개)
-    # n_x=4 or n_x=5: increase_decrease_template_4x.xml (5행 12열, 데이터 행 4개, x슬롯 5개)
+    # n_x=3: inc_dec_3x.xml (4행 8열, 데이터 행 3개)
+    # n_x=4 or n_x=5: inc_dec_4x.xml (5행 12열, 데이터 행 4개, x슬롯 5개)
     if n_x in (1, 2):
-        tpl_name = ("increase_decrease_template.xml" if n_x == 1
-                    else "increase_decrease_template_2x.xml")
+        tpl_name = ("inc_dec_1x.xml" if n_x == 1
+                    else "inc_dec_2x.xml")
         tpl_n_data_rows = 2      # 데이터 행 수 (헤더 제외)
         tpl_n_cols = 2 * n_x + 2  # 1-x→4, 2-x→6
     elif n_x == 3:
-        tpl_name = "increase_decrease_template_3x.xml"
+        tpl_name = "inc_dec_3x.xml"
         tpl_n_data_rows = 3      # y', y'', y 3행
         tpl_n_cols = 8           # 2*3+2=8
     elif n_x in (4, 5):
-        tpl_name = "increase_decrease_template_4x.xml"
+        tpl_name = "inc_dec_4x.xml"
         tpl_n_data_rows = 4      # f'(x), f(x), F''(x), F'(x) 4행
         tpl_n_cols = 12          # x슬롯 5개 포함
     else:
@@ -355,8 +355,16 @@ def make_synthetic_division_table(explanation_table, base_path):
     return header + trs + '</hp:tbl>'
 
 
+CHOICE_TABLE_MAP = {
+    "5x5": "pq_proposition_table_5x5.xml",
+    "9x4": "choice_image_5options.xml",
+    "6x3": "choice_grid_2cols.xml",
+    "6x4": "choice_grid_3cols.xml",
+}
+
+
 def make_choice_table(condition_box, base_path):
-    """그리드형 선지 테이블 (choice_table_*.xml).
+    """그리드형 선지 테이블.
 
     cellAddr(rowAddr, colAddr) 기반 in-place 치환.
     - rowSpan 병합 셀을 보존하기 위해 <hp:tr> 재구성을 하지 않음.
@@ -365,7 +373,9 @@ def make_choice_table(condition_box, base_path):
     - 데이터 길이 부족 시 fixture 원본 셀 유지.
     """
     table_type = condition_box.get("table_type", "6x3")
-    tpl_name = f"choice_table_{table_type}.xml"
+    if table_type not in CHOICE_TABLE_MAP:
+        raise KeyError(f"Unknown choice table_type: {table_type!r}")
+    tpl_name = CHOICE_TABLE_MAP[table_type]
     rows_data = condition_box.get("rows", [])  # [[v0,v1,...], ...]
 
     with open(f"{base_path}/{tpl_name}", encoding="utf-8") as f:
@@ -398,11 +408,11 @@ def make_bogi_table(condition_box, base_path):
     n_items = len(items)
 
     if n_items <= 3:
-        tpl_name = "bogi_table_3items.xml"
+        tpl_name = "bogi_box_3items.xml"
     elif n_items == 4:
-        tpl_name = "bogi_table_4items.xml"
+        tpl_name = "bogi_box_4items.xml"
     else:
-        tpl_name = "bogi_table_6items.xml"
+        tpl_name = "bogi_box_6items.xml"
     with open(f"{base_path}/{tpl_name}", "r", encoding="utf-8") as f:
         tbl_xml = f.read()
 
