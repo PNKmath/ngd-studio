@@ -20,7 +20,11 @@ def _replace_table_ids(xml):
 
 
 def _inject_cell_value(cell_xml, value):
-    """빈 셀(empty run)에 값(텍스트 or 수식)을 삽입"""
+    """셀(빈 셀 또는 이미 채워진 셀)에 값(텍스트 or 수식)을 삽입.
+
+    기존: self-closing run(<hp:run charPrIDRef="N"/>)만 매칭 → 채워진 셀 덮어쓰기 불가.
+    개선: self-closing run 없으면 내용 있는 run(<hp:run ...>...</hp:run>)도 교체.
+    """
     if not value:
         return cell_xml
 
@@ -39,7 +43,13 @@ def _inject_cell_value(cell_xml, value):
         run = f'<hp:run charPrIDRef="1"><hp:t>{xml_escape(value)}</hp:t></hp:run>'
         ls = make_lineseg(0, 1000, 1000, 850, 600)
 
-    cell_xml = re.sub(r'<hp:run charPrIDRef="\d+"/>', run, cell_xml, count=1)
+    # 1) self-closing run (빈 셀) 우선 시도
+    if re.search(r'<hp:run charPrIDRef="\d+"/>', cell_xml):
+        cell_xml = re.sub(r'<hp:run charPrIDRef="\d+"/>', run, cell_xml, count=1)
+    else:
+        # 2) 이미 텍스트/수식이 있는 run도 덮어쓰기 — 첫 번째 run 전체 교체
+        cell_xml = re.sub(r'<hp:run charPrIDRef="\d+">.*?</hp:run>', run, cell_xml, count=1, flags=re.DOTALL)
+
     cell_xml = re.sub(r'<hp:linesegarray>.*?</hp:linesegarray>', ls, cell_xml, count=1, flags=re.DOTALL)
     return cell_xml
 
@@ -346,7 +356,14 @@ def make_synthetic_division_table(explanation_table, base_path):
 
 
 def make_choice_table(condition_box, base_path):
-    """그리드형 선지 테이블 (choice_table_*.xml)"""
+    """그리드형 선지 테이블 (choice_table_*.xml).
+
+    cellAddr(rowAddr, colAddr) 기반 in-place 치환.
+    - rowSpan 병합 셀을 보존하기 위해 <hp:tr> 재구성을 하지 않음.
+    - rows_data[ri][ci] → rowAddr=ri, colAddr=ci 인 셀에 주입.
+    - 채워진 셀(헤더 등)도 _inject_cell_value 가 덮어씀.
+    - 데이터 길이 부족 시 fixture 원본 셀 유지.
+    """
     table_type = condition_box.get("table_type", "6x3")
     tpl_name = f"choice_table_{table_type}.xml"
     rows_data = condition_box.get("rows", [])  # [[v0,v1,...], ...]
@@ -359,21 +376,20 @@ def make_choice_table(condition_box, base_path):
     if not rows_data:
         return tbl_xml
 
-    cells = re.findall(r'<hp:tc .*?</hp:tc>', tbl_xml, re.DOTALL)
-    n_cols = int(table_type.split("x")[1])
-    n_rows = int(table_type.split("x")[0])
+    # cellAddr 기반 in-place 치환 — <hp:tr> 재구성 없이 fixture 원본 구조 유지
+    def _sub_cell(m):
+        cell = m.group(0)
+        addr_match = re.search(r'colAddr="(\d+)"\s+rowAddr="(\d+)"', cell)
+        if not addr_match:
+            return cell
+        col, row = int(addr_match.group(1)), int(addr_match.group(2))
+        if row < len(rows_data) and col < len(rows_data[row]):
+            val = rows_data[row][col]
+            if val:
+                return _inject_cell_value(cell, str(val))
+        return cell
 
-    for ri, row_vals in enumerate(rows_data[:n_rows]):
-        for ci, val in enumerate(row_vals[:n_cols]):
-            cell_idx = ri * n_cols + ci
-            if val and cell_idx < len(cells):
-                cells[cell_idx] = _inject_cell_value(cells[cell_idx], str(val))
-
-    header = re.match(r'^(.*?)<hp:tr>', tbl_xml, re.DOTALL).group(1)
-    trs = ""
-    for ri in range(n_rows):
-        trs += f'<hp:tr>{"".join(cells[ri*n_cols:(ri+1)*n_cols])}</hp:tr>'
-    return header + trs + '</hp:tbl>'
+    return re.sub(r'<hp:tc\b.*?</hp:tc>', _sub_cell, tbl_xml, flags=re.DOTALL)
 
 
 def make_bogi_table(condition_box, base_path):

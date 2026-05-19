@@ -160,6 +160,51 @@ open "outputs/[고][2026][1학기][강북고][수학 II]_fix_ver_final.hwpx"  # 
 
 **STATUS: needs_user** — 빌드+validate 모두 exit 0, borderFill 구조 수정 완료. 사용자가 한컴오피스에서 bogi_table_4items 시각 확인 필요.
 
+### 3회차 (근본 원인 fix) — needs_user
+
+**실행일**: 2026-05-19
+**run_id**: run-1779116264-26908
+**원인**: `make_choice_table` 평면 배열 인덱싱 + `_inject_cell_value` 채워진 셀 미덮어쓰기
+
+#### 패치 내용
+
+1. **`tables.py` — `make_choice_table` cellAddr 기반 재작성**
+   - 기존: `cell_idx = ri * n_cols + ci` → 9x4(24셀)에서 36개 인덱스 생성 → 범위 초과 silent skip + 빈 `<hp:tr>` 생성
+   - 개선: `re.sub(r'<hp:tc\b.*?</hp:tc>', _sub_cell, tbl_xml, flags=re.DOTALL)` — cellAddr(col, row) 기반 in-place 치환
+   - 결과: `<hp:tr>` 재구성 없이 fixture 원본 구조(rowSpan 병합 등) 완전 보존
+
+2. **`tables.py` — `_inject_cell_value` 채워진 셀 덮어쓰기 지원**
+   - 기존: `<hp:run charPrIDRef="N"/>` self-closing만 매칭 → `(가)(나)(다)` 헤더 절대 안 바뀜
+   - 개선: self-closing 없으면 `<hp:run charPrIDRef="N">...</hp:run>` 전체 교체 (count=1, re.DOTALL)
+   - 결과: 6x3/6x4 첫 행 헤더 `(가)(나)(다)` → ①, 데이터 정상 주입
+
+3. **`tools/build_template_showcase.py` — 타임스탬프 파일명**
+   - 기존: `_TEMPLATE_SHOWCASE.hwpx` 매번 덮어씀
+   - 개선: `_TEMPLATE_SHOWCASE_ver{YYYYMMDD-HHMMSS}.hwpx` — 이전 빌드와 비교 가능
+   - showcase validate 시 `outputs/_TEMPLATE_SHOWCASE_ver*.hwpx` 명시 (glob `outputs/*.hwpx` 사용 금지)
+
+#### 단위 테스트 결과
+
+| 테스트 케이스 | 결과 |
+|---|---|
+| 9x4 cell count = 24 (재구성 없음) | **PASS** |
+| 9x4 ① 주입 확인 | **PASS** |
+| 6x3 ① 덮어쓰기, (가) 잔존 없음 | **PASS** |
+| 6x4 24 cells | **PASS** |
+| 5x5 25 cells | **PASS** |
+
+#### 빌드 검증 결과
+
+| 항목 | exit | 비고 |
+|------|------|------|
+| build_hwpx.py | 0 | 19문제 (선택12/서술7), 이미지 1개 — 회귀 없음 |
+| validate (시험지) | 0 | cellAddr 1건 자동 FIX |
+| build_template_showcase.py | 0 | `_TEMPLATE_SHOWCASE_ver20260519-090201.hwpx` 생성 |
+| validate (showcase) | 0 | cellAddr 11건 / zOrder 105건 자동 FIX |
+
+**STATUS: needs_user** — 코드 fix 완료 + 빌드/validate exit 0. 사용자가 한컴오피스에서 9x4/6x3/6x4 choice_table 시각 확인 필요.
+- 신규 파일: `outputs/_TEMPLATE_SHOWCASE_ver20260519-090201.hwpx`
+
 ## 영향 범위
 
 - `tools/build_template_showcase.py` 만 수정 (스코프 밖 변경 없음)
