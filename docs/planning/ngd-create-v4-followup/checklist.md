@@ -26,7 +26,7 @@ Phase 2 만 Phase 1 의존. Phase 3, 4 는 독립. 사용자 우선순위는 1 >
 | 1 | [phase-01-extractor-reference-doc-expansion.md](./phase-01-extractor-reference-doc-expansion.md) | 6 | 6 | 100% | completed | `155e696` |
 | 2 | [phase-02-extractor-agentic-conversion.md](./phase-02-extractor-agentic-conversion.md) | 4 | 4 | 100% | completed | `06020a1` |
 | 3 | [phase-03-builder-cell-routing-explicit.md](./phase-03-builder-cell-routing-explicit.md) | 5 | 5 | 100% | completed | `09ecca6` |
-| 4 | [phase-04-dead-reference-cleanup.md](./phase-04-dead-reference-cleanup.md) | 4 | 4 | 100% | completed | - |
+| 4 | [phase-04-dead-reference-cleanup.md](./phase-04-dead-reference-cleanup.md) | 4 | 4 | 100% | completed | `09a2f4f` |
 | **Total** | | **19** | **19** | **100%** | | |
 
 ## Phase 의존성
