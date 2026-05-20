@@ -51,6 +51,12 @@ export function parseExamMetaFromFilename(fileName: string): ParsedFilenameMeta 
     }
   }
 
+  const yearTokenIndex = parts.findIndex((part, index) => YEAR_PATTERN.test(part) && !used.has(index));
+  if (yearTokenIndex >= 0) {
+    parsed.year = Number(parts[yearTokenIndex]);
+    used.add(yearTokenIndex);
+  }
+
   const subjectTokenIndex = parts.findIndex((part) => SUBJECT_MAP[part] !== undefined);
   if (subjectTokenIndex >= 0) {
     parsed.subject = SUBJECT_MAP[parts[subjectTokenIndex]];

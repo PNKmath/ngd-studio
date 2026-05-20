@@ -8,6 +8,7 @@ describe("parseExamMetaFromFilename", () => {
     ).toEqual({
       school: "강북고",
       grade: 2,
+      year: 2025,
       subject: "수학 II",
       semester: "1학기",
       examType: "기말",
@@ -20,6 +21,7 @@ describe("parseExamMetaFromFilename", () => {
     ).toMatchObject({
       school: "광명고",
       grade: 2,
+      year: 2025,
       subject: "수학 I",
       semester: "1학기",
       examType: "중간",
@@ -33,6 +35,7 @@ describe("parseExamMetaFromFilename", () => {
     ).toMatchObject({
       school: "강북고",
       grade: 2,
+      year: 2025,
       subject: "수학 II",
       semester: "1학기",
       examType: "기말",
@@ -45,10 +48,17 @@ describe("parseExamMetaFromFilename", () => {
     ).toMatchObject({
       school: "치동고",
       grade: 2,
+      year: 2025,
       subject: "확률과 통계",
       semester: "1학기",
       examType: "중간",
       range: "여러가지순열-확률의뜻과활용",
     });
+  });
+
+  it("returns undefined year when filename has no year token", () => {
+    const result = parseExamMetaFromFilename("[강북고][수2][지수-삼각함수].pdf");
+    expect(result).toMatchObject({ school: "강북고", subject: "수학 II" });
+    expect(result?.year).toBeUndefined();
   });
 });
