@@ -154,3 +154,14 @@ SIMPLIFIED 1 / VERIFY pass — ExtractionEditor.tsx: store 별칭 제거(useJobS
 
 #### Review (orchestrator)
 VERDICT pass / ISSUES 0 — K(UI 통일성) 및 L(아키텍처 sanity) 점검 통과. 자체 완결 아키텍처가 Phase 3 resumeFrom·followup route 와 정합, dirty 격리·동시 실행 방지 모두 OK.
+
+#### Commit
+f867f48 — feat(extraction-editor): Phase 4 — 추출 편집 저장 후 풀이부터 재실행 버튼
+
+#### E2E (orchestrator)
+skip — create-v4-full-pipeline 자동 실행은 사용자 결정으로 보류 (외부 API 과금 + 장시간). 수동 검증으로 대체:
+1. /create 에서 PDF 빌드 1회 완료
+2. 결과 패널에서 Q1 추출 결과 텍스트 일부 수정 → 저장
+3. "풀이부터 재실행" 버튼 활성화 확인 → 클릭
+4. Q1 의 solver/verifier 가 재실행되고, 나머지 문제 skip 확인
+5. 최종 HWPX 재생성, Q1 풀이만 새 추출 기반으로 갱신

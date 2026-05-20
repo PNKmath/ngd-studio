@@ -213,3 +213,9 @@ SIMPLIFIED 2 / VERIFY pass — useJobRunner.ts 이중 getState() 통합, sse.ts 
 
 #### Review (orchestrator)
 VERDICT pass / ISSUES 0 — 전 레이어 스펙 일치, UI/UX 통일성(K) 확인: section wrapper·label 클래스·card 스타일 모두 figureRegen 형제와 동일.
+
+#### Commit
+c77056b — feat(settings): Phase 1 — checker maxAttempts 설정화
+
+#### E2E (orchestrator)
+skip — no e2e_triggers

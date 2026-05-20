@@ -145,3 +145,9 @@ SIMPLIFIED 1 / VERIFY pass — app/create/page.tsx: 미사용 `canResume` 변수
 
 #### Review (orchestrator)
 VERDICT pass / ISSUES 0 — K(UI 통일성) 점검: 새 select 가 기존 MetaForm select className 과 100% 동일, 새 색·간격·border-radius 도입 없음.
+
+#### Commit
+5f9a02c — feat(create): Phase 3 — 재시작 지점 select UI 노출
+
+#### E2E (orchestrator)
+skip — no e2e_triggers
