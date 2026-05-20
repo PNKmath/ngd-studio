@@ -162,3 +162,43 @@ pytest tests/test_parts_normalizer.py -q
 | 7 | Cross-language parity | 28/28 fixture TS==Python byte-level equal |
 
 모든 결정적 규칙(R-01~R-10)이 코드로 이전 완료. LLM은 수학적 풀이 / 논리 / 교과 범위에만 집중.
+
+---
+
+## 사후 검증 부록 (2026-05-20)
+
+본 task 완료 후 사용자 요청으로 운영 데이터(`inputs/시험지 제작/.v3cache/`의 19개 cached solved JSON) 기반 동치성 검증을 추가 수행. 합성 fixture 검증의 빈 곳을 보완하기 위함.
+
+### 검증 결과 요약
+
+| Stage | 결과 | 발견 |
+|-------|------|------|
+| 1. Normalizer on real solver outputs | ✓ PASS | 19/19 안전 (5 정정, 14 idempotent, 0 손상) |
+| 2. Cross-language parity on real data | ✗ **FAIL** | TS↔Python R-10 단항 minus drift (7+ mismatch) |
+| 3. HWPX build regression | ✓ PASS | 차이 100% 의도된 normalize 효과 |
+| 4. Checker autofix on real XML | ✓ PASS | 운영 통수식 8건 모두 분리 |
+| 5. R-09 text-side (C1) 효과 | 효과 미측정 | 본 sample에 단위 표기 0건 (수2 미적분 특성) |
+
+### Stage 2 silent regression 상세
+
+Phase 7의 cross-language parity test는 28개 합성 fixture로만 검증되어 **단항 minus 케이스를 놓침**. 운영 19개 cached solved JSON 중 7+ 파일에서 TS와 Python 출력 불일치 확인:
+
+```
+input:  "= -2"           →  Python: "= - 2"   TS: "=-2"
+input:  "k =-1"          →  Python: "k = -1"  TS: "k =-1"
+input:  "=-{1 over 6}a^3" → Python: "= - {1 over 6}a^3"  TS: "=-{1 over 6}a^3"
+```
+
+운영 영향:
+- 현재 build 경로(`build_hwpx.py`)는 Python normalize만 사용 → HWPX 출력 자체는 정상
+- TS normalize는 cache write 시점에 적용 (verifier→cache 경로) → 같은 cache가 다음 build에서 Python을 다시 통과하면 의도되지 않은 추가 변환 발생, idempotency 명세 위반
+- Phase 7 parity test는 합성 fixture로만 통과 → false sense of safety
+
+### 후속 처리
+
+후속 task `audit-driven-full-agentic-codification` Phase 6에 R-10 단항 minus parity 정렬 + 운영 fixture(19개 solved JSON) parity test 통합으로 보강.
+
+### 검증 한계
+
+- Stage 5는 본 sample 특성상 효과 미측정. 통계/물리/생활 응용 문제 sample 확보 시 R-09 text-side 실효성 별도 측정 필요.
+- 검증은 build 경로 단방향만 다룸. solver→verifier feedback loop의 동치성은 verifier가 LLM 호출이라 결정적 검증 불가 (의도된 agentic 잔존).
