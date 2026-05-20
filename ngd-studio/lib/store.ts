@@ -13,6 +13,7 @@ export interface QuestionResult {
 }
 
 export interface V3Meta {
+  schoolLevel?: "중" | "고";
   school?: string;
   grade?: number;
   year?: number;

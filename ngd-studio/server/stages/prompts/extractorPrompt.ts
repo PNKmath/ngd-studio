@@ -6,6 +6,7 @@
  */
 
 export interface ExamMeta {
+  schoolLevel?: "중" | "고";
   school?: string;
   year?: number;
   grade?: number;
@@ -197,6 +198,9 @@ export function buildExtractorPrompt(input: ExtractorPromptInput): { system: str
 
   if (input.examMeta) {
     const metaLines: string[] = [];
+    if (input.examMeta.schoolLevel) {
+      metaLines.push(`학교급: ${input.examMeta.schoolLevel === "중" ? "중학교" : "고등학교"}`);
+    }
     if (input.examMeta.school) metaLines.push(`학교: ${input.examMeta.school}`);
     if (input.examMeta.year) metaLines.push(`연도: ${input.examMeta.year}`);
     if (input.examMeta.grade) metaLines.push(`학년: ${input.examMeta.grade}학년`);

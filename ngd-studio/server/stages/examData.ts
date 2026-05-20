@@ -6,6 +6,7 @@ import type { StageCache } from "./cache";
  * Field names match build_hwpx.py / figure_processor.py consumption.
  */
 export interface ExamMetaInput {
+  schoolLevel?: "중" | "고";
   school?: string;
   grade?: number;
   subject?: string;

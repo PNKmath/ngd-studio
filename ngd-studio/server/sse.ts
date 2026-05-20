@@ -131,7 +131,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   let body: {
     mode: string;
     files: { pdf: string; hwpx?: string; questionImages?: number[] };
-    meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number };
+    meta?: { schoolLevel?: "중" | "고"; school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number };
     jobId: string;
     provider?: AIProviderId;
     stageOverrides?: Partial<Record<AIStageKey, AIProviderId>>;

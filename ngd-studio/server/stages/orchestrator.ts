@@ -300,6 +300,7 @@ export async function runStageOrchestrator(
         const r = await runExtractorStage({
           questionNumber: n,
           imagePath: img.path,
+          examMeta: input.meta,
           cache,
           provider: getProviderForStage("create.extractor", stageOverrides),
           signal,

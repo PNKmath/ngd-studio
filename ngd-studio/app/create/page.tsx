@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CropperWorkspace, type CropperWorkspaceRef } from "@/components/cropper/CropperWorkspace";
-import { type MetaValue } from "@/components/upload/MetaForm";
+import { HIGH_SCHOOL_SUBJECTS, MIDDLE_SCHOOL_SUBJECT, type MetaValue, type SchoolLevel } from "@/components/upload/MetaForm";
 import { parseExamMetaFromFilename } from "@/lib/pdf/filenameMeta";
 import { useJobRunner } from "@/lib/useJobRunner";
 import { useJobStore } from "@/lib/store";
@@ -38,6 +38,7 @@ const META_LS_KEY = "create-v4.meta-form";
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
 const DEFAULT_META: MetaValue = {
+  schoolLevel: "고",
   school: "",
   grade: 2,
   year: CURRENT_YEAR,
@@ -172,6 +173,7 @@ export default function CreateV4Page() {
     if (!v3Meta || hasJob) return;
     queueMicrotask(() => {
       setMeta({
+        schoolLevel: v3Meta.schoolLevel ?? "고",
         school: v3Meta.school ?? "",
         grade: v3Meta.grade ?? 2,
         year: v3Meta.year ?? CURRENT_YEAR,
@@ -229,6 +231,7 @@ export default function CreateV4Page() {
     } catch { /* ignore */ }
 
     const jobMeta = {
+      schoolLevel: (cachedMeta.schoolLevel as SchoolLevel) || meta.schoolLevel,
       school: (cachedMeta.school as string) || meta.school,
       grade: (cachedMeta.grade as number) || meta.grade,
       year: (cachedMeta.year as number) || meta.year,
@@ -443,97 +446,121 @@ export default function CreateV4Page() {
             {hasJob && <span className="text-[9px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">LOCKED</span>}
           </div>
           
-          <div className="flex flex-col gap-2.5">
-            {/* Row 1: 학년도 | 학교 | 학년 | 과목 */}
-            <div className="grid grid-cols-4 gap-x-6 gap-y-2">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">학년도</span>
-                <select
-                  value={hasJob ? (v3Meta?.year || meta.year) : meta.year}
-                  onChange={(e) => handleMetaChange({ ...meta, year: Number(e.target.value) })}
-                  disabled={submitting || isRunning || hasJob}
-                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
-                >
-                  {YEAR_OPTIONS.map((y) => (
-                    <option key={y} value={y}>{y}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">학교</span>
-                <input
-                  type="text"
-                  value={hasJob ? (v3Meta?.school || "") : meta.school}
-                  onChange={(e) => handleMetaChange({ ...meta, school: e.target.value })}
-                  placeholder="학교명 입력"
-                  disabled={submitting || isRunning || hasJob}
-                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none transition-colors placeholder:text-muted-foreground/40 disabled:opacity-70"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">학년</span>
-                <select
-                  value={hasJob ? (v3Meta?.grade || 2) : meta.grade}
-                  onChange={(e) => handleMetaChange({ ...meta, grade: Number(e.target.value) })}
-                  disabled={submitting || isRunning || hasJob}
-                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
-                >
-                  {[1, 2, 3].map(g => <option key={g} value={g}>{g}학년</option>)}
-                </select>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">과목</span>
-                <select
-                  value={hasJob ? (v3Meta?.subject || "수학 I") : meta.subject}
-                  onChange={(e) => handleMetaChange({ ...meta, subject: e.target.value })}
-                  disabled={submitting || isRunning || hasJob}
-                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
-                >
-                  {["수학", "수학 I", "수학 II", "확률과 통계", "미적분", "기하"].map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            </div>
+          {(() => {
+            const effectiveLevel: SchoolLevel = (hasJob ? (v3Meta?.schoolLevel ?? meta.schoolLevel) : meta.schoolLevel) ?? "고";
+            const isMiddle = effectiveLevel === "중";
+            const handleLevelChange = (next: SchoolLevel) => {
+              const nextSubject = next === "중" ? MIDDLE_SCHOOL_SUBJECT : (HIGH_SCHOOL_SUBJECTS.includes(meta.subject as typeof HIGH_SCHOOL_SUBJECTS[number]) ? meta.subject : HIGH_SCHOOL_SUBJECTS[0]);
+              handleMetaChange({ ...meta, schoolLevel: next, subject: nextSubject });
+            };
+            const subjectOptions = isMiddle ? [MIDDLE_SCHOOL_SUBJECT] : [...HIGH_SCHOOL_SUBJECTS];
+            return (
+              <div className="flex flex-col gap-2.5">
+                {/* Row 1: 학교급 | 학년도 | 학교 | 학년 */}
+                <div className="grid grid-cols-4 gap-x-6 gap-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] w-10 text-muted-foreground font-semibold shrink-0">학교급</span>
+                    <select
+                      value={effectiveLevel}
+                      onChange={(e) => handleLevelChange(e.target.value as SchoolLevel)}
+                      disabled={submitting || isRunning || hasJob}
+                      className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                    >
+                      <option value="고">고등학교</option>
+                      <option value="중">중학교</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] w-10 text-muted-foreground font-semibold shrink-0">학년도</span>
+                    <select
+                      value={hasJob ? (v3Meta?.year || meta.year) : meta.year}
+                      onChange={(e) => handleMetaChange({ ...meta, year: Number(e.target.value) })}
+                      disabled={submitting || isRunning || hasJob}
+                      className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                    >
+                      {YEAR_OPTIONS.map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] w-10 text-muted-foreground font-semibold shrink-0">학교</span>
+                    <input
+                      type="text"
+                      value={hasJob ? (v3Meta?.school || "") : meta.school}
+                      onChange={(e) => handleMetaChange({ ...meta, school: e.target.value })}
+                      placeholder={isMiddle ? "OO중학교" : "학교명 입력"}
+                      disabled={submitting || isRunning || hasJob}
+                      className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none transition-colors placeholder:text-muted-foreground/40 disabled:opacity-70"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] w-10 text-muted-foreground font-semibold shrink-0">학년</span>
+                    <select
+                      value={hasJob ? (v3Meta?.grade || 2) : meta.grade}
+                      onChange={(e) => handleMetaChange({ ...meta, grade: Number(e.target.value) })}
+                      disabled={submitting || isRunning || hasJob}
+                      className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                    >
+                      {[1, 2, 3].map(g => <option key={g} value={g}>{g}학년</option>)}
+                    </select>
+                  </div>
+                </div>
 
-            {/* Row 2: 학기 | 시험 | 범위 */}
-            <div className="grid grid-cols-3 gap-x-6 gap-y-2">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">학기</span>
-                <select
-                  value={hasJob ? (v3Meta?.semester || "1학기") : meta.semester}
-                  onChange={(e) => handleMetaChange({ ...meta, semester: e.target.value })}
-                  disabled={submitting || isRunning || hasJob}
-                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
-                >
-                  <option value="1학기">1학기</option>
-                  <option value="2학기">2학기</option>
-                </select>
+                {/* Row 2: 과목 | 학기 | 시험 | 범위 */}
+                <div className="grid grid-cols-4 gap-x-6 gap-y-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] w-10 text-muted-foreground font-semibold shrink-0">과목</span>
+                    <select
+                      value={hasJob ? (v3Meta?.subject || (isMiddle ? MIDDLE_SCHOOL_SUBJECT : "수학 I")) : meta.subject}
+                      onChange={(e) => handleMetaChange({ ...meta, subject: e.target.value })}
+                      disabled={submitting || isRunning || hasJob || isMiddle}
+                      title={isMiddle ? "중학교는 단일 과목(수학)으로 고정됩니다." : undefined}
+                      className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                    >
+                      {subjectOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] w-10 text-muted-foreground font-semibold shrink-0">학기</span>
+                    <select
+                      value={hasJob ? (v3Meta?.semester || "1학기") : meta.semester}
+                      onChange={(e) => handleMetaChange({ ...meta, semester: e.target.value })}
+                      disabled={submitting || isRunning || hasJob}
+                      className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                    >
+                      <option value="1학기">1학기</option>
+                      <option value="2학기">2학기</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] w-10 text-muted-foreground font-semibold shrink-0">시험</span>
+                    <select
+                      value={hasJob ? (v3Meta?.examType || "중간") : meta.examType}
+                      onChange={(e) => handleMetaChange({ ...meta, examType: e.target.value })}
+                      disabled={submitting || isRunning || hasJob}
+                      className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                    >
+                      <option value="중간">중간</option>
+                      <option value="기말">기말</option>
+                      <option value="모의">모의</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] w-10 text-muted-foreground font-semibold shrink-0">범위</span>
+                    <input
+                      type="text"
+                      value={hasJob ? (v3Meta?.range || "") : meta.range}
+                      onChange={(e) => handleMetaChange({ ...meta, range: e.target.value })}
+                      placeholder={isMiddle ? "예: 정수와 유리수~일차방정식" : "예: 지수~로그"}
+                      disabled={submitting || isRunning || hasJob}
+                      className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none transition-colors placeholder:text-muted-foreground/40 disabled:opacity-70"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">시험</span>
-                <select
-                  value={hasJob ? (v3Meta?.examType || "중간") : meta.examType}
-                  onChange={(e) => handleMetaChange({ ...meta, examType: e.target.value })}
-                  disabled={submitting || isRunning || hasJob}
-                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
-                >
-                  <option value="중간">중간</option>
-                  <option value="기말">기말</option>
-                  <option value="모의">모의</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">범위</span>
-                <input
-                  type="text"
-                  value={hasJob ? (v3Meta?.range || "") : meta.range}
-                  onChange={(e) => handleMetaChange({ ...meta, range: e.target.value })}
-                  placeholder="예: 지수~로그"
-                  disabled={submitting || isRunning || hasJob}
-                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none transition-colors placeholder:text-muted-foreground/40 disabled:opacity-70"
-                />
-              </div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
 
         {/* Partial Separator */}
@@ -638,7 +665,7 @@ export default function CreateV4Page() {
             <div className="flex items-center gap-3">
               <label
                 className="flex items-center gap-1.5"
-                title="solver 풀이를 별도 LLM(verifier)이 독립 검증해 fail 시 solver↔verifier 재시도 루프를 돕니다. 0이면 verifier 단계를 건너뛰고 solver 결과를 그대로 사용 (비용↓, 품질↓)."
+                title="AI가 푼 풀이를 또 다른 AI가 다시 검토합니다. 틀린 곳이 있으면 풀이를 다시 시도하며, 횟수가 많을수록 정확도는 올라가지만 시간·비용이 늘어납니다. 0 = 검증 없이 첫 풀이 그대로 사용."
               >
                 <span className={cn(
                   "text-[11px] font-bold tracking-tight transition-colors",
@@ -662,7 +689,7 @@ export default function CreateV4Page() {
               </label>
               <label
                 className="flex items-center gap-1.5"
-                title="checker가 빌드된 HWPX를 검사한 뒤 발견된 결정적 이슈(빈줄 누락·수식 토큰 오류 등)를 자동 수정 후 재검사하는 횟수. 0이면 검사만 하고 수정 안 함."
+                title="완성된 HWPX 시험지를 자동 점검하고, 자주 나는 사소한 오류(빈 줄 누락·수식 기호 오타 등)를 자동으로 고친 뒤 다시 점검합니다. 0 = 점검만 하고 수정은 사용자가 직접."
               >
                 <span className={cn(
                   "text-[11px] font-bold tracking-tight transition-colors",

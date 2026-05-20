@@ -3,7 +3,10 @@
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
 
+export type SchoolLevel = "중" | "고";
+
 export type MetaValue = {
+  schoolLevel: SchoolLevel;
   school: string;
   grade: number;
   year: number;
@@ -12,6 +15,9 @@ export type MetaValue = {
   examType: string;
   range: string;
 };
+
+export const HIGH_SCHOOL_SUBJECTS = ["수학", "수학 I", "수학 II", "확률과 통계", "미적분", "기하"] as const;
+export const MIDDLE_SCHOOL_SUBJECT = "수학";
 
 export interface MetaFormProps {
   value: MetaValue;
@@ -22,9 +28,27 @@ export interface MetaFormProps {
 export function MetaForm({ value, onChange, disabled }: MetaFormProps) {
   const fieldClass =
     "w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm disabled:opacity-50 disabled:cursor-not-allowed";
+  const isMiddle = value.schoolLevel === "중";
+  const handleSchoolLevelChange = (next: SchoolLevel) => {
+    // 중학교 선택 시 과목을 단일 옵션으로 고정 (extractor 가 schoolLevel 로 분기).
+    const nextSubject = next === "중" ? MIDDLE_SCHOOL_SUBJECT : (value.subject || HIGH_SCHOOL_SUBJECTS[0]);
+    onChange({ ...value, schoolLevel: next, subject: nextSubject });
+  };
   return (
     <div className="space-y-2 text-sm">
       <div className="grid grid-cols-4 gap-2">
+        <div>
+          <label className="text-xs text-muted-foreground">학교급</label>
+          <select
+            value={value.schoolLevel}
+            onChange={(e) => handleSchoolLevelChange(e.target.value as SchoolLevel)}
+            disabled={disabled}
+            className={fieldClass}
+          >
+            <option value="고">고등학교</option>
+            <option value="중">중학교</option>
+          </select>
+        </div>
         <div>
           <label className="text-xs text-muted-foreground">학년도</label>
           <select
@@ -44,7 +68,7 @@ export function MetaForm({ value, onChange, disabled }: MetaFormProps) {
             type="text"
             value={value.school}
             onChange={(e) => onChange({ ...value, school: e.target.value })}
-            placeholder="OO고등학교"
+            placeholder={isMiddle ? "OO중학교" : "OO고등학교"}
             disabled={disabled}
             className={fieldClass}
           />
@@ -62,24 +86,22 @@ export function MetaForm({ value, onChange, disabled }: MetaFormProps) {
             <option value={3}>3학년</option>
           </select>
         </div>
+      </div>
+      <div className="grid grid-cols-4 gap-2">
         <div>
           <label className="text-xs text-muted-foreground">과목</label>
           <select
             value={value.subject}
             onChange={(e) => onChange({ ...value, subject: e.target.value })}
-            disabled={disabled}
+            disabled={disabled || isMiddle}
+            title={isMiddle ? "중학교는 단일 과목(수학)으로 고정됩니다." : undefined}
             className={fieldClass}
           >
-            <option>수학</option>
-            <option>수학 I</option>
-            <option>수학 II</option>
-            <option>확률과 통계</option>
-            <option>미적분</option>
-            <option>기하</option>
+            {isMiddle
+              ? <option value={MIDDLE_SCHOOL_SUBJECT}>{MIDDLE_SCHOOL_SUBJECT}</option>
+              : HIGH_SCHOOL_SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
         <div>
           <label className="text-xs text-muted-foreground">학기</label>
           <select
@@ -111,7 +133,7 @@ export function MetaForm({ value, onChange, disabled }: MetaFormProps) {
             type="text"
             value={value.range}
             onChange={(e) => onChange({ ...value, range: e.target.value })}
-            placeholder="지수 ~ 삼각함수그래프"
+            placeholder={isMiddle ? "정수와 유리수 ~ 일차방정식" : "지수 ~ 삼각함수그래프"}
             disabled={disabled}
             className={fieldClass}
           />
