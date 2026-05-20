@@ -14,7 +14,6 @@ import {
   type AISettings,
   type SelectableProviderId,
   type StageProviderId,
-  type StageSkipMap,
 } from "@/lib/ai/settings";
 import { STAGE_PROVIDER_CAPABILITY } from "@/lib/ai/stageCapability";
 import { recommendStageProvider } from "@/lib/ai/recommendation";
@@ -499,7 +498,6 @@ export default function SettingsPage() {
                       <select
                         value={currentOverride}
                         onChange={(e) => setStageOverride(stageKey, e.target.value as StageProviderId | "")}
-                        disabled={stageKey === "create.verifier" && !!settings.stageSkip?.["create.verifier"]}
                         className="w-full rounded-md border bg-background px-2 py-1.5 text-sm outline-none transition-colors focus:border-primary disabled:opacity-40"
                       >
                         <option value="">자동 (기본 provider 사용)</option>
@@ -509,20 +507,6 @@ export default function SettingsPage() {
                           </option>
                         ))}
                       </select>
-
-                      {stageKey === "create.verifier" && (
-                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <input
-                            type="checkbox"
-                            checked={!!settings.stageSkip?.["create.verifier"]}
-                            onChange={(e) => setSettings(writeAISettings({
-                              ...settings,
-                              stageSkip: { ...settings.stageSkip, "create.verifier": e.target.checked } as StageSkipMap,
-                            }))}
-                          />
-                          검증 단계 스킵 (solver 결과로 figure 진입)
-                        </label>
-                      )}
 
                       {!deepSeekSupported && (
                         <p className="text-xs text-muted-foreground">

@@ -18,7 +18,9 @@ import {
   AI_STAGE_KEYS,
   DEFAULT_AI_SETTINGS,
   readAISettings,
+  writeAISettings,
   type AISettings,
+  type StageSkipMap,
 } from "@/lib/ai/settings";
 import type { AIProviderId, AIStageKey } from "@/lib/ai";
 
@@ -184,7 +186,6 @@ export default function CreateV4Page() {
 
   // 이전 작업 재개 상태
   const [existingImages, setExistingImages] = useState<{ count: number; hasClean: boolean; numbers: number[]; essayNumbers: number[] } | null>(null);
-  const [resumeFrom, setResumeFrom] = useState("auto");
 
   // figure 상태 + 폴링
   const [figureStatus, setFigureStatus] = useState<FigureStatus | null>(null);
@@ -237,7 +238,7 @@ export default function CreateV4Page() {
       examType: (cachedMeta.examType as string) || meta.examType,
       range: (cachedMeta.range as string) || meta.range,
       questionCount: existingImages.count,
-      resumeFrom,
+      resumeFrom: "auto",
     };
     setV3Meta({ ...jobMeta });
 
@@ -258,7 +259,7 @@ export default function CreateV4Page() {
     }
 
     await startJob("resume", { pdf: "" }, jobMeta);
-  }, [existingImages, meta, resumeFrom, startJob, setV3Meta]);
+  }, [existingImages, meta, startJob, setV3Meta]);
 
   // figure 확인 패널 표시 여부
   const showFigureConfirm = isDone
@@ -583,6 +584,12 @@ export default function CreateV4Page() {
 
         {/* Section 4: Global Actions */}
         <div className="px-6 py-3 bg-muted/10 self-stretch flex flex-col justify-center gap-3 min-w-[240px] rounded-r-2xl border-l">
+          {!hasJob && existingImages && (
+            <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-200 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm flex items-center gap-2">
+              <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
+              이전 작업이 존재합니다. "작업 재개"를 클릭하세요.
+            </div>
+          )}
           <div className="flex items-center gap-2">
             {!hasJob ? (
               <>
@@ -626,31 +633,27 @@ export default function CreateV4Page() {
             )}
           </div>
           
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-2 cursor-pointer group">
               <input type="checkbox" checked={autoSplitEnabled} onChange={handleAutoSplitToggle} className="accent-primary w-3.5 h-3.5" />
-              <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors font-bold uppercase tracking-tight">Auto-Split</span>
+              <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors font-bold tracking-tight">
+                자동 분할 <span className="font-normal opacity-70">(Gemini API 사용)</span>
+              </span>
             </label>
-            {!hasJob && !existingImages && <span className="text-[9px] text-muted-foreground font-mono opacity-50 uppercase">Ready</span>}
-            {!hasJob && existingImages && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-tight">어디부터?</span>
-                <select
-                  value={resumeFrom}
-                  onChange={(e) => setResumeFrom(e.target.value)}
-                  disabled={submitting}
-                  className="px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
-                >
-                  <option value="auto">자동 (캐시 스캔)</option>
-                  <option value="extractor">추출부터</option>
-                  <option value="solver">풀이부터</option>
-                  <option value="verifier">검증부터</option>
-                  <option value="figure">그림부터</option>
-                  <option value="builder">빌드부터</option>
-                  <option value="checker">검사만</option>
-                </select>
-              </label>
-            )}
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={!aiSettings.stageSkip?.["create.verifier"]}
+                onChange={(e) => setAiSettings(writeAISettings({
+                  ...aiSettings,
+                  stageSkip: { ...aiSettings.stageSkip, "create.verifier": !e.target.checked } as StageSkipMap,
+                }))}
+                className="accent-primary w-3.5 h-3.5"
+              />
+              <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors font-bold tracking-tight">
+                검증 포함
+              </span>
+            </label>
           </div>
         </div>
       </div>
@@ -751,14 +754,6 @@ export default function CreateV4Page() {
               </div>
             )}
 
-            {!hasJob && existingImages && (
-              <div className="absolute top-4 right-4 pointer-events-none">
-                <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-200 px-3 py-1.5 rounded-lg text-xs font-bold shadow-md flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
-                  <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
-                  이전 작업이 존재합니다. 상단 "작업 재개"를 클릭하세요.
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
