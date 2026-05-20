@@ -20,11 +20,12 @@ entry_points:
   - api-question-images
   - api-file
 involved_globs:
-  - ngd-studio/app/create-v4/**
+  - ngd-studio/app/create/**
   - ngd-studio/components/cropper/**
   - ngd-studio/components/upload/**
   - ngd-studio/lib/useJobRunner.ts
   - ngd-studio/lib/store.ts
+  - ngd-studio/lib/pdf/**
   - ngd-studio/app/api/run/**
   - ngd-studio/app/api/jobs/**
   - ngd-studio/app/api/upload/**
@@ -40,9 +41,9 @@ involved_globs:
   - ngd-studio/components/ui/**
   - ngd-studio/lib/utils.ts
 last_change:
-  date: 2026-05-20
-  task: bootstrap
-  ref: changelog/create.md#create-v4-full-pipeline-2026-05-20
+  date: 2026-05-21
+  task: create-meta-year-field
+  ref: changelog/create.md#create-v4-full-pipeline-2026-05-21
 ---
 
 # create-v4-full-pipeline: create-v4 PDF → 추출 → solver → builder → HWPX 완성
@@ -51,7 +52,7 @@ last_change:
 
 ## scenarios
 
-1. localhost:3000/create-v4 진입 → 페이지 200 응답
+1. localhost:3000/create 진입 → 페이지 200 응답
 2. PDF + 메타 입력 → "추출 시작" → extractor 완료 (job status = extracted)
 3. solver/verifier 단계 통과 (job status = solved)
 4. figure + builder 단계 통과 (job status = built)
