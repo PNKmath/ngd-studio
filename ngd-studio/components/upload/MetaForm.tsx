@@ -1,5 +1,8 @@
 "use client";
 
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
+
 export type MetaValue = {
   school: string;
   grade: number;
@@ -45,6 +48,21 @@ export function MetaForm({ value, onChange, disabled }: MetaFormProps) {
           </select>
         </div>
         <div>
+          <label className="text-xs text-muted-foreground">학년도</label>
+          <select
+            value={value.year}
+            onChange={(e) => onChange({ ...value, year: Number(e.target.value) })}
+            disabled={disabled}
+            className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {YEAR_OPTIONS.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
           <label className="text-xs text-muted-foreground">과목</label>
           <select
             value={value.subject}
@@ -60,8 +78,6 @@ export function MetaForm({ value, onChange, disabled }: MetaFormProps) {
             <option>기하</option>
           </select>
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="text-xs text-muted-foreground">학기</label>
           <select
@@ -74,19 +90,19 @@ export function MetaForm({ value, onChange, disabled }: MetaFormProps) {
             <option>2학기</option>
           </select>
         </div>
-        <div>
-          <label className="text-xs text-muted-foreground">시험</label>
-          <select
-            value={value.examType}
-            onChange={(e) => onChange({ ...value, examType: e.target.value })}
-            disabled={disabled}
-            className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option>중간</option>
-            <option>기말</option>
-            <option>모의</option>
-          </select>
-        </div>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground">시험</label>
+        <select
+          value={value.examType}
+          onChange={(e) => onChange({ ...value, examType: e.target.value })}
+          disabled={disabled}
+          className="w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <option>중간</option>
+          <option>기말</option>
+          <option>모의</option>
+        </select>
       </div>
       <div>
         <label className="text-xs text-muted-foreground">범위</label>

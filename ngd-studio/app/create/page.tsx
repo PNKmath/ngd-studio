@@ -34,9 +34,12 @@ type BuildStatus = {
 
 const AUTO_SPLIT_LS_KEY = "cropper.auto-split-on-upload";
 const META_LS_KEY = "create-v4.meta-form";
+const CURRENT_YEAR = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
 const DEFAULT_META: MetaValue = {
   school: "",
   grade: 2,
+  year: CURRENT_YEAR,
   subject: "수학 I",
   semester: "1학기",
   examType: "중간",
@@ -171,6 +174,7 @@ export default function CreateV4Page() {
       setMeta({
         school: v3Meta.school ?? "",
         grade: v3Meta.grade ?? 2,
+        year: v3Meta.year ?? CURRENT_YEAR,
         subject: v3Meta.subject ?? "수학 I",
         semester: v3Meta.semester ?? "1학기",
         examType: v3Meta.examType ?? "중간",
@@ -199,6 +203,7 @@ export default function CreateV4Page() {
   const isMetaComplete =
     meta.school.trim().length > 0 &&
     meta.grade > 0 &&
+    meta.year > 0 &&
     meta.subject.trim().length > 0 &&
     meta.semester.trim().length > 0 &&
     meta.examType.trim().length > 0 &&
@@ -227,6 +232,7 @@ export default function CreateV4Page() {
     const jobMeta = {
       school: (cachedMeta.school as string) || meta.school,
       grade: (cachedMeta.grade as number) || meta.grade,
+      year: (cachedMeta.year as number) || meta.year,
       subject: (cachedMeta.subject as string) || meta.subject,
       semester: (cachedMeta.semester as string) || meta.semester,
       examType: (cachedMeta.examType as string) || meta.examType,
@@ -346,7 +352,7 @@ export default function CreateV4Page() {
       if (items.length === 0) return;
 
       if (!isMetaComplete) {
-        setSubmitError("학교/학년/과목/학기/시험/범위 6개 필드를 모두 입력하세요.");
+        setSubmitError("학교/학년/학년도/과목/학기/시험/범위 7개 필드를 모두 입력하세요.");
         return;
       }
 
@@ -463,6 +469,19 @@ export default function CreateV4Page() {
                   className="w-24 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
                 >
                   {[1, 2, 3].map(g => <option key={g} value={g}>{g}학년</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] w-8 text-muted-foreground font-semibold">학년도</span>
+                <select
+                  value={hasJob ? (v3Meta?.year || meta.year) : meta.year}
+                  onChange={(e) => handleMetaChange({ ...meta, year: Number(e.target.value) })}
+                  disabled={submitting || isRunning || hasJob}
+                  className="w-24 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                >
+                  {YEAR_OPTIONS.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
                 </select>
               </div>
             </div>
