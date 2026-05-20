@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "대시보드", icon: "grid" },
   { href: "/create", label: "시험지 제작", icon: "file-plus" },
-  { href: "/create-v4", label: "PDF 자동크롭", icon: "scissors" },
   { href: "/review", label: "오검", icon: "search" },
   { href: "/history", label: "히스토리", icon: "clock" },
   { href: "/settings", label: "설정", icon: "settings" },
@@ -29,15 +28,6 @@ const iconMap: Record<string, React.ReactNode> = {
       <polyline points="14 2 14 8 20 8" />
       <line x1="12" y1="18" x2="12" y2="12" />
       <line x1="9" y1="15" x2="15" y2="15" />
-    </svg>
-  ),
-  scissors: (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-      <circle cx="6" cy="6" r="3" />
-      <circle cx="6" cy="18" r="3" />
-      <line x1="20" y1="4" x2="8.12" y2="15.88" />
-      <line x1="14.47" y1="14.48" x2="20" y2="20" />
-      <line x1="8.12" y1="8.12" x2="12" y2="12" />
     </svg>
   ),
   search: (

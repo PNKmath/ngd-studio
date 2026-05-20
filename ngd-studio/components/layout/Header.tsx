@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 const pageTitles: Record<string, { title: string }> = {
   "/": { title: "대시보드" },
   "/create": { title: "시험지 제작" },
-  "/create-v4": { title: "PDF 자동크롭" },
   "/review": { title: "오검 (오류검수)" },
   "/history": { title: "작업 히스토리" },
   "/settings": { title: "설정" },
