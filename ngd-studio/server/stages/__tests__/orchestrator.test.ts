@@ -525,11 +525,11 @@ describe("runStageOrchestrator", () => {
     const summary = (verifierDoneEvent!.data as Record<string, unknown>).summary as string;
     expect(summary).toMatch(/스킵|skipped|skip/i);
 
-    // Should emit a verifier log event mentioning stageSkip.
+    // Should emit a verifier log event indicating skip.
     const verifierSkipLog = events.find(
       (e) => e.event === "log" &&
         (e.data as Record<string, unknown>).stage === "verifier" &&
-        ((e.data as Record<string, unknown>).message as string).includes("stageSkip")
+        ((e.data as Record<string, unknown>).message as string).includes("스킵")
     );
     expect(verifierSkipLog).toBeDefined();
   }, 10_000);

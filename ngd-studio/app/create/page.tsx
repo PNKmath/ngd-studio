@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { CropperWorkspace, type CropperWorkspaceRef } from "@/components/cropper/CropperWorkspace";
-import { MetaForm, type MetaValue } from "@/components/upload/MetaForm";
+import { type MetaValue } from "@/components/upload/MetaForm";
 import { parseExamMetaFromFilename } from "@/lib/pdf/filenameMeta";
 import { useJobRunner } from "@/lib/useJobRunner";
 import { useJobStore } from "@/lib/store";
@@ -20,7 +20,6 @@ import {
   readAISettings,
   writeAISettings,
   type AISettings,
-  type StageSkipMap,
 } from "@/lib/ai/settings";
 import type { AIProviderId, AIStageKey } from "@/lib/ai";
 
@@ -444,82 +443,78 @@ export default function CreateV4Page() {
             {hasJob && <span className="text-[9px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">LOCKED</span>}
           </div>
           
-          <div className="flex flex-wrap gap-x-8 gap-y-3">
-            {/* Column 1: Core Info */}
-            <div className="flex flex-col gap-2.5 min-w-[200px]">
+          <div className="flex flex-col gap-2.5">
+            {/* Row 1: 학년도 | 학교 | 학년 | 과목 */}
+            <div className="grid grid-cols-4 gap-x-6 gap-y-2">
               <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold">학교</span>
-                <input
-                  type="text"
-                  value={hasJob ? (v3Meta?.school || "") : meta.school}
-                  onChange={(e) => handleMetaChange({ ...meta, school: e.target.value })}
-                  placeholder="학교명 입력"
-                  disabled={submitting || isRunning || hasJob}
-                  className="flex-1 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none transition-colors placeholder:text-muted-foreground/40 disabled:opacity-70"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold">학년</span>
-                <select
-                  value={hasJob ? (v3Meta?.grade || 2) : meta.grade}
-                  onChange={(e) => handleMetaChange({ ...meta, grade: Number(e.target.value) })}
-                  disabled={submitting || isRunning || hasJob}
-                  className="w-24 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
-                >
-                  {[1, 2, 3].map(g => <option key={g} value={g}>{g}학년</option>)}
-                </select>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold">학년도</span>
+                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">학년도</span>
                 <select
                   value={hasJob ? (v3Meta?.year || meta.year) : meta.year}
                   onChange={(e) => handleMetaChange({ ...meta, year: Number(e.target.value) })}
                   disabled={submitting || isRunning || hasJob}
-                  className="w-24 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
                 >
                   {YEAR_OPTIONS.map((y) => (
                     <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
               </div>
-            </div>
-
-            {/* Column 2: Subject & Semester */}
-            <div className="flex flex-col gap-2.5 min-w-[180px]">
               <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold">과목</span>
+                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">학교</span>
+                <input
+                  type="text"
+                  value={hasJob ? (v3Meta?.school || "") : meta.school}
+                  onChange={(e) => handleMetaChange({ ...meta, school: e.target.value })}
+                  placeholder="학교명 입력"
+                  disabled={submitting || isRunning || hasJob}
+                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none transition-colors placeholder:text-muted-foreground/40 disabled:opacity-70"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">학년</span>
+                <select
+                  value={hasJob ? (v3Meta?.grade || 2) : meta.grade}
+                  onChange={(e) => handleMetaChange({ ...meta, grade: Number(e.target.value) })}
+                  disabled={submitting || isRunning || hasJob}
+                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                >
+                  {[1, 2, 3].map(g => <option key={g} value={g}>{g}학년</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">과목</span>
                 <select
                   value={hasJob ? (v3Meta?.subject || "수학 I") : meta.subject}
                   onChange={(e) => handleMetaChange({ ...meta, subject: e.target.value })}
                   disabled={submitting || isRunning || hasJob}
-                  className="flex-1 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
                 >
                   {["수학", "수학 I", "수학 II", "확률과 통계", "미적분", "기하"].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
+            </div>
+
+            {/* Row 2: 학기 | 시험 | 범위 */}
+            <div className="grid grid-cols-3 gap-x-6 gap-y-2">
               <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold">학기</span>
+                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">학기</span>
                 <select
                   value={hasJob ? (v3Meta?.semester || "1학기") : meta.semester}
                   onChange={(e) => handleMetaChange({ ...meta, semester: e.target.value })}
                   disabled={submitting || isRunning || hasJob}
-                  className="w-24 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
                 >
                   <option value="1학기">1학기</option>
                   <option value="2학기">2학기</option>
                 </select>
               </div>
-            </div>
-
-            {/* Column 3: Exam & Range */}
-            <div className="flex flex-col gap-2.5 min-w-[200px]">
               <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold">시험</span>
+                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">시험</span>
                 <select
                   value={hasJob ? (v3Meta?.examType || "중간") : meta.examType}
                   onChange={(e) => handleMetaChange({ ...meta, examType: e.target.value })}
                   disabled={submitting || isRunning || hasJob}
-                  className="w-24 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
                 >
                   <option value="중간">중간</option>
                   <option value="기말">기말</option>
@@ -527,14 +522,14 @@ export default function CreateV4Page() {
                 </select>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] w-8 text-muted-foreground font-semibold">범위</span>
+                <span className="text-[10px] w-8 text-muted-foreground font-semibold shrink-0">범위</span>
                 <input
                   type="text"
                   value={hasJob ? (v3Meta?.range || "") : meta.range}
                   onChange={(e) => handleMetaChange({ ...meta, range: e.target.value })}
                   placeholder="예: 지수~로그"
                   disabled={submitting || isRunning || hasJob}
-                  className="flex-1 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none transition-colors placeholder:text-muted-foreground/40 disabled:opacity-70"
+                  className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none transition-colors placeholder:text-muted-foreground/40 disabled:opacity-70"
                 />
               </div>
             </div>
@@ -640,20 +635,56 @@ export default function CreateV4Page() {
                 자동 분할 <span className="font-normal opacity-70">(Gemini API 사용)</span>
               </span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={!aiSettings.stageSkip?.["create.verifier"]}
-                onChange={(e) => setAiSettings(writeAISettings({
-                  ...aiSettings,
-                  stageSkip: { ...aiSettings.stageSkip, "create.verifier": !e.target.checked } as StageSkipMap,
-                }))}
-                className="accent-primary w-3.5 h-3.5"
-              />
-              <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors font-bold tracking-tight">
-                검증 포함
-              </span>
-            </label>
+            <div className="flex items-center gap-3">
+              <label
+                className="flex items-center gap-1.5"
+                title="solver 풀이를 별도 LLM(verifier)이 독립 검증해 fail 시 solver↔verifier 재시도 루프를 돕니다. 0이면 verifier 단계를 건너뛰고 solver 결과를 그대로 사용 (비용↓, 품질↓)."
+              >
+                <span className={cn(
+                  "text-[11px] font-bold tracking-tight transition-colors",
+                  aiSettings.verifierMaxAttempts === 0 ? "text-muted-foreground/40" : "text-muted-foreground",
+                )}>풀이검증</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={1}
+                  value={aiSettings.verifierMaxAttempts}
+                  onChange={(e) => setAiSettings(writeAISettings({
+                    ...aiSettings,
+                    verifierMaxAttempts: Number(e.target.value),
+                  }))}
+                  className={cn(
+                    "w-10 px-1.5 py-0.5 rounded-md border bg-background text-xs text-center",
+                    aiSettings.verifierMaxAttempts === 0 && "opacity-40",
+                  )}
+                />
+              </label>
+              <label
+                className="flex items-center gap-1.5"
+                title="checker가 빌드된 HWPX를 검사한 뒤 발견된 결정적 이슈(빈줄 누락·수식 토큰 오류 등)를 자동 수정 후 재검사하는 횟수. 0이면 검사만 하고 수정 안 함."
+              >
+                <span className={cn(
+                  "text-[11px] font-bold tracking-tight transition-colors",
+                  aiSettings.checkerMaxAttempts === 0 ? "text-muted-foreground/40" : "text-muted-foreground",
+                )}>자동수정</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={1}
+                  value={aiSettings.checkerMaxAttempts}
+                  onChange={(e) => setAiSettings(writeAISettings({
+                    ...aiSettings,
+                    checkerMaxAttempts: Number(e.target.value),
+                  }))}
+                  className={cn(
+                    "w-10 px-1.5 py-0.5 rounded-md border bg-background text-xs text-center",
+                    aiSettings.checkerMaxAttempts === 0 && "opacity-40",
+                  )}
+                />
+              </label>
+            </div>
           </div>
         </div>
       </div>

@@ -137,6 +137,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     stageOverrides?: Partial<Record<AIStageKey, AIProviderId>>;
     figureRegen?: boolean;
     checkerMaxAttempts?: number;
+    verifierMaxAttempts?: number;
     stageSkip?: Partial<Record<string, boolean>>;
   };
   try {
@@ -325,6 +326,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         stageSkip,
         figureRegen: body.figureRegen,
         checkerMaxAttempts: body.checkerMaxAttempts,
+        verifierMaxAttempts: body.verifierMaxAttempts,
         baseDir: BASE_DIR,
         send,
         isAborted: () => clientDisconnected,

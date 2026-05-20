@@ -498,6 +498,7 @@ export default function SettingsPage() {
                       <select
                         value={currentOverride}
                         onChange={(e) => setStageOverride(stageKey, e.target.value as StageProviderId | "")}
+                        disabled={stageKey === "create.verifier" && settings.verifierMaxAttempts === 0}
                         className="w-full rounded-md border bg-background px-2 py-1.5 text-sm outline-none transition-colors focus:border-primary disabled:opacity-40"
                       >
                         <option value="">자동 (기본 provider 사용)</option>
@@ -507,6 +508,12 @@ export default function SettingsPage() {
                           </option>
                         ))}
                       </select>
+
+                      {stageKey === "create.verifier" && settings.verifierMaxAttempts === 0 && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                          비활성화 — create 페이지의 풀이검증이 0으로 설정되어 verifier 단계가 스킵됩니다.
+                        </p>
+                      )}
 
                       {!deepSeekSupported && (
                         <p className="text-xs text-muted-foreground">
@@ -560,33 +567,6 @@ export default function SettingsPage() {
                   />
                 </button>
               </div>
-            </div>
-          </section>
-
-          {/* ── Checker auto-fix ─────────────────────────────────────────── */}
-          <section className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Sparkles className="size-4" />
-              Checker auto-fix
-            </div>
-            <div className="rounded-lg border bg-card px-4 py-4 space-y-2">
-              <h2 className="text-base font-medium">자동 수정 최대 시도 횟수</h2>
-              <p className="text-sm text-muted-foreground">
-                checker 검사 후 발견된 결정적 이슈를 자동으로 수정하고 재검사하는 횟수.
-                0이면 검사만 수행 (수정 안 함). 기본 2회.
-              </p>
-              <input
-                type="number"
-                min={0}
-                max={5}
-                step={1}
-                value={settings.checkerMaxAttempts}
-                onChange={(e) => setSettings(writeAISettings({
-                  ...settings,
-                  checkerMaxAttempts: Number(e.target.value),
-                }))}
-                className="w-20 rounded-md border bg-background px-2 py-1.5 text-sm"
-              />
             </div>
           </section>
 

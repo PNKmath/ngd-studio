@@ -45,6 +45,8 @@ export interface OrchestratorInput {
   figureRegen?: boolean;
   /** checker auto-fix 시도 최대 횟수. 0 = 검사만, 기본 2. 범위 0~5. */
   checkerMaxAttempts?: number;
+  /** verifier 재시도 최대 횟수. 0 = verifier 단계 스킵, 기본 3. 범위 1~5 (>=1일 때만 적용). */
+  verifierMaxAttempts?: number;
   baseDir: string;
   send: (event: SSEEvent) => void;
   isAborted: () => boolean;
@@ -275,12 +277,16 @@ export async function runStageOrchestrator(
       !shouldRunStage(startStage, "solver") ||
       state.solved;
 
+    // verifier 재시도 최대 횟수 (기본 3, 범위 0~5). 0이면 verifier 단계 스킵.
+    const verifierMaxAttempts = Math.max(0, Math.min(5, Math.round(input.verifierMaxAttempts ?? 3)));
+
     // Skip verifier if: stage not needed OR disk cache already has verifier result
-    // OR user explicitly set stageSkip["create.verifier"] = true.
+    // OR user explicitly set stageSkip["create.verifier"] = true OR verifierMaxAttempts === 0.
     const skipVerifier =
       !shouldRunStage(startStage, "verifier") ||
       state.verified ||
-      input.stageSkip?.["create.verifier"] === true;
+      input.stageSkip?.["create.verifier"] === true ||
+      verifierMaxAttempts === 0;
 
     // ── Stage: Extractor ────────────────────────────────────────────────────
     let extractedOutput: unknown = null;
@@ -387,10 +393,13 @@ export async function runStageOrchestrator(
     }
 
     // ── Stage: Verifier (with feedback loop via applyVerifierRetry) ──────────
-    // When skipped explicitly by stageSkip, emit a single done event for UI clarity.
-    if (input.stageSkip?.["create.verifier"] === true && !state.verified) {
+    // When skipped explicitly by user setting, emit a single done event for UI clarity.
+    const verifierExplicitlySkipped =
+      (input.stageSkip?.["create.verifier"] === true || verifierMaxAttempts === 0) &&
+      !state.verified;
+    if (verifierExplicitlySkipped) {
       send(stageEvent("verifier", "done", { summary: "스킵됨 (사용자 설정)" }));
-      send(logEvent("verifier", `Q${n} 검증 스킵 (stageSkip)`));
+      send(logEvent("verifier", `Q${n} 검증 스킵 (verifierMaxAttempts=${verifierMaxAttempts})`));
     }
 
     if (!skipVerifier) {
@@ -479,7 +488,7 @@ export async function runStageOrchestrator(
         },
         // config — pass the already-computed solver output to skip the initial solver call
         {
-          maxAttempts: 3,
+          maxAttempts: Math.max(1, verifierMaxAttempts),
           initialSolverOutput: solvedOutput,
         }
       );
@@ -494,7 +503,7 @@ export async function runStageOrchestrator(
       }
 
       // All attempts exhausted — manual_review.
-      send(logEvent("verifier", `Q${n} 검증 실패: 3회 시도 후에도 pass 못함`, "warn"));
+      send(logEvent("verifier", `Q${n} 검증 실패: ${Math.max(1, verifierMaxAttempts)}회 시도 후에도 pass 못함`, "warn"));
       onLeave("verifier", n, "failed");
       send({
         event: "question",

@@ -105,6 +105,7 @@ export function useJobRunner() {
             stageOverrides: aiSettings.stageOverrides,
             figureRegen: aiSettings.figureRegen,
             checkerMaxAttempts: aiSettings.checkerMaxAttempts,
+            verifierMaxAttempts: aiSettings.verifierMaxAttempts,
             stageSkip: aiSettings.stageSkip,
           }),
           signal: abortController.signal,

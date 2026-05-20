@@ -52,11 +52,12 @@ describe("AI settings storage", () => {
 
   it("writes normalized settings", () => {
     const storage = createStorage();
-    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true, checkerMaxAttempts: 2, stageSkip: {} }, storage)).toEqual({
+    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true, checkerMaxAttempts: 2, verifierMaxAttempts: 3, stageSkip: {} }, storage)).toEqual({
       defaultProvider: "claude-cli",
       stageOverrides: {},
       figureRegen: true,
       checkerMaxAttempts: 2,
+      verifierMaxAttempts: 3,
       stageSkip: {},
     });
     expect(readDefaultProvider(storage)).toBe("claude-cli");
@@ -129,6 +130,7 @@ describe("AI settings storage", () => {
       },
       figureRegen: true,
       checkerMaxAttempts: 2,
+      verifierMaxAttempts: 3,
       stageSkip: {},
     }, storage);
 
@@ -139,8 +141,27 @@ describe("AI settings storage", () => {
       },
       figureRegen: true,
       checkerMaxAttempts: 2,
+      verifierMaxAttempts: 3,
       stageSkip: {},
     });
+  });
+
+  it("normalizes verifierMaxAttempts to 0~5 range (default 3)", () => {
+    expect(writeAISettings({ ...DEFAULT_AI_SETTINGS, verifierMaxAttempts: -1 }).verifierMaxAttempts).toBe(0);
+    expect(writeAISettings({ ...DEFAULT_AI_SETTINGS, verifierMaxAttempts: 10 }).verifierMaxAttempts).toBe(5);
+    expect(writeAISettings({ ...DEFAULT_AI_SETTINGS, verifierMaxAttempts: 2 }).verifierMaxAttempts).toBe(2);
+  });
+
+  it("syncs stageSkip['create.verifier'] with verifierMaxAttempts === 0", () => {
+    const offResult = writeAISettings({ ...DEFAULT_AI_SETTINGS, verifierMaxAttempts: 0 });
+    expect(offResult.stageSkip["create.verifier"]).toBe(true);
+    const onResult = writeAISettings({ ...DEFAULT_AI_SETTINGS, verifierMaxAttempts: 3, stageSkip: { "create.verifier": true } });
+    expect(onResult.stageSkip["create.verifier"]).toBeUndefined();
+  });
+
+  it("migrates legacy stageSkip['create.verifier'] = true → verifierMaxAttempts = 0", () => {
+    const storage = createStorage(JSON.stringify({ stageSkip: { "create.verifier": true } }));
+    expect(readAISettings(storage).verifierMaxAttempts).toBe(0);
   });
 
   it("normalizes checkerMaxAttempts to 0~5 range", () => {
@@ -172,6 +193,7 @@ describe("AI settings storage", () => {
       stageOverrides: {},
       figureRegen: true,
       checkerMaxAttempts: 2,
+      verifierMaxAttempts: 3,
       stageSkip: {},
     });
   });
@@ -187,14 +209,21 @@ describe("AI settings storage", () => {
     });
   });
 
-  it("stageSkip defaults to {} and round-trips through read/write", () => {
+  it("stageSkip defaults to {} and round-trips through read/write (synced with verifierMaxAttempts)", () => {
     // Default stageSkip is empty
     expect(DEFAULT_AI_SETTINGS.stageSkip).toEqual({});
-    // Stored stageSkip survives read/write
+    // 직접 stageSkip["create.verifier"]=true 를 쓰더라도 verifierMaxAttempts=0 이 아니면 sync 로 제거된다.
     const storage = createStorage();
     writeAISettings({ ...DEFAULT_AI_SETTINGS, stageSkip: { "create.verifier": true } }, storage);
     expect(readAISettings(storage)).toEqual({
       ...DEFAULT_AI_SETTINGS,
+      stageSkip: {},
+    });
+    // verifierMaxAttempts=0 으로 쓰면 stageSkip["create.verifier"]=true 가 동기화된다.
+    writeAISettings({ ...DEFAULT_AI_SETTINGS, verifierMaxAttempts: 0 }, storage);
+    expect(readAISettings(storage)).toEqual({
+      ...DEFAULT_AI_SETTINGS,
+      verifierMaxAttempts: 0,
       stageSkip: { "create.verifier": true },
     });
   });

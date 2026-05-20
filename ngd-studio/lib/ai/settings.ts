@@ -27,6 +27,7 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   stageOverrides: {},
   figureRegen: true,
   checkerMaxAttempts: 2,
+  verifierMaxAttempts: 3,
   stageSkip: {},
 };
 
@@ -37,7 +38,9 @@ export interface AISettings {
   figureRegen: boolean;
   /** checker auto-fix 시도 최대 횟수. 0 = 검사만, 기본 2. 범위 0~5. */
   checkerMaxAttempts: number;
-  /** stage별 스킵 플래그. 현재는 create.verifier만 의미 있음. */
+  /** verifier 재시도 최대 횟수. 0 = verifier 단계 스킵, 기본 3. 범위 0~5. */
+  verifierMaxAttempts: number;
+  /** stage별 스킵 플래그. 현재는 create.verifier만 의미 있음 (legacy — verifierMaxAttempts === 0 와 동등). */
   stageSkip: StageSkipMap;
 }
 
@@ -147,6 +150,16 @@ function normalizeCheckerMaxAttempts(value: unknown): number {
   return Math.max(0, Math.min(5, Math.round(n)));
 }
 
+/** Normalize verifierMaxAttempts to 0~5 range, default to 3 if invalid. 0 = skip verifier. */
+function normalizeVerifierMaxAttempts(value: unknown, fallback?: boolean): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) {
+    // legacy 마이그레이션: stageSkip["create.verifier"] === true 였던 사용자는 0 으로 이관
+    return fallback ? 0 : DEFAULT_AI_SETTINGS.verifierMaxAttempts;
+  }
+  return Math.max(0, Math.min(5, Math.round(n)));
+}
+
 export function createDeepSeekStageOverrides(): StageOverrideMap {
   return Object.fromEntries(
     DEEPSEEK_MODEL_STAGE_KEYS.map((stageKey) => [stageKey, "deepseek-v4"])
@@ -164,12 +177,17 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
     const raw = storage.getItem(AI_SETTINGS_STORAGE_KEY);
     if (!raw) return DEFAULT_AI_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<AISettings>;
+    const stageSkip = normalizeStageSkip(parsed.stageSkip);
     return {
       defaultProvider: normalizeSelectableProviderId(parsed.defaultProvider),
       stageOverrides: normalizeStageOverrides(parsed.stageOverrides),
       figureRegen: parsed.figureRegen !== false,
       checkerMaxAttempts: normalizeCheckerMaxAttempts(parsed.checkerMaxAttempts),
-      stageSkip: normalizeStageSkip(parsed.stageSkip),
+      verifierMaxAttempts: normalizeVerifierMaxAttempts(
+        parsed.verifierMaxAttempts,
+        stageSkip["create.verifier"] === true,
+      ),
+      stageSkip,
     };
   } catch {
     return DEFAULT_AI_SETTINGS;
@@ -177,12 +195,19 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
 }
 
 export function writeAISettings(settings: AISettings, storage = getBrowserStorage()): AISettings {
+  const verifierMaxAttempts = normalizeVerifierMaxAttempts(settings.verifierMaxAttempts);
+  const stageSkip = normalizeStageSkip(settings.stageSkip);
+  // verifierMaxAttempts === 0 일 때 stageSkip 도 동기화 (legacy 호환 + orchestrator 양방향 일관성)
+  if (verifierMaxAttempts === 0) stageSkip["create.verifier"] = true;
+  else delete stageSkip["create.verifier"];
+
   const normalized: AISettings = {
     defaultProvider: normalizeSelectableProviderId(settings.defaultProvider),
     stageOverrides: normalizeStageOverrides(settings.stageOverrides),
     figureRegen: settings.figureRegen !== false,
     checkerMaxAttempts: normalizeCheckerMaxAttempts(settings.checkerMaxAttempts),
-    stageSkip: normalizeStageSkip(settings.stageSkip),
+    verifierMaxAttempts,
+    stageSkip,
   };
 
   storage?.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
