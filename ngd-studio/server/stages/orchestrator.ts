@@ -41,6 +41,8 @@ export interface OrchestratorInput {
   stageOverrides: StageOverrideMap;
   /** Gemini로 그림을 재생성할지. false면 crop+워터마크만 (figure_processor.py --no-regen). default true. */
   figureRegen?: boolean;
+  /** checker auto-fix 시도 최대 횟수. 0 = 검사만, 기본 2. 범위 0~5. */
+  checkerMaxAttempts?: number;
   baseDir: string;
   send: (event: SSEEvent) => void;
   isAborted: () => boolean;
@@ -693,9 +695,10 @@ export async function runStageOrchestrator(
         : "";
 
       const checkerStartedAt = Date.now();
+      const maxAttempts = input.checkerMaxAttempts ?? 2;
       const { result: checkerResult, autofixed } = await runCheckerWithAutoFix(
         { hwpxPath: hwpxPath || undefined },
-        2 // max 2 fix attempts
+        maxAttempts
       );
 
       if (autofixed) {

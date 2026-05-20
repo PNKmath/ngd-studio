@@ -563,6 +563,33 @@ export default function SettingsPage() {
             </div>
           </section>
 
+          {/* ── Checker auto-fix ─────────────────────────────────────────── */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <Sparkles className="size-4" />
+              Checker auto-fix
+            </div>
+            <div className="rounded-lg border bg-card px-4 py-4 space-y-2">
+              <h2 className="text-base font-medium">자동 수정 최대 시도 횟수</h2>
+              <p className="text-sm text-muted-foreground">
+                checker 검사 후 발견된 결정적 이슈를 자동으로 수정하고 재검사하는 횟수.
+                0이면 검사만 수행 (수정 안 함). 기본 2회.
+              </p>
+              <input
+                type="number"
+                min={0}
+                max={5}
+                step={1}
+                value={settings.checkerMaxAttempts}
+                onChange={(e) => setSettings(writeAISettings({
+                  ...settings,
+                  checkerMaxAttempts: Number(e.target.value),
+                }))}
+                className="w-20 rounded-md border bg-background px-2 py-1.5 text-sm"
+              />
+            </div>
+          </section>
+
           {/* ── 현재 선택 요약 ─────────────────────────────────────────── */}
           <section className="rounded-lg border bg-card px-4 py-4">
             <div className="flex items-center justify-between gap-4">

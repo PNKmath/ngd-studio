@@ -25,6 +25,7 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   defaultProvider: "auto",
   stageOverrides: {},
   figureRegen: true,
+  checkerMaxAttempts: 2,
 };
 
 export interface AISettings {
@@ -32,6 +33,8 @@ export interface AISettings {
   stageOverrides: StageOverrideMap;
   /** Gemini(nano-banana)로 그림을 재생성할지 여부. false면 crop+워터마크만. */
   figureRegen: boolean;
+  /** checker auto-fix 시도 최대 횟수. 0 = 검사만, 기본 2. 범위 0~5. */
+  checkerMaxAttempts: number;
 }
 
 interface StorageLike {
@@ -122,6 +125,13 @@ export function normalizeStageOverrides(value: unknown): StageOverrideMap {
   return normalized;
 }
 
+/** Normalize checkerMaxAttempts to 0~5 range, default to 2 if invalid */
+function normalizeCheckerMaxAttempts(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_AI_SETTINGS.checkerMaxAttempts;
+  return Math.max(0, Math.min(5, Math.round(n)));
+}
+
 export function createDeepSeekStageOverrides(): StageOverrideMap {
   return Object.fromEntries(
     DEEPSEEK_MODEL_STAGE_KEYS.map((stageKey) => [stageKey, "deepseek-v4"])
@@ -143,6 +153,7 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
       defaultProvider: normalizeSelectableProviderId(parsed.defaultProvider),
       stageOverrides: normalizeStageOverrides(parsed.stageOverrides),
       figureRegen: parsed.figureRegen !== false,
+      checkerMaxAttempts: normalizeCheckerMaxAttempts(parsed.checkerMaxAttempts),
     };
   } catch {
     return DEFAULT_AI_SETTINGS;
@@ -154,6 +165,7 @@ export function writeAISettings(settings: AISettings, storage = getBrowserStorag
     defaultProvider: normalizeSelectableProviderId(settings.defaultProvider),
     stageOverrides: normalizeStageOverrides(settings.stageOverrides),
     figureRegen: settings.figureRegen !== false,
+    checkerMaxAttempts: normalizeCheckerMaxAttempts(settings.checkerMaxAttempts),
   };
 
   storage?.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));

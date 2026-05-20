@@ -51,10 +51,11 @@ describe("AI settings storage", () => {
 
   it("writes normalized settings", () => {
     const storage = createStorage();
-    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true }, storage)).toEqual({
+    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true, checkerMaxAttempts: 2 }, storage)).toEqual({
       defaultProvider: "claude-cli",
       stageOverrides: {},
       figureRegen: true,
+      checkerMaxAttempts: 2,
     });
     expect(readDefaultProvider(storage)).toBe("claude-cli");
   });
@@ -125,6 +126,7 @@ describe("AI settings storage", () => {
         "review.reviewer": "deepseek-v4",
       },
       figureRegen: true,
+      checkerMaxAttempts: 2,
     }, storage);
 
     expect(readAISettings(storage)).toEqual({
@@ -133,6 +135,50 @@ describe("AI settings storage", () => {
         "review.reviewer": "deepseek-v4",
       },
       figureRegen: true,
+      checkerMaxAttempts: 2,
+    });
+  });
+
+  it("normalizes checkerMaxAttempts to 0~5 range", () => {
+    // Test clamping
+    expect(writeAISettings({ ...DEFAULT_AI_SETTINGS, checkerMaxAttempts: -1 })).toEqual({
+      ...DEFAULT_AI_SETTINGS,
+      checkerMaxAttempts: 0,
+    });
+    expect(writeAISettings({ ...DEFAULT_AI_SETTINGS, checkerMaxAttempts: 10 })).toEqual({
+      ...DEFAULT_AI_SETTINGS,
+      checkerMaxAttempts: 5,
+    });
+    // Test valid range
+    expect(writeAISettings({ ...DEFAULT_AI_SETTINGS, checkerMaxAttempts: 3 })).toEqual({
+      ...DEFAULT_AI_SETTINGS,
+      checkerMaxAttempts: 3,
+    });
+  });
+
+  it("applies default checkerMaxAttempts when legacy settings lack the field", () => {
+    const storage = createStorage(JSON.stringify({
+      defaultProvider: "auto",
+      stageOverrides: {},
+      figureRegen: true,
+      // checkerMaxAttempts missing
+    }));
+    expect(readAISettings(storage)).toEqual({
+      defaultProvider: "auto",
+      stageOverrides: {},
+      figureRegen: true,
+      checkerMaxAttempts: 2,
+    });
+  });
+
+  it("rounds checkerMaxAttempts to nearest integer", () => {
+    expect(writeAISettings({ ...DEFAULT_AI_SETTINGS, checkerMaxAttempts: 2.7 })).toEqual({
+      ...DEFAULT_AI_SETTINGS,
+      checkerMaxAttempts: 3,
+    });
+    expect(writeAISettings({ ...DEFAULT_AI_SETTINGS, checkerMaxAttempts: 2.3 })).toEqual({
+      ...DEFAULT_AI_SETTINGS,
+      checkerMaxAttempts: 2,
     });
   });
 });

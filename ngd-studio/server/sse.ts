@@ -136,6 +136,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     provider?: AIProviderId;
     stageOverrides?: Partial<Record<AIStageKey, AIProviderId>>;
     figureRegen?: boolean;
+    checkerMaxAttempts?: number;
   };
   try {
     body = JSON.parse(rawBody);
@@ -319,6 +320,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         questionImages: questionImagePaths,
         stageOverrides,
         figureRegen: body.figureRegen,
+        checkerMaxAttempts: body.checkerMaxAttempts,
         baseDir: BASE_DIR,
         send,
         isAborted: () => clientDisconnected,
@@ -478,7 +480,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       if (path.isAbsolute(outputFile)) {
         outputFile = path.relative(BASE_DIR, outputFile);
       }
-      // outputPath를 프론트엔드에 전달
       send({ event: "file", data: { type: "hwpx", name: path.basename(outputFile), path: outputFile } });
     }
 

@@ -104,6 +104,7 @@ export function useJobRunner() {
             provider: selectedProvider,
             stageOverrides: aiSettings.stageOverrides,
             figureRegen: aiSettings.figureRegen,
+            checkerMaxAttempts: aiSettings.checkerMaxAttempts,
           }),
           signal: abortController.signal,
         });
@@ -145,8 +146,8 @@ export function useJobRunner() {
         }
 
         // If status is still running, mark as done
-        if (useJobStore.getState().status === "running") {
-          const state = useJobStore.getState();
+        const state = useJobStore.getState();
+        if (state.status === "running") {
           if (!state.result) {
             store.setResult({ status: "success" });
           }
