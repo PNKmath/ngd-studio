@@ -18,6 +18,7 @@ import { runCheckerWithAutoFix } from "./checker";
 import { runStageCommand } from "./commands";
 import { readRuntimeEnv } from "../../lib/server/runtimeEnv";
 import { determineStartStage, shouldRunStage } from "./resumeState";
+import { applyVerifierRetry } from "./stagePlan";
 import {
   stageEvent,
   progressEvent,
@@ -379,106 +380,109 @@ export async function runStageOrchestrator(
       solvedOutput = result.output;
     }
 
-    // ── Stage: Verifier (with feedback loop) ───────────────────────────────
+    // ── Stage: Verifier (with feedback loop via applyVerifierRetry) ──────────
     if (!skipVerifier) {
       if (isAborted()) throw new Error("aborted");
 
       const verifierProvider = getProviderForStage("create.verifier", stageOverrides);
       const solverProvider   = getProviderForStage("create.solver",   stageOverrides);
 
-      let solved = solvedOutput;
-      const MAX_ATTEMPTS = 3;
-      let attempt = 0;
-      let lastVerifierResult: Awaited<ReturnType<typeof runVerifierStage>> | undefined;
-
       onEnter("verifier", n);
 
-      while (attempt < MAX_ATTEMPTS) {
-        if (isAborted()) throw new Error("aborted");
+      // Track the last verifier result for error reporting.
+      let lastVerifierError: string | undefined;
 
-        const verifierResult = await verifySem.acquire(async () =>
-          runVerifierStage({
-            questionNumber: n,
-            extracted: extractedOutput,
-            solved,
-            cache,
-            provider: verifierProvider,
-            signal,
-          })
-        );
-        lastVerifierResult = verifierResult;
+      // retryAttempt tracks how many retry solver calls have been made (for telemetry attempt number).
+      let retryAttempt = 0;
 
-        if (verifierResult.provider) {
-          providerTelemetry.push(
-            createProviderTelemetryEntry({
-              stageKey: "create.verifier",
-              workflowStageKey: "create.verifier",
-              requestedProvider: verifierResult.provider.requestedProvider ?? "auto",
-              resolvedProvider: verifierResult.provider.provider ?? "claude-cli",
-              attempt: attempt + 1,
-              status: verifierResult.status === "completed" ? "success" : "failed",
-              elapsedMs: computeElapsedMs(verifierResult.startedAt, verifierResult.completedAt),
-              retry: attempt > 0,
-              errorSummary: verifierResult.error?.message,
+      const retryResult = await applyVerifierRetry(
+        // runSolver callback: called only on verifier-feedback retries (feedback is always set).
+        // The initial solver output (solvedOutput) is provided via initialSolverOutput.
+        async (feedback) => {
+          if (isAborted()) throw new Error("aborted");
+          retryAttempt++;
+          send(logEvent("verifier", `Q${n} 검증 fail — 재풀이 (시도 ${retryAttempt + 1}/3)`));
+          const solverResult = await solveSem.acquire(async () =>
+            runSolverStage({
+              questionNumber: n,
+              extracted: extractedOutput,
+              guidelineContext: feedback ? `Verifier feedback: ${feedback}` : undefined,
+              cache,
+              provider: solverProvider,
+              signal,
             })
           );
-        }
-
-        if (verifierResult.status === "completed" && verifierResult.output?.status === "pass") {
-          onLeave("verifier", n, "completed");
-          send({
-            event: "question",
-            data: { number: n, stage: "verified", status: "ok", data: verifierResult.output },
-          });
-          return { number: n };
-        }
-
-        attempt++;
-
-        if (attempt >= MAX_ATTEMPTS) {
-          send(logEvent("verifier", `Q${n} 검증 실패: ${MAX_ATTEMPTS}회 시도 후에도 pass 못함`, "warn"));
-          break;
-        }
-        if (isAborted()) throw new Error("aborted");
-
-        // Re-run solver with verifier feedback.
-        const feedback = lastVerifierResult?.output?.feedback;
-        send(logEvent("verifier", `Q${n} 검증 fail — 재풀이 (시도 ${attempt + 1}/${MAX_ATTEMPTS})`));
-
-        const solverResult = await solveSem.acquire(async () =>
-          runSolverStage({
-            questionNumber: n,
-            extracted: extractedOutput,
-            guidelineContext: feedback ? `Verifier feedback: ${feedback}` : undefined,
-            cache,
-            provider: solverProvider,
-            signal,
-          })
-        );
-
-        if (solverResult.provider) {
-          providerTelemetry.push(
-            createProviderTelemetryEntry({
-              stageKey: "create.solver",
-              workflowStageKey: "create.solver",
-              requestedProvider: solverResult.provider.requestedProvider ?? "auto",
-              resolvedProvider: solverResult.provider.provider ?? "claude-cli",
-              attempt: attempt,
-              status: solverResult.status === "completed" ? "success" : "failed",
-              elapsedMs: computeElapsedMs(solverResult.startedAt, solverResult.completedAt),
-              retry: true,
-              downstreamCorrection: true,
-              errorSummary: solverResult.error?.message,
+          if (solverResult.provider) {
+            providerTelemetry.push(
+              createProviderTelemetryEntry({
+                stageKey: "create.solver",
+                workflowStageKey: "create.solver",
+                requestedProvider: solverResult.provider.requestedProvider ?? "auto",
+                resolvedProvider: solverResult.provider.provider ?? "claude-cli",
+                attempt: retryAttempt,
+                status: solverResult.status === "completed" ? "success" : "failed",
+                elapsedMs: computeElapsedMs(solverResult.startedAt, solverResult.completedAt),
+                retry: true,
+                downstreamCorrection: true,
+                errorSummary: solverResult.error?.message,
+              })
+            );
+          }
+          return solverResult.status === "completed" ? solverResult.output as unknown : solvedOutput;
+        },
+        // runVerifier callback: called after each solver run
+        async (currentSolvedOutput) => {
+          if (isAborted()) throw new Error("aborted");
+          const verifierResult = await verifySem.acquire(async () =>
+            runVerifierStage({
+              questionNumber: n,
+              extracted: extractedOutput,
+              solved: currentSolvedOutput,
+              cache,
+              provider: verifierProvider,
+              signal,
             })
           );
+          if (verifierResult.provider) {
+            providerTelemetry.push(
+              createProviderTelemetryEntry({
+                stageKey: "create.verifier",
+                workflowStageKey: "create.verifier",
+                requestedProvider: verifierResult.provider.requestedProvider ?? "auto",
+                resolvedProvider: verifierResult.provider.provider ?? "claude-cli",
+                attempt: retryAttempt + 1,
+                status: verifierResult.status === "completed" ? "success" : "failed",
+                elapsedMs: computeElapsedMs(verifierResult.startedAt, verifierResult.completedAt),
+                retry: retryAttempt > 0,
+                errorSummary: verifierResult.error?.message,
+              })
+            );
+          }
+          lastVerifierError = verifierResult.error?.message;
+          if (verifierResult.status === "completed" && verifierResult.output?.status === "pass") {
+            return { status: "pass" as const };
+          }
+          const feedback = verifierResult.output?.feedback;
+          return { status: "fail" as const, ...(feedback ? { feedback } : {}) };
+        },
+        // config — pass the already-computed solver output to skip the initial solver call
+        {
+          maxAttempts: 3,
+          initialSolverOutput: solvedOutput,
         }
+      );
 
-        if (solverResult.status === "completed") {
-          solved = solverResult.output as unknown;
-        }
+      if (retryResult.status === "pass") {
+        onLeave("verifier", n, "completed");
+        send({
+          event: "question",
+          data: { number: n, stage: "verified", status: "ok", data: retryResult.finalVerifierOutput },
+        });
+        return { number: n };
       }
 
-      // All attempts exhausted — verifier ultimately failed.
+      // All attempts exhausted — manual_review.
+      send(logEvent("verifier", `Q${n} 검증 실패: 3회 시도 후에도 pass 못함`, "warn"));
       onLeave("verifier", n, "failed");
       send({
         event: "question",
@@ -486,7 +490,7 @@ export async function runStageOrchestrator(
           number: n,
           stage: "verified",
           status: "failed",
-          error: lastVerifierResult?.error?.message ?? "verifier max attempts exceeded",
+          error: lastVerifierError ?? "verifier max attempts exceeded",
         },
       });
       // Not a hard stop — partial result is still usable.

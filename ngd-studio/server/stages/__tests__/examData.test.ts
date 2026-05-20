@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from "fs/promises";
 import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildExamDataJson } from "../examData";
+import { buildExamDataJson, aggregateVerifiedProblems } from "../examData";
 import { FileBackedStageCache } from "../cache";
 
 const tempDirs: string[] = [];
@@ -105,6 +105,26 @@ describe("buildExamDataJson", () => {
     ).rejects.toThrow("missing extracted/solved/verified for Q4");
   });
 
+  it("count match: problems.length === questionNumbers.length on full success", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    for (const n of [1, 2, 3]) {
+      await writeFile(cache.verifierResultPath(n), JSON.stringify({ number: n }), "utf8");
+    }
+
+    const result = await buildExamDataJson({
+      cache,
+      meta: { school: "테스트고" },
+      questionNumbers: [1, 2, 3],
+    });
+
+    // audit doc line 19 "count match" condition
+    expect(result.problems).toHaveLength(3);
+    const written = JSON.parse(await readFile(cache.paths.examData, "utf8")) as { problems: unknown[] };
+    expect(written.problems).toHaveLength(3);
+  });
+
   it("includes all meta fields in the output info object", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
@@ -147,5 +167,98 @@ describe("buildExamDataJson", () => {
       info: typeof meta;
     };
     expect(written.info).toMatchObject(meta);
+  });
+});
+
+// ──────────────────────────────────────────────
+// aggregateVerifiedProblems — Phase 3
+// ──────────────────────────────────────────────
+
+describe("aggregateVerifiedProblems", () => {
+  it("aggregates all verified problems and returns AggregateResult", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    for (const n of [1, 2, 3]) {
+      await writeFile(cache.verifierResultPath(n), JSON.stringify({ number: n, status: "pass" }), "utf8");
+    }
+
+    const result = await aggregateVerifiedProblems(cache, [1, 2, 3], { school: "테스트고" });
+
+    expect(result.totalQuestions).toBe(3);
+    expect(result.includedQuestions).toBe(3);
+    expect(result.skippedQuestions).toHaveLength(0);
+    expect(result.examDataPath).toBe(cache.paths.examData);
+
+    const written = JSON.parse(await readFile(cache.paths.examData, "utf8")) as { problems: unknown[] };
+    expect(written.problems).toHaveLength(3);
+  });
+
+  it("skips missing questions and reports them in skippedQuestions (partial verified)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    // Q1 has verified, Q2 has only extracted, Q3 missing entirely
+    await writeFile(cache.verifierResultPath(1), JSON.stringify({ number: 1 }), "utf8");
+    await writeFile(cache.questionJsonPath(2), JSON.stringify({ number: 2 }), "utf8");
+    // Q3: no file at all
+
+    const result = await aggregateVerifiedProblems(cache, [1, 2, 3], { school: "학교" });
+
+    expect(result.totalQuestions).toBe(3);
+    expect(result.includedQuestions).toBe(2); // Q1 + Q2
+    expect(result.skippedQuestions).toHaveLength(1);
+    expect(result.skippedQuestions[0]?.number).toBe(3);
+    expect(result.skippedQuestions[0]?.reason).toContain("Q3");
+  });
+
+  it("throws AggregateError when ALL questions are missing (typed error)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    // No files written — all questions will fail
+    await expect(
+      aggregateVerifiedProblems(cache, [1, 2], { school: "학교" })
+    ).rejects.toThrow(AggregateError);
+  });
+
+  it("AggregateError message mentions total and 'all skipped'", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    let thrown: unknown;
+    try {
+      await aggregateVerifiedProblems(cache, [5, 6], { school: "학교" });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).message).toContain("all skipped");
+    expect((thrown as AggregateError).errors).toHaveLength(2);
+  });
+
+  it("falls back from verified → solved → extracted in priority order", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    // Q1: verified only
+    await writeFile(cache.verifierResultPath(1), JSON.stringify({ number: 1, source: "verified" }), "utf8");
+    // Q2: solved only
+    await writeFile(cache.solverResultPath(2), JSON.stringify({ number: 2, source: "solved" }), "utf8");
+    // Q3: extracted only
+    await writeFile(cache.questionJsonPath(3), JSON.stringify({ number: 3, source: "extracted" }), "utf8");
+
+    const result = await aggregateVerifiedProblems(cache, [1, 2, 3], {});
+
+    expect(result.includedQuestions).toBe(3);
+    expect(result.skippedQuestions).toHaveLength(0);
+
+    const written = JSON.parse(await readFile(cache.paths.examData, "utf8")) as {
+      problems: Array<{ number: number; source: string }>;
+    };
+    expect(written.problems[0]).toMatchObject({ source: "verified" });
+    expect(written.problems[1]).toMatchObject({ source: "solved" });
+    expect(written.problems[2]).toMatchObject({ source: "extracted" });
   });
 });

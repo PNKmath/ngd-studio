@@ -71,10 +71,6 @@ export async function buildExamDataJson(input: {
   return output;
 }
 
-/**
- * Read the best available JSON for question number `n`.
- * Priority: verified > solved > extracted
- */
 function normalizeMeta(meta: ExamMetaInput): ExamMetaInput {
   const examType = meta.exam_type ?? meta.examType ?? "";
   const year = typeof meta.year === "number" ? meta.year : new Date().getFullYear();
@@ -97,6 +93,10 @@ function normalizeMeta(meta: ExamMetaInput): ExamMetaInput {
   };
 }
 
+/**
+ * Read the best available JSON for question number `n`.
+ * Priority: verified > solved > extracted
+ */
 async function readQuestionWithFallback(
   cache: StageCache,
   n: number
@@ -126,4 +126,75 @@ async function tryReadJson(filePath: string): Promise<ExamDataProblem | null> {
   } catch {
     return null;
   }
+}
+
+// ──────────────────────────────────────────────
+// aggregateVerifiedProblems — Phase 3
+// ──────────────────────────────────────────────
+
+/**
+ * Result of aggregating verified problems into exam_data.json.
+ */
+export interface AggregateResult {
+  examDataPath: string;
+  totalQuestions: number;
+  includedQuestions: number;
+  skippedQuestions: Array<{ number: number; reason: string }>;
+}
+
+/**
+ * Aggregate all per-question verified JSON files into `exam_data.json`.
+ *
+ * Codifies SKILL.md Step 5-1 "JSON 취합":
+ * - Priority: verified (_verified.json) > solved (_solved.json) > extracted (q{N}.json)
+ * - If a question is present in `totalQuestions` but cannot be read from any
+ *   source, it is added to `skippedQuestions` (rather than throwing).
+ * - If ALL questions are skipped, throws `AggregateError`.
+ *
+ * For orchestrator-level usage where strict counting is required:
+ * use `buildExamDataJson` (which throws on any missing question).
+ *
+ * @param cache          - StageCache for path resolution and writing exam_data.json.
+ * @param totalQuestions - All question numbers in this exam (determines `totalQuestions` in result).
+ * @param meta           - Exam metadata for the `info` key.
+ */
+export async function aggregateVerifiedProblems(
+  cache: StageCache,
+  totalQuestions: number[],
+  meta: ExamMetaInput,
+): Promise<AggregateResult> {
+  const problems: ExamDataProblem[] = [];
+  const skippedQuestions: Array<{ number: number; reason: string }> = [];
+
+  for (const n of totalQuestions) {
+    try {
+      const problem = await readQuestionWithFallback(cache, n);
+      problems.push(problem);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      skippedQuestions.push({ number: n, reason });
+    }
+  }
+
+  if (problems.length === 0) {
+    throw new AggregateError(
+      skippedQuestions.map((s) => new Error(s.reason)),
+      `aggregateVerifiedProblems: no problems could be read (${totalQuestions.length} total, all skipped)`
+    );
+  }
+
+  const output: ExamDataOutput = {
+    info: normalizeMeta(meta),
+    problems,
+  };
+
+  const examDataPath = cache.paths.examData;
+  await writeFile(examDataPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+
+  return {
+    examDataPath,
+    totalQuestions: totalQuestions.length,
+    includedQuestions: problems.length,
+    skippedQuestions,
+  };
 }

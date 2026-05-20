@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: batch scheduling / verifier retry / verified aggregation codify
-status: pending
+status: completed
 depends_on: [2]
 scope:
   - ngd-studio/server/stages/stagePlan.ts
@@ -11,6 +11,8 @@ scope:
   - ngd-studio/server/stages/__tests__/examData.test.ts
   - ngd-studio/server/stages/__tests__/fixtures/stage-plan-cases.json
   - .claude/skills/ngd-exam-create/SKILL.md
+e2e_triggers:
+  - create-v4-full-pipeline
 intervention_likely: true
 intervention_reason: "orchestrator의 기존 retry/aggregation 코드를 함수로 추출하면서 호출 위치 변경. 회귀 위험 있어 e2e 회귀 사전 확인 필요."
 ---
@@ -145,13 +147,13 @@ export async function aggregateVerifiedProblems(
 
 ## 체크리스트
 
-- [ ] coverage-matrix.md의 A3, A4, B4, B5, B6, B7 행에서 본 phase 인용 확인
-- [ ] `stagePlan.ts` 신규 — `buildStagePlan` + `runBatches`
-- [ ] fixture 10개 + `stagePlan.test.ts` round-trip 검증
-- [ ] `examData.ts` — `aggregateVerifiedProblems` 추가 + `examData.test.ts` typed-error case 포함
-- [ ] orchestrator.ts 리팩터 — 인라인 batch/retry/aggregation을 신규 함수 호출로 대체 (외부 동작 불변)
-- [ ] SKILL.md — batch/retry/aggregation 자연어 + inline Python 제거, 코드 경로 인용
-- [ ] **agentic→code 동치성 검증**: skill의 retry 로직 자연어 사양(3회 실패 → manual_review)을 fixture로 만들어 `applyVerifierRetry`가 정확히 같은 흐름 산출. orchestrator.integration.test.ts의 기존 verifier-loop 시나리오 5개 모두 동일 결과.
+- [x] coverage-matrix.md의 A3, A4, B4, B5, B6, B7 행에서 본 phase 인용 확인
+- [x] `stagePlan.ts` 신규 — `buildStagePlan` + `runBatches`
+- [x] fixture 10개 + `stagePlan.test.ts` round-trip 검증
+- [x] `examData.ts` — `aggregateVerifiedProblems` 추가 + `examData.test.ts` typed-error case 포함
+- [x] orchestrator.ts 리팩터 — 인라인 batch/retry/aggregation을 신규 함수 호출로 대체 (외부 동작 불변)
+- [x] SKILL.md — batch/retry/aggregation 자연어 + inline Python 제거, 코드 경로 인용
+- [x] **agentic→code 동치성 검증**: skill의 retry 로직 자연어 사양(3회 실패 → manual_review)을 fixture로 만들어 `applyVerifierRetry`가 정확히 같은 흐름 산출. orchestrator.integration.test.ts의 기존 verifier-loop 시나리오 5개 모두 동일 결과.
 
 ## 검증
 
@@ -171,3 +173,49 @@ grep -nE "verifier feedback.*재시도|3회 실패.*manual_review|concurrency=8"
 # examData.test.ts 안에서 verified 누락 시 typed error 발생 확인
 # orchestrator.integration.test.ts의 verifier feedback loop 시나리오 unchanged
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-20 KST) — completed
+**상태**: completed
+**소요 시간**: 약 30분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+batch scheduling / verifier retry / verified aggregation 4개 함수를 TS로 추출 + skill 자연어 제거 완료.
+
+#### 변경 파일
+- `ngd-studio/server/stages/stagePlan.ts` (신규, +220줄) — `buildStagePlan` + `runBatches` + `applyVerifierRetry`
+- `ngd-studio/server/stages/__tests__/stagePlan.test.ts` (신규, +220줄) — 23개 테스트
+- `ngd-studio/server/stages/__tests__/fixtures/stage-plan-cases.json` (신규, 10개 fixture)
+- `ngd-studio/server/stages/examData.ts` (수정) — `aggregateVerifiedProblems` + `AggregateResult` 추가
+- `ngd-studio/server/stages/__tests__/examData.test.ts` (수정) — 5개 신규 테스트 (count match + aggregateVerifiedProblems 4개)
+- `ngd-studio/server/stages/orchestrator.ts` (수정) — verifier 인라인 루프를 `applyVerifierRetry` 호출로 대체, `stagePlan.ts` import 추가
+- `.claude/skills/ngd-exam-create/SKILL.md` (수정) — Step 4-2 재시도 루프 pseudo-code + Step 5-1 Python inline 제거, 코드 경로 인용 대체
+- `docs/planning/audit-driven-full-agentic-codification/phase-03-batch-and-aggregation.md` (수정)
+
+#### 검증 결과
+- [x] TypeScript `--noEmit`: pass (0 errors)
+- [x] stagePlan.test.ts 23/23 pass
+- [x] examData.test.ts 9/9 pass
+- [x] orchestrator.test.ts 17/17 pass
+- [x] orchestrator.pipeline.test.ts 5/5 pass
+- [x] orchestrator.integration.test.ts 34/34 pass
+- [x] 전체 88/88 pass
+- [x] SKILL.md 자연어 잔존: `grep -nE "verifier feedback.*재시도|3회 실패.*manual_review|concurrency=8"` → 0 match
+
+#### 추가 발견사항
+- `applyVerifierRetry` 초기 설계에서 첫 solver 호출이 중복 발생하는 버그 발견 → `initialSolverOutput` 선택적 파라미터 추가로 해결. orchestrator에서 이미 실행된 solver output을 전달하여 double-call 방지.
+- `buildStagePlan`에서 `fromStage`와 `state="verified"` 충돌 처리: `min(fromIdx, stateStartIdx)` 패턴으로 해결 (fromStage가 state가 요구하는 최초 stage보다 늦으면 state를 따름, 빠르면 fromStage를 따름).
+
+#### Scope Audit (orchestrator)
+pass — 모든 편집이 scope 내 (stagePlan.ts, examData.ts, orchestrator.ts, 테스트 2 + fixture, SKILL.md).
+
+#### Verification Re-run (orchestrator)
+exit 0 — tsc 0 errors, stagePlan+examData 32/32, orchestrator+pipeline+integration 56/56, SKILL.md grep 0 matches.
+
+#### Simplify (orchestrator)
+3 files, 4 edits, VERIFY: pass. stagePlan STAGE_IDX 맵 / examData JSDoc 정리 / orchestrator empty 콜백 제거.
+
+#### Review (orchestrator)
+pass — ISSUES: 0. 4개 함수 정확 구현, 88/88 pass, 회귀 없음.
