@@ -165,3 +165,6 @@ build_hwpx.py 3곳(lineseg_params_for_eq 분기 통합 / _inject_cell_value arro
 
 #### Review (orchestrator)
 VERDICT: fix_required (scope 외 로직 변경 3건 — simplify 결과물). 처리: simplify 변경 revert해 build_hwpx.py 변경을 BASE env override 1개 hunk로 축소. 재검증(빌드+validate) pass. fix 후 사실상 pass.
+
+#### Commit
+00bc41c

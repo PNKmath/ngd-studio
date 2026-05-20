@@ -26,7 +26,7 @@ HWP build 파이프라인(`build_hwpx.py` + `fix_namespaces.py` + `validate.py`)
 | 2 | [phase-02-build-hwpx-modularize.md](./phase-02-build-hwpx-modularize.md) | 6 | 6 | 100% | completed | 43be499 |
 | 3 | [phase-03-skill-doc-cleanup.md](./phase-03-skill-doc-cleanup.md) | 4 | 4 | 100% | completed | 6e2f59d |
 | 4 | [phase-04-sse-orchestrator-llm-removal.md](./phase-04-sse-orchestrator-llm-removal.md) | 5 | 5 | 100% | completed | b8be23f |
-| 5 | [phase-05-unit-tests.md](./phase-05-unit-tests.md) | 4 | 4 | 100% | completed | (pending) |
+| 5 | [phase-05-unit-tests.md](./phase-05-unit-tests.md) | 4 | 4 | 100% | completed | 0bdf527 |
 | 6 | [phase-06-e2e-build-verification.md](./phase-06-e2e-build-verification.md) | 4 | 0 | 0% | pending | - |
 | **Total** | | **28** | **0** | **0%** | | |
 
