@@ -35,12 +35,12 @@ created: 2026-05-20
 | 1 | [phase-01-coverage-matrix.md](./phase-01-coverage-matrix.md) | 6 | 6 | 100% | completed | 7e1cf48 |
 | 2 | [phase-02-resume-and-cleanup.md](./phase-02-resume-and-cleanup.md) | 9 | 9 | 100% | completed | ce07f91 |
 | 3 | [phase-03-batch-and-aggregation.md](./phase-03-batch-and-aggregation.md) | 7 | 7 | 100% | completed | 9a35f67 |
-| 4 | [phase-04-figure-pipeline.md](./phase-04-figure-pipeline.md) | 8 | 8 | 100% | completed | (pending commit) |
+| 4 | [phase-04-figure-pipeline.md](./phase-04-figure-pipeline.md) | 8 | 8 | 100% | completed | 955f104 |
 | 5 | [phase-05-checker-additional-rules.md](./phase-05-checker-additional-rules.md) | 7 | 7 | 100% | completed | 4136fe6 |
 | 6 | [phase-06-r07-complete-codify.md](./phase-06-r07-complete-codify.md) | 11 | 11 | 100% | completed | 1874fad |
-| 7 | [phase-07-reviewer-auto-validators.md](./phase-07-reviewer-auto-validators.md) | 8 | 0 | 0% | pending | - |
-| 8 | [phase-08-e2e-and-coverage-verification.md](./phase-08-e2e-and-coverage-verification.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **61** | **48** | **79%** | | |
+| 7 | [phase-07-reviewer-auto-validators.md](./phase-07-reviewer-auto-validators.md) | 8 | 8 | 100% | completed | c083afb |
+| 8 | [phase-08-e2e-and-coverage-verification.md](./phase-08-e2e-and-coverage-verification.md) | 5 | 5 | 100% | completed | (pending commit) |
+| **Total** | | **61** | **61** | **100%** | | |
 
 ## Phase 의존성
 

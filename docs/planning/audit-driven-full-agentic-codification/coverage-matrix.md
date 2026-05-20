@@ -628,8 +628,9 @@
 
 ## 전체 Cover 진행률 요약 표
 
-> **Phase 8 검증 기준**: 모든 행이 "covered" 상태여야 Phase 8 통과.
-> 현재 상태는 task 시작 기준(2026-05-20). Phase 진행 후 Phase 8에서 최종 갱신.
+> **Phase 8 최종 갱신 (2026-05-21)**: 39행 전체 covered — audit-coverage.test.ts 78 specs 전부 pass.
+
+### Phase 1~7 완료 후 현황 (Phase 8 검증 기준)
 
 | 그룹 | 총 행 | 코드화됨 (선행 task) | 부분 코드화 | agentic 잔존 | 본 task 완료 후 목표 |
 |------|-------|---------------------|-------------|-------------|---------------------|
@@ -652,3 +653,17 @@
 | Phase 6 | (R-07, R-10 parity — 본 매트릭스 외 별도) | equation codify |
 | Phase 7 | A11, E1, E2 | reviewer auto-validators |
 | Phase 8 | 전체 39행 | 최종 cover 확인 + 진행률 100% 검증 |
+
+### 최종 39행 100% Green 검증
+
+| 그룹 | 총 행 | covered | 미처리 |
+|------|-------|---------|--------|
+| A (audit 후보 12) | 12 | 12 | 0 |
+| B (orchestration 7) | 7 | 7 | 0 |
+| C (builder 5) | 5 | 5 | 0 |
+| D (checker 9) | 9 | 9 | 0 |
+| E (reviewer 6) | 6 | 6 | 0 |
+| **Total** | **39** | **39** | **0** |
+
+**검증 명령**: `npx vitest run server/stages/__tests__/audit-coverage.test.ts --reporter=basic`
+**결과**: 78 tests passed (2026-05-21 Phase 8 실행)
