@@ -9,6 +9,7 @@ import {
   isSelectableProviderId,
   isStageProviderId,
   normalizeStageOverrides,
+  normalizeStageSkip,
   readAISettings,
   readDefaultProvider,
   readStageOverrides,
@@ -51,11 +52,12 @@ describe("AI settings storage", () => {
 
   it("writes normalized settings", () => {
     const storage = createStorage();
-    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true, checkerMaxAttempts: 2 }, storage)).toEqual({
+    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true, checkerMaxAttempts: 2, stageSkip: {} }, storage)).toEqual({
       defaultProvider: "claude-cli",
       stageOverrides: {},
       figureRegen: true,
       checkerMaxAttempts: 2,
+      stageSkip: {},
     });
     expect(readDefaultProvider(storage)).toBe("claude-cli");
   });
@@ -127,6 +129,7 @@ describe("AI settings storage", () => {
       },
       figureRegen: true,
       checkerMaxAttempts: 2,
+      stageSkip: {},
     }, storage);
 
     expect(readAISettings(storage)).toEqual({
@@ -136,6 +139,7 @@ describe("AI settings storage", () => {
       },
       figureRegen: true,
       checkerMaxAttempts: 2,
+      stageSkip: {},
     });
   });
 
@@ -168,6 +172,7 @@ describe("AI settings storage", () => {
       stageOverrides: {},
       figureRegen: true,
       checkerMaxAttempts: 2,
+      stageSkip: {},
     });
   });
 
@@ -179,6 +184,52 @@ describe("AI settings storage", () => {
     expect(writeAISettings({ ...DEFAULT_AI_SETTINGS, checkerMaxAttempts: 2.3 })).toEqual({
       ...DEFAULT_AI_SETTINGS,
       checkerMaxAttempts: 2,
+    });
+  });
+
+  it("stageSkip defaults to {} and round-trips through read/write", () => {
+    // Default stageSkip is empty
+    expect(DEFAULT_AI_SETTINGS.stageSkip).toEqual({});
+    // Stored stageSkip survives read/write
+    const storage = createStorage();
+    writeAISettings({ ...DEFAULT_AI_SETTINGS, stageSkip: { "create.verifier": true } }, storage);
+    expect(readAISettings(storage)).toEqual({
+      ...DEFAULT_AI_SETTINGS,
+      stageSkip: { "create.verifier": true },
+    });
+  });
+
+  it("normalizeStageSkip filters unknown stageKeys and coerces values to boolean", () => {
+    expect(normalizeStageSkip({
+      "create.verifier": true,
+      "create.solver": false,
+      "unknown.stage": true,
+      "create.extractor": 1,
+    })).toEqual({
+      "create.verifier": true,
+      "create.solver": false,
+      "create.extractor": true,
+    });
+  });
+
+  it("normalizeStageSkip returns {} for non-object inputs", () => {
+    expect(normalizeStageSkip(null)).toEqual({});
+    expect(normalizeStageSkip(undefined)).toEqual({});
+    expect(normalizeStageSkip("string")).toEqual({});
+    expect(normalizeStageSkip([])).toEqual({});
+  });
+
+  it("legacy settings without stageSkip field migrate to default {}", () => {
+    const storage = createStorage(JSON.stringify({
+      defaultProvider: "auto",
+      stageOverrides: {},
+      figureRegen: true,
+      checkerMaxAttempts: 2,
+      // stageSkip missing — legacy
+    }));
+    expect(readAISettings(storage)).toEqual({
+      ...DEFAULT_AI_SETTINGS,
+      stageSkip: {},
     });
   });
 });

@@ -3,7 +3,7 @@ import { readFile } from "fs/promises";
 import type { SSEEvent } from "@/lib/claude";
 import type { AIProviderId } from "@/lib/ai/types";
 import { getProviderAdapter } from "@/lib/ai/registry";
-import type { StageOverrideMap, StageProviderId } from "@/lib/ai/settings";
+import type { StageOverrideMap, StageProviderId, StageSkipMap } from "@/lib/ai/settings";
 import type { ProviderTelemetryEntry } from "@/lib/ai/retry";
 import { createProviderTelemetryEntry } from "@/lib/ai/retry";
 import type { StageCache } from "./cache";
@@ -39,6 +39,8 @@ export interface OrchestratorInput {
   meta: ExamMetaInput;
   questionImages: { number: number; path: string }[];
   stageOverrides: StageOverrideMap;
+  /** stage별 스킵 플래그. 현재는 create.verifier만 의미 있음. */
+  stageSkip?: StageSkipMap;
   /** Gemini로 그림을 재생성할지. false면 crop+워터마크만 (figure_processor.py --no-regen). default true. */
   figureRegen?: boolean;
   /** checker auto-fix 시도 최대 횟수. 0 = 검사만, 기본 2. 범위 0~5. */
@@ -273,10 +275,12 @@ export async function runStageOrchestrator(
       !shouldRunStage(startStage, "solver") ||
       state.solved;
 
-    // Skip verifier if: stage not needed OR disk cache already has verifier result.
+    // Skip verifier if: stage not needed OR disk cache already has verifier result
+    // OR user explicitly set stageSkip["create.verifier"] = true.
     const skipVerifier =
       !shouldRunStage(startStage, "verifier") ||
-      state.verified;
+      state.verified ||
+      input.stageSkip?.["create.verifier"] === true;
 
     // ── Stage: Extractor ────────────────────────────────────────────────────
     let extractedOutput: unknown = null;
@@ -383,6 +387,12 @@ export async function runStageOrchestrator(
     }
 
     // ── Stage: Verifier (with feedback loop via applyVerifierRetry) ──────────
+    // When skipped explicitly by stageSkip, emit a single done event for UI clarity.
+    if (input.stageSkip?.["create.verifier"] === true && !state.verified) {
+      send(stageEvent("verifier", "done", { summary: "스킵됨 (사용자 설정)" }));
+      send(logEvent("verifier", `Q${n} 검증 스킵 (stageSkip)`));
+    }
+
     if (!skipVerifier) {
       if (isAborted()) throw new Error("aborted");
 

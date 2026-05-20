@@ -17,7 +17,7 @@ import {
   type AIProviderId,
   type AIStageKey,
 } from "../lib/ai";
-import { normalizeStageOverrides, type StageOverrideMap } from "../lib/ai/settings";
+import { normalizeStageOverrides, normalizeStageSkip, type StageOverrideMap, type StageSkipMap } from "../lib/ai/settings";
 import type { ProviderTelemetryEntry } from "../lib/ai/retry";
 import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
 import { runBuilderStage } from "./stages/builder";
@@ -137,6 +137,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     stageOverrides?: Partial<Record<AIStageKey, AIProviderId>>;
     figureRegen?: boolean;
     checkerMaxAttempts?: number;
+    stageSkip?: Partial<Record<string, boolean>>;
   };
   try {
     body = JSON.parse(rawBody);
@@ -150,10 +151,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   let requestedProvider: AIProviderId;
   let resolvedProvider: Exclude<AIProviderId, "auto">;
   let stageOverrides: StageOverrideMap;
+  let stageSkip: StageSkipMap;
   let primaryStageKey: AIStageKey | undefined;
   try {
     requestedProvider = normalizeProviderId(body.provider);
     stageOverrides = normalizeStageOverrides(body.stageOverrides);
+    stageSkip = normalizeStageSkip(body.stageSkip);
     primaryStageKey = inferPrimaryStageKey(body.mode, body.meta?.resumeFrom);
     const stageRequestedProvider = primaryStageKey ? stageOverrides[primaryStageKey] : undefined;
     requestedProvider = normalizeProviderId(stageRequestedProvider ?? requestedProvider);
@@ -319,6 +322,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         meta: meta ?? {},
         questionImages: questionImagePaths,
         stageOverrides,
+        stageSkip,
         figureRegen: body.figureRegen,
         checkerMaxAttempts: body.checkerMaxAttempts,
         baseDir: BASE_DIR,

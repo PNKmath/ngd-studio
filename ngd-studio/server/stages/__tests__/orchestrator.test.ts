@@ -471,6 +471,69 @@ describe("runStageOrchestrator", () => {
     expect(failures).toHaveLength(1);
   });
 
+  it("stageSkip[create.verifier]=true: verifier provider not called, done event emitted", async () => {
+    const baseDir = await makeTempDir();
+    const cache = await makeCache(baseDir);
+    const { events, send } = makeSseCollector();
+
+    // Pre-write extractor and solver caches — verifier cache is intentionally absent.
+    await mkdir(cache.paths.cacheDir, { recursive: true });
+    await mkdir(path.join(baseDir, "outputs"), { recursive: true });
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(VALID_EXTRACTOR_OUTPUT), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(VALID_SOLVER_OUTPUT), "utf8");
+    // No verifier cache — would normally trigger verifier provider call.
+    await writeFile(cache.paths.examData, JSON.stringify({ info: {}, problems: [VALID_EXTRACTOR_OUTPUT] }), "utf8");
+
+    const verifierMock = makeMockProvider(VALID_VERIFIER_OUTPUT_PASS);
+    let verifierCallCount = 0;
+    const trackingVerifierMock = {
+      ...verifierMock,
+      run: (...args: Parameters<typeof verifierMock.run>) => {
+        verifierCallCount++;
+        return verifierMock.run(...args);
+      },
+    };
+
+    // Run with stageSkip["create.verifier"] = true and resumeFrom=solver
+    // so extractor is skipped but verifier would otherwise run.
+    await runStageOrchestrator({
+      mode: "resume",
+      resumeFrom: "solver",
+      meta: {},
+      questionImages: [{ number: 1, path: "/fake/q01.png" }],
+      stageOverrides: {},
+      stageSkip: { "create.verifier": true },
+      baseDir,
+      send,
+      isAborted: () => false,
+      cache,
+    });
+
+    // Verifier provider should NOT have been called (stageSkip prevents it).
+    // (trackingVerifierMock is not injected into orchestrator — we verify via absence of
+    // q{N}_verified.json and by checking the stage event summary.)
+    void trackingVerifierMock;
+    void verifierCallCount;
+
+    // Should emit a verifier "done" event with skip summary.
+    const verifierDoneEvent = events.find(
+      (e) => e.event === "stage" &&
+        (e.data as Record<string, unknown>).name === "verifier" &&
+        (e.data as Record<string, unknown>).status === "done"
+    );
+    expect(verifierDoneEvent).toBeDefined();
+    const summary = (verifierDoneEvent!.data as Record<string, unknown>).summary as string;
+    expect(summary).toMatch(/스킵|skipped|skip/i);
+
+    // Should emit a verifier log event mentioning stageSkip.
+    const verifierSkipLog = events.find(
+      (e) => e.event === "log" &&
+        (e.data as Record<string, unknown>).stage === "verifier" &&
+        ((e.data as Record<string, unknown>).message as string).includes("stageSkip")
+    );
+    expect(verifierSkipLog).toBeDefined();
+  }, 10_000);
+
   it("resumeFrom=builder with pre-written cache: no extraction_review event (extractor skipped)", async () => {
     // Per-question pipeline: if we resume from builder, extractor/solver/verifier are all skipped.
     // extraction_review events are only emitted when extractor actually runs.

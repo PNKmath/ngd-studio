@@ -105,6 +105,7 @@ export function useJobRunner() {
             stageOverrides: aiSettings.stageOverrides,
             figureRegen: aiSettings.figureRegen,
             checkerMaxAttempts: aiSettings.checkerMaxAttempts,
+            stageSkip: aiSettings.stageSkip,
           }),
           signal: abortController.signal,
         });
@@ -161,7 +162,6 @@ export function useJobRunner() {
 
           // Parse review report from logs if in review mode
           if (mode === "review") {
-            const state = useJobStore.getState();
             const allText = state.logs.map((l) => l.message).join("\n");
             const reviewItems = parseReviewReport(allText);
             store.setReviewItems(reviewItems);

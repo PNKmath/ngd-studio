@@ -6,6 +6,7 @@ export type SelectableProviderId = Extract<
 >;
 export type StageProviderId = AIProviderId;
 export type StageOverrideMap = Partial<Record<AIStageKey, StageProviderId>>;
+export type StageSkipMap = Partial<Record<AIStageKey, boolean>>;
 
 export const AI_SETTINGS_STORAGE_KEY = "ngd-studio.ai-settings";
 export const AI_STAGE_KEYS: AIStageKey[] = [
@@ -26,6 +27,7 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   stageOverrides: {},
   figureRegen: true,
   checkerMaxAttempts: 2,
+  stageSkip: {},
 };
 
 export interface AISettings {
@@ -35,6 +37,8 @@ export interface AISettings {
   figureRegen: boolean;
   /** checker auto-fix 시도 최대 횟수. 0 = 검사만, 기본 2. 범위 0~5. */
   checkerMaxAttempts: number;
+  /** stage별 스킵 플래그. 현재는 create.verifier만 의미 있음. */
+  stageSkip: StageSkipMap;
 }
 
 interface StorageLike {
@@ -125,6 +129,17 @@ export function normalizeStageOverrides(value: unknown): StageOverrideMap {
   return normalized;
 }
 
+export function normalizeStageSkip(value: unknown): StageSkipMap {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  const normalized: StageSkipMap = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (!isAIStageKey(key)) continue;
+    normalized[key] = Boolean(val);
+  }
+  return normalized;
+}
+
 /** Normalize checkerMaxAttempts to 0~5 range, default to 2 if invalid */
 function normalizeCheckerMaxAttempts(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -154,6 +169,7 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
       stageOverrides: normalizeStageOverrides(parsed.stageOverrides),
       figureRegen: parsed.figureRegen !== false,
       checkerMaxAttempts: normalizeCheckerMaxAttempts(parsed.checkerMaxAttempts),
+      stageSkip: normalizeStageSkip(parsed.stageSkip),
     };
   } catch {
     return DEFAULT_AI_SETTINGS;
@@ -166,6 +182,7 @@ export function writeAISettings(settings: AISettings, storage = getBrowserStorag
     stageOverrides: normalizeStageOverrides(settings.stageOverrides),
     figureRegen: settings.figureRegen !== false,
     checkerMaxAttempts: normalizeCheckerMaxAttempts(settings.checkerMaxAttempts),
+    stageSkip: normalizeStageSkip(settings.stageSkip),
   };
 
   storage?.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(normalized));
