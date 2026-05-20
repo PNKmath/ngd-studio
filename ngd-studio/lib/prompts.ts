@@ -8,6 +8,7 @@ export function buildCreatePrompt(
   questionImages: QuestionImagePath[],
   meta: {
     school?: string;
+    year?: number;
     grade?: number;
     subject?: string;
     semester?: string;
@@ -26,6 +27,7 @@ export function buildCreatePrompt(
   lines.push(``);
   lines.push(`## 시험 정보`);
   if (meta.school) lines.push(`- 학교: ${meta.school}`);
+  if (meta.year) lines.push(`- 연도: ${meta.year}`);
   if (meta.grade) lines.push(`- 학년: ${meta.grade}`);
   if (meta.subject) lines.push(`- 과목: ${meta.subject}`);
   if (meta.semester) lines.push(`- 학기: ${meta.semester}`);
@@ -52,6 +54,7 @@ export function buildResumePrompt(
   questionCount: number,
   meta: {
     school?: string;
+    year?: number;
     grade?: number;
     subject?: string;
     semester?: string;
@@ -71,6 +74,7 @@ export function buildResumePrompt(
   lines.push(``);
   lines.push(`## 시험 정보`);
   if (meta.school) lines.push(`- 학교: ${meta.school}`);
+  if (meta.year) lines.push(`- 연도: ${meta.year}`);
   if (meta.grade) lines.push(`- 학년: ${meta.grade}`);
   if (meta.subject) lines.push(`- 과목: ${meta.subject}`);
   if (meta.semester) lines.push(`- 학기: ${meta.semester}`);

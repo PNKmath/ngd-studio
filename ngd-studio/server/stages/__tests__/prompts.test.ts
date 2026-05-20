@@ -30,6 +30,7 @@ describe("buildExtractorPrompt", () => {
       questionNumber: 3,
       examMeta: {
         school: "강북고",
+        year: 2025,
         grade: 2,
         subject: "수학 I",
         semester: "1학기",
@@ -38,6 +39,7 @@ describe("buildExtractorPrompt", () => {
       },
     });
     expect(result.user).toContain("강북고");
+    expect(result.user).toContain("연도: 2025");
     expect(result.user).toContain("수학 I");
   });
 

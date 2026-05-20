@@ -7,8 +7,8 @@
 
 export interface ExamMeta {
   school?: string;
-  grade?: number;
   year?: number;
+  grade?: number;
   subject?: string;
   semester?: string;
   examType?: string;
@@ -198,6 +198,7 @@ export function buildExtractorPrompt(input: ExtractorPromptInput): { system: str
   if (input.examMeta) {
     const metaLines: string[] = [];
     if (input.examMeta.school) metaLines.push(`학교: ${input.examMeta.school}`);
+    if (input.examMeta.year) metaLines.push(`연도: ${input.examMeta.year}`);
     if (input.examMeta.grade) metaLines.push(`학년: ${input.examMeta.grade}학년`);
     if (input.examMeta.subject) metaLines.push(`과목: ${input.examMeta.subject}`);
     if (input.examMeta.semester) metaLines.push(`학기: ${input.examMeta.semester}`);
