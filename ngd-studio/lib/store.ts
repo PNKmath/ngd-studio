@@ -15,6 +15,7 @@ export interface QuestionResult {
 export interface V3Meta {
   school?: string;
   grade?: number;
+  year?: number;
   subject?: string;
   semester?: string;
   examType?: string;

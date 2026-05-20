@@ -8,6 +8,7 @@
 export interface ExamMeta {
   school?: string;
   grade?: number;
+  year?: number;
   subject?: string;
   semester?: string;
   examType?: string;

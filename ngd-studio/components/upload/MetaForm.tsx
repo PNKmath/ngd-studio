@@ -3,6 +3,7 @@
 export type MetaValue = {
   school: string;
   grade: number;
+  year: number;
   subject: string;
   semester: string;
   examType: string;
