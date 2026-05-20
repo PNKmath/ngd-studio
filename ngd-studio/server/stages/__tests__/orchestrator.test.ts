@@ -235,13 +235,22 @@ describe("shouldRunStage", () => {
 // ──────────────────────────────────────────────
 
 describe("runStageOrchestrator", () => {
-  it("normal flow: extractor → review_pause", async () => {
+  it("normal flow: cached extractor/solver/verifier — no provider calls", async () => {
     const baseDir = await makeTempDir();
     const cache = await makeCache(baseDir);
-    const { events, send } = makeSseCollector();
+    const { send } = makeSseCollector();
 
-    // Use a cache with pre-written files to skip heavier stages and test the extractor flow.
+    // Pre-write all model-stage caches for both questions so the orchestrator
+    // skips every provider call. This makes the test deterministic regardless
+    // of whether real API keys are present in the environment (.env.local with
+    // claude-sdk credentials would otherwise cause real network calls and a
+    // multi-second hang).
     await mkdir(cache.paths.cacheDir, { recursive: true });
+    for (const n of [1, 2]) {
+      await writeFile(cache.extractorResultPath(n), JSON.stringify(VALID_EXTRACTOR_OUTPUT), "utf8");
+      await writeFile(cache.solverResultPath(n), JSON.stringify(VALID_SOLVER_OUTPUT), "utf8");
+      await writeFile(cache.verifierResultPath(n), JSON.stringify(VALID_VERIFIER_OUTPUT_PASS), "utf8");
+    }
 
     const result = await runStageOrchestrator({
       mode: "create",
@@ -259,19 +268,13 @@ describe("runStageOrchestrator", () => {
       send,
       isAborted: () => false,
       cache,
-      // Override provider registry for extractor by pre-writing cache files instead.
     });
 
-    // The orchestrator should emit extraction_review and return done.
-    const reviewEvent = events.find((e) => e.event === "extraction_review");
-    const resultEvent = events.find((e) => e.event === "result");
-
-    // We expect either extraction_review or result depending on whether extractor fails/succeeds.
-    // Since we don't have actual image files, extractor will fail for all questions.
-    // But the orchestrator should still emit extraction_review (or fail if all failed).
-    // Let's just check the orchestrator terminates and returns a known status.
+    // Orchestrator should terminate cleanly (status "done" or "failed" — but
+    // never hang). With all caches present, no provider auth/network attempt
+    // happens.
     expect(["done", "failed"]).toContain(result.status);
-  });
+  }, 15_000);
 
   it("cancel: returns cancelled status when isAborted() is true from start", async () => {
     const baseDir = await makeTempDir();
