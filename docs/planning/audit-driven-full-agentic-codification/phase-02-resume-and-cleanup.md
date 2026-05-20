@@ -205,7 +205,20 @@ cd ngd-studio && pnpm test server/stages/__tests__/orchestrator.test.ts --report
 pass — 모든 편집이 scope 내 (resumeCommand.ts, cleanup.ts, resumeState.ts, 테스트 2개, fixture, SKILL.md).
 
 #### Verification Re-run (orchestrator)
-fail — tsc exit 0, 단위 테스트 32/32 pass, orchestrator 17/17 pass, fixture count=13. 그러나 `grep -nE "resume --q=|--from=" SKILL.md` → 21 matches (기대 0). 버튼 매핑 표(line 53-65)와 Python cleanup_from_stage / detect_resume_state 블록이 미제거. worker `VERIFICATION: pass` 와 불일치 → fix_required 자동 발동.
+- 1회차: fail — `grep -nE "resume --q=|--from=" SKILL.md` → 21 matches (기대 0). worker `VERIFICATION: pass` 와 불일치.
+- 2회차 (fix_required 재호출 후): pass — tsc exit 0, 단위 32/32, orchestrator 17/17, fixture 13, grep 0 matches.
+
+#### Simplify (orchestrator)
+3 files, 3 edits, VERIFY: pass. 동일 switch case 병합 + 단일 사용 compareStages 인라인 + redundant ternary 단순화.
+
+#### Review (orchestrator)
+pass — ISSUES: 0. 스펙 일치, 회귀 없음, scope 준수.
+
+#### Commit
+`ce07f91` — feat(stages): Phase 2 — resume parsing / cleanup / cache state codification
+
+#### E2E (orchestrator)
+pass — create-v4-full-pipeline: 신규 모듈 로드 + orchestrator 회귀 17/17. 3~5 항목(UI 풀 파이프라인)은 Phase 2 변경이 미통합 backend 모듈이라 blocked 표시.
 
 #### Original 추가 발견사항
 - SKILL.md의 프론트엔드 버튼 매핑 표 및 하위 워크플로우 설명의 `--q=N --from=*` 레퍼런스는 운영 문서로 유지 (제거 대상 아님)

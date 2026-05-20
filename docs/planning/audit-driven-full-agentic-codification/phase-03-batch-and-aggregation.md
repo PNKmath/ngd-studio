@@ -219,3 +219,9 @@ exit 0 — tsc 0 errors, stagePlan+examData 32/32, orchestrator+pipeline+integra
 
 #### Review (orchestrator)
 pass — ISSUES: 0. 4개 함수 정확 구현, 88/88 pass, 회귀 없음.
+
+#### Commit
+`9a35f67` — feat(codify): Phase 3 — batch scheduling / verifier retry / verified aggregation codify
+
+#### E2E (orchestrator)
+pass — create-v4-full-pipeline: orchestrator 17/17 + pipeline 5/5 + integration 34/34 회귀 없음. stagePlan 23/23 + examData 9/9 신규 함수 pass. 풀 UI(2~5단계)는 외부 의존으로 blocked 표시.
