@@ -1,6 +1,69 @@
 import { readFile } from "fs/promises";
+import { join } from "path";
 import JSZip from "jszip";
 import type { StageResult, StageRunner } from "./types";
+
+// ──────────────────────────────────────────────
+// unit_classification.json types + loader
+// ──────────────────────────────────────────────
+
+interface UnitEntry {
+  code: string | null;
+  name: string;
+  topics: string[];
+}
+
+interface SubjectEntry {
+  code: string;
+  name: string;
+  grade: number | null;
+  units: UnitEntry[];
+}
+
+export interface UnitClassification {
+  subjects: SubjectEntry[];
+  legacy?: { subjects: SubjectEntry[] };
+}
+
+/** Cached classification data (null = not yet attempted; false = load failed). */
+let _unitClassificationCache: UnitClassification | null | false = null;
+
+/** Path to unit_classification.json — 3 levels up from server/stages/ to repo root, then into .claude/data/. */
+const UNIT_CLASSIFICATION_PATH = join(
+  __dirname,
+  "../../../.claude/data/unit_classification.json",
+);
+
+/**
+ * Load unit_classification.json once and cache the result.
+ * Returns null if the file cannot be read (rule is skipped, warning logged).
+ */
+async function loadUnitClassification(): Promise<UnitClassification | null> {
+  if (_unitClassificationCache !== null) {
+    return _unitClassificationCache === false ? null : _unitClassificationCache;
+  }
+  try {
+    const raw = await readFile(UNIT_CLASSIFICATION_PATH, "utf8");
+    _unitClassificationCache = JSON.parse(raw) as UnitClassification;
+    return _unitClassificationCache;
+  } catch {
+    console.warn(
+      `[checker] unit_classification.json not found at ${UNIT_CLASSIFICATION_PATH} — text.vocabulary rule skipped`,
+    );
+    _unitClassificationCache = false;
+    return null;
+  }
+}
+
+/** Reset cache (used in tests to inject custom classification data). */
+export function _resetUnitClassificationCache(): void {
+  _unitClassificationCache = null;
+}
+
+/** Inject classification data directly (used in tests). */
+export function _injectUnitClassification(data: UnitClassification): void {
+  _unitClassificationCache = data;
+}
 
 export type CheckerIssueSeverity = "error" | "warning" | "info";
 
@@ -55,11 +118,14 @@ const RULES: Record<string, RuleHandler> = {
   "text.raw_equation_xml": { detect: checkRawEquationXml },
   "text.english_word": { detect: checkEnglishWords },
   "text.difficulty_vocabulary": { detect: checkDifficultyVocabulary },
+  "text.vocabulary": { detect: checkTextVocabularySync },
   "equation.run_on": {
     detect: checkRunOnEquations,
     fix: fixRunOnEquationsInXml,
   },
   "equation.permutation_combination": { detect: checkPermutationCombination },
+  "endNote.structure": { detect: checkEndNoteStructure },
+  "section.style_format": { detect: checkSectionStyleFormat },
 };
 
 const ALLOWED_DIFFICULTIES = new Set(["하", "중", "상", "킬"]);
@@ -74,6 +140,8 @@ export async function runCheckerStage(input: CheckerStageInput): Promise<StageRe
   const startedAt = new Date().toISOString();
 
   try {
+    // Pre-load unit classification (cached after first call; no-op if already loaded).
+    await loadUnitClassification();
     const source = await loadSectionSource(input);
     const issues = runDeterministicCheckerRules(source.xml, source.file);
     const fallbackReasons = issues
@@ -151,6 +219,8 @@ export async function runCheckerWithAutoFix(
   input: CheckerStageInput,
   maxAttempts = 2,
 ): Promise<CheckerAutoFixResult> {
+  // Pre-load unit classification before running any rules.
+  await loadUnitClassification();
   // Load source XML once so we can mutate it in the fix loop.
   const source = await loadSectionSource(input).catch(() => null);
 
@@ -382,6 +452,294 @@ function checkPermutationCombination(xml: string, file: string): CheckerIssue[] 
       });
     }
   }
+  return issues;
+}
+
+// ──────────────────────────────────────────────
+// Rule: endNote.structure
+// ──────────────────────────────────────────────
+
+/**
+ * Validate HWPX endNote (각주/미주) structure:
+ *   1. suffixChar attribute exists on the endNote element.
+ *   2. <hp:autoNum> child element exists inside each endNote.
+ *   3. number attribute exists.
+ *   4. Attribute order: suffixChar → (autoNum in body) → number must appear in this sequence.
+ *      Specifically: suffixChar must precede number in attrs string,
+ *      and <hp:autoNum> must appear before any <hp:t> content in body.
+ *   5. [정답] text is present in each endNote body.
+ *   6. The <hp:p> immediately preceding the <hp:endNote> must not end with whitespace
+ *      (미주-문제 띄어쓰기 없음).
+ */
+function checkEndNoteStructure(xml: string, file: string): CheckerIssue[] {
+  const issues: CheckerIssue[] = [];
+
+  // Check for leading whitespace before endNote blocks (미주-문제 띄어쓰기 없음).
+  // Find all <hp:p>...</hp:p> blocks that appear immediately before a <hp:endNote>.
+  // We look for a closing </hp:p> followed (possibly with whitespace) by <hp:endNote.
+  // The last hp:t text node in the preceding <hp:p> must not end with a space.
+  const precedingParaPattern = /(<hp:p\b[^>]*>[\s\S]*?<\/hp:p>)\s*<hp:endNote\b/g;
+  for (const paraMatch of xml.matchAll(precedingParaPattern)) {
+    const paraXml = paraMatch[1];
+    const tNodes = textNodes(paraXml);
+    if (tNodes.length > 0) {
+      const lastText = tNodes[tNodes.length - 1];
+      if (/\s$/.test(lastText)) {
+        issues.push({
+          ruleId: "endNote.structure",
+          severity: "error",
+          message: "Paragraph immediately before endNote ends with whitespace (미주-문제 띄어쓰기 없음)",
+          file,
+          evidence: snippet(lastText),
+        });
+      }
+    }
+  }
+
+  // Match each <hp:endNote ...>...</hp:endNote> block
+  const endNotePattern = /<hp:endNote\b([^>]*)>([\s\S]*?)<\/hp:endNote>/g;
+
+  for (const match of xml.matchAll(endNotePattern)) {
+    const attrs = match[1];
+    const body = match[2];
+
+    const hasSuffixChar = /suffixChar\s*=/.test(attrs);
+    const hasNumber = /\bnumber\s*=/.test(attrs) || /\bnumber\s*=/.test(body);
+    const hasAutoNum = /<hp:autoNum\b/.test(body);
+
+    // 1. suffixChar attribute
+    if (!hasSuffixChar) {
+      issues.push({
+        ruleId: "endNote.structure",
+        severity: "error",
+        message: "endNote is missing suffixChar attribute",
+        file,
+        evidence: snippet(match[0]),
+      });
+    }
+
+    // 2. autoNum child element
+    if (!hasAutoNum) {
+      issues.push({
+        ruleId: "endNote.structure",
+        severity: "error",
+        message: "endNote is missing <hp:autoNum> child element",
+        file,
+        evidence: snippet(body),
+      });
+    }
+
+    // 3. number attribute
+    if (!hasNumber) {
+      issues.push({
+        ruleId: "endNote.structure",
+        severity: "warning",
+        message: "endNote is missing number attribute",
+        file,
+        evidence: snippet(match[0]),
+      });
+    }
+
+    // 4. Order check: suffixChar must appear before number in attrs;
+    //    <hp:autoNum> must appear before the first <hp:t> in body.
+    if (hasSuffixChar && hasNumber) {
+      const suffixCharPos = attrs.indexOf("suffixChar");
+      const numberPos = attrs.indexOf("number");
+      // number attr may also be in body — only check attr-level order when both are in attrs
+      if (numberPos !== -1 && suffixCharPos > numberPos) {
+        issues.push({
+          ruleId: "endNote.structure",
+          severity: "warning",
+          message: "endNote attribute order violation: suffixChar should appear before number",
+          file,
+          evidence: snippet(attrs),
+        });
+      }
+    }
+
+    if (hasAutoNum && body.includes("<hp:t")) {
+      const autoNumPos = body.indexOf("<hp:autoNum");
+      const firstTPos = body.indexOf("<hp:t");
+      if (autoNumPos > firstTPos) {
+        issues.push({
+          ruleId: "endNote.structure",
+          severity: "warning",
+          message: "endNote structure order violation: <hp:autoNum> should appear before <hp:t> content",
+          file,
+          evidence: snippet(body),
+        });
+      }
+    }
+
+    // 5. [정답] text in body
+    const bodyText = textNodes(body).join(" ");
+    if (!bodyText.includes("[정답]")) {
+      issues.push({
+        ruleId: "endNote.structure",
+        severity: "error",
+        message: "endNote body does not contain [정답] text",
+        file,
+        evidence: snippet(bodyText || body.slice(0, 120)),
+      });
+    }
+  }
+
+  // If no endNote found at all, nothing to validate (rule doesn't fire)
+  return issues;
+}
+
+// ──────────────────────────────────────────────
+// Rule: section.style_format
+// ──────────────────────────────────────────────
+
+/**
+ * Validate section0.xml style and formatting constraints:
+ *   1. Exactly 1 바탕글 style (F6 rule).
+ *   2. <hp:lineBreak> usage is limited to answer lines (2-line answers only).
+ *      Since we cannot determine context statically, we flag any lineBreak as warning.
+ *   3. Bold (charPr bold="true" / bold="1") in answer context is forbidden.
+ *      We flag bold inside endNote blocks (정답 bold 금지).
+ */
+function checkSectionStyleFormat(xml: string, file: string): CheckerIssue[] {
+  const issues: CheckerIssue[] = [];
+
+  // 1. Count 바탕글 style definitions (hp:style name containing "바탕글")
+  const batangglMatches = [...xml.matchAll(/<hp:style\b[^>]*name\s*=\s*["'][^"']*바탕글[^"']*["'][^>]*>/g)];
+  if (batangglMatches.length > 1) {
+    issues.push({
+      ruleId: "section.style_format",
+      severity: "error",
+      message: `바탕글 style defined ${batangglMatches.length} times; expected exactly 1 (F6 rule)`,
+      file,
+      evidence: snippet(`Found ${batangglMatches.length} occurrences`),
+    });
+  }
+
+  // 2. <hp:lineBreak> outside answer context — flag as warning (conservative: any usage)
+  const lineBreakMatches = [...xml.matchAll(/<hp:lineBreak\b[^>]*\/>/g)];
+  if (lineBreakMatches.length > 0) {
+    issues.push({
+      ruleId: "section.style_format",
+      severity: "warning",
+      message: `<hp:lineBreak> found (${lineBreakMatches.length} occurrence(s)); allowed only for 2-line answer lines`,
+      file,
+      evidence: snippet(`${lineBreakMatches.length} lineBreak element(s) detected`),
+      fallbackRequired: true,
+    });
+  }
+
+  // 3. Bold in endNote body (정답 bold 금지)
+  for (const endNoteMatch of xml.matchAll(/<hp:endNote\b[^>]*>([\s\S]*?)<\/hp:endNote>/g)) {
+    const endNoteBody = endNoteMatch[1];
+    if (/bold\s*=\s*["'](?:true|1)["']/.test(endNoteBody)) {
+      issues.push({
+        ruleId: "section.style_format",
+        severity: "error",
+        message: "Bold formatting found inside endNote (정답 bold 금지)",
+        file,
+        evidence: snippet(endNoteBody),
+      });
+      break; // Report once per document
+    }
+  }
+
+  return issues;
+}
+
+// ──────────────────────────────────────────────
+// Rule: text.vocabulary
+// ──────────────────────────────────────────────
+
+/**
+ * Synchronous wrapper for text.vocabulary — uses the cached classification.
+ * Returns empty array if classification is not yet loaded (caller must preload via loadUnitClassification()).
+ */
+function checkTextVocabularySync(xml: string, file: string): CheckerIssue[] {
+  if (_unitClassificationCache === null || _unitClassificationCache === false) {
+    return [];
+  }
+  return checkTextVocabulary(xml, file, _unitClassificationCache);
+}
+
+/**
+ * Validate 중단원/과목/범위 text against unit_classification.json.
+ *
+ * Scans all hp:t nodes for:
+ *  - [중단원] VALUE — must match a known topic in unit_classification.json
+ *  - [과목] VALUE   — must match a known subject name
+ *  - [범위] VALUE   — must match a topic within the expected subject/unit combination
+ */
+export function checkTextVocabulary(
+  xml: string,
+  file: string,
+  unitClassification: UnitClassification,
+): CheckerIssue[] {
+  const issues: CheckerIssue[] = [];
+
+  // Collect all subject names and all topics from both current + legacy curricula
+  const allSubjectNames = new Set<string>();
+  const allTopics = new Set<string>();
+  const allUnitNames = new Set<string>();
+
+  const allSubjects = [
+    ...unitClassification.subjects,
+    ...(unitClassification.legacy?.subjects ?? []),
+  ];
+
+  for (const subject of allSubjects) {
+    allSubjectNames.add(subject.name);
+    for (const unit of subject.units) {
+      allUnitNames.add(unit.name);
+      for (const topic of unit.topics) {
+        allTopics.add(topic);
+      }
+    }
+  }
+
+  const visibleText = textNodes(xml).join("\n");
+
+  // [중단원] check
+  for (const match of visibleText.matchAll(/\[중단원\]\s*([^\s\[]+(?:\s+[^\s\[]+)*)/g)) {
+    const value = match[1].trim();
+    if (!allTopics.has(value) && !allUnitNames.has(value)) {
+      issues.push({
+        ruleId: "text.vocabulary",
+        severity: "error",
+        message: `Unknown 중단원 value: "${value}" — not found in unit_classification.json`,
+        file,
+        evidence: snippet(match[0]),
+      });
+    }
+  }
+
+  // [과목] check
+  for (const match of visibleText.matchAll(/\[과목\]\s*([^\s\[]+(?:\s+[^\s\[]+)*)/g)) {
+    const value = match[1].trim();
+    if (!allSubjectNames.has(value)) {
+      issues.push({
+        ruleId: "text.vocabulary",
+        severity: "error",
+        message: `Unknown 과목 value: "${value}" — not found in unit_classification.json`,
+        file,
+        evidence: snippet(match[0]),
+      });
+    }
+  }
+
+  // [범위] check — same pool as 중단원/topics
+  for (const match of visibleText.matchAll(/\[범위\]\s*([^\s\[]+(?:\s+[^\s\[]+)*)/g)) {
+    const value = match[1].trim();
+    if (!allTopics.has(value) && !allUnitNames.has(value)) {
+      issues.push({
+        ruleId: "text.vocabulary",
+        severity: "error",
+        message: `Unknown 범위 value: "${value}" — not found in unit_classification.json`,
+        file,
+        evidence: snippet(match[0]),
+      });
+    }
+  }
+
   return issues;
 }
 

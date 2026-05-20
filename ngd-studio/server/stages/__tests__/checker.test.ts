@@ -9,13 +9,20 @@
  *  3. `runCheckerWithAutoFix` — wrapper: clean XML passes immediately;
  *     run-on XML triggers fix and passes on second run; unfixable errors
  *     are returned as-is.
+ *  4. NEW: endNote.structure rule (D6).
+ *  5. NEW: section.style_format rule (D8).
+ *  6. NEW: text.vocabulary rule (D9).
  */
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   runDeterministicCheckerRules,
   fixRunOnEquationsInXml,
   runCheckerWithAutoFix,
+  checkTextVocabulary,
+  _resetUnitClassificationCache,
+  _injectUnitClassification,
+  type UnitClassification,
 } from "../checker";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -277,5 +284,253 @@ describe("runCheckerWithAutoFix", () => {
 
     expect(autofixed).toBe(true);
     expect(result.validation?.message).toContain("auto-fix");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. NEW Deterministic rule: endNote.structure (D6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeEndNoteXml(options: {
+  suffixChar?: string;
+  number?: string;
+  autoNum?: boolean;
+  answerText?: string;
+  bold?: boolean;
+}): string {
+  const {
+    suffixChar = "46",
+    number = "1",
+    autoNum = true,
+    answerText = "[정답] ①",
+    bold = false,
+  } = options;
+
+  const attrs = [
+    suffixChar !== undefined ? `suffixChar="${suffixChar}"` : "",
+    number !== undefined ? `number="${number}"` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return `<hp:endNote ${attrs}>${autoNum ? '<hp:autoNum numType="digit" />' : ""}<hp:p><hp:run>${bold ? '<hp:charPr bold="true" />' : ""}<hp:t>${answerText}</hp:t></hp:run></hp:p></hp:endNote>`;
+}
+
+describe("checkEndNoteStructure (endNote.structure)", () => {
+  it("pass: valid endNote with all required elements", () => {
+    const xml = wrapSection(makeEndNoteXml({}));
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    expect(issues).toHaveLength(0);
+  });
+
+  it("fail: missing [정답] text produces error", () => {
+    const xml = wrapSection(makeEndNoteXml({ answerText: "풀이만 있고 정답 없음" }));
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.some((i) => i.severity === "error")).toBe(true);
+    expect(issues.some((i) => i.message.includes("[정답]"))).toBe(true);
+  });
+
+  it("fail: missing suffixChar attribute produces error", () => {
+    // Build endNote without suffixChar
+    const xmlNoSuffix = wrapSection(
+      `<hp:endNote number="1"><hp:autoNum numType="digit" /><hp:p><hp:run><hp:t>[정답] ①</hp:t></hp:run></hp:p></hp:endNote>`,
+    );
+    const issues = runDeterministicCheckerRules(xmlNoSuffix).filter(
+      (i) => i.ruleId === "endNote.structure",
+    );
+    expect(issues.some((i) => i.message.includes("suffixChar"))).toBe(true);
+  });
+
+  it("fail: missing autoNum child produces error", () => {
+    const xml = wrapSection(makeEndNoteXml({ autoNum: false }));
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    expect(issues.some((i) => i.message.includes("autoNum"))).toBe(true);
+  });
+
+  it("edge: no endNote elements in XML → no issues fired", () => {
+    const xml = wrapSection(makeEquationXml("f(x) = x^2"));
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    expect(issues).toHaveLength(0);
+  });
+
+  it("pass: multiple endNotes all valid", () => {
+    const xml = wrapSection(
+      makeEndNoteXml({ answerText: "[정답] ①", number: "1" }) +
+        makeEndNoteXml({ answerText: "[정답] ②", number: "2" }),
+    );
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    expect(issues).toHaveLength(0);
+  });
+
+  // ── Order checks ──────────────────────────────────────────────────────────
+
+  it("pass: suffixChar precedes number in attrs (correct order)", () => {
+    const xml = `<hsp:secPr><hp:endNote suffixChar="46" number="1"><hp:autoNum numType="digit" /><hp:p><hp:run><hp:t>[정답] ①</hp:t></hp:run></hp:p></hp:endNote></hsp:secPr>`;
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    // No order-related issues
+    expect(issues.filter((i) => i.message.includes("order"))).toHaveLength(0);
+  });
+
+  it("fail: number precedes suffixChar in attrs — order violation warning", () => {
+    const xml = `<hsp:secPr><hp:endNote number="1" suffixChar="46"><hp:autoNum numType="digit" /><hp:p><hp:run><hp:t>[정답] ①</hp:t></hp:run></hp:p></hp:endNote></hsp:secPr>`;
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    expect(issues.some((i) => i.message.includes("suffixChar") && i.message.includes("number"))).toBe(true);
+  });
+
+  it("fail: <hp:autoNum> appears after <hp:t> in body — order violation warning", () => {
+    // autoNum after the text node
+    const xml = `<hsp:secPr><hp:endNote suffixChar="46" number="1"><hp:p><hp:run><hp:t>[정답] ①</hp:t></hp:run></hp:p><hp:autoNum numType="digit" /></hp:endNote></hsp:secPr>`;
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    expect(issues.some((i) => i.message.includes("autoNum") && i.message.includes("order"))).toBe(true);
+  });
+
+  // ── 미주-문제 띄어쓰기 없음 ────────────────────────────────────────────────
+
+  it("pass: preceding <hp:p> ends without whitespace — no spacing error", () => {
+    const xml = `<hsp:secPr><hp:p><hp:run><hp:t>다음 물음에 답하시오.</hp:t></hp:run></hp:p><hp:endNote suffixChar="46" number="1"><hp:autoNum numType="digit" /><hp:p><hp:run><hp:t>[정답] ①</hp:t></hp:run></hp:p></hp:endNote></hsp:secPr>`;
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    expect(issues.filter((i) => i.message.includes("whitespace"))).toHaveLength(0);
+  });
+
+  it("fail: preceding <hp:p> last text ends with space — spacing error", () => {
+    // The last hp:t in the preceding <hp:p> ends with a trailing space
+    const xml = `<hsp:secPr><hp:p><hp:run><hp:t>다음 물음에 답하시오. </hp:t></hp:run></hp:p><hp:endNote suffixChar="46" number="1"><hp:autoNum numType="digit" /><hp:p><hp:run><hp:t>[정답] ①</hp:t></hp:run></hp:p></hp:endNote></hsp:secPr>`;
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "endNote.structure");
+    expect(issues.some((i) => i.severity === "error" && i.message.includes("whitespace"))).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. NEW Deterministic rule: section.style_format (D8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeStyleXml(batangglCount: number): string {
+  const styles = Array.from({ length: batangglCount }, (_, i) => `<hp:style name="바탕글${i > 0 ? i + 1 : ""}" styleId="Normal${i}" type="para"></hp:style>`).join("\n");
+  return `<hsp:secPr><hp:styles>${styles}</hp:styles></hsp:secPr>`;
+}
+
+describe("checkSectionStyleFormat (section.style_format)", () => {
+  it("pass: single 바탕글 style, no lineBreak, no bold in endNote", () => {
+    const xml = makeStyleXml(1);
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "section.style_format");
+    expect(issues).toHaveLength(0);
+  });
+
+  it("fail: multiple 바탕글 styles produces error", () => {
+    const xml = makeStyleXml(2);
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "section.style_format");
+    expect(issues.some((i) => i.severity === "error" && i.message.includes("바탕글"))).toBe(true);
+  });
+
+  it("warning: lineBreak present produces warning with fallbackRequired", () => {
+    const xml = wrapSection(`<hp:run><hp:lineBreak /></hp:run>`);
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "section.style_format");
+    expect(issues.some((i) => i.severity === "warning" && i.message.includes("lineBreak"))).toBe(true);
+    expect(issues.some((i) => i.fallbackRequired === true)).toBe(true);
+  });
+
+  it("fail: bold inside endNote body produces error", () => {
+    const xml = wrapSection(makeEndNoteXml({ bold: true }));
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "section.style_format");
+    expect(issues.some((i) => i.severity === "error" && i.message.includes("bold"))).toBe(true);
+  });
+
+  it("pass: bold outside endNote (in main body) does not trigger rule", () => {
+    const xml = wrapSection(`<hp:run><hp:charPr bold="true" /><hp:t>일반 텍스트 굵게</hp:t></hp:run>`);
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "section.style_format");
+    // Bold outside endNote is not checked by this rule
+    expect(issues.filter((i) => i.severity === "error")).toHaveLength(0);
+  });
+
+  it("edge: no 바탕글 styles (0 count) → no error (rule only fires if count > 1)", () => {
+    const xml = wrapSection(`<hp:t>본문만</hp:t>`);
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "section.style_format");
+    expect(issues.filter((i) => i.severity === "error" && i.message.includes("바탕글"))).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. NEW Deterministic rule: text.vocabulary (D9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Minimal UnitClassification fixture for vocabulary tests. */
+const TEST_CLASSIFICATION: UnitClassification = {
+  subjects: [
+    {
+      code: "수1",
+      name: "수학 I",
+      grade: 2,
+      units: [
+        {
+          code: "I",
+          name: "수열",
+          topics: ["등차수열", "등비수열", "수열의 합", "수학적 귀납법"],
+        },
+      ],
+    },
+    {
+      code: "수2",
+      name: "수학 II",
+      grade: 2,
+      units: [
+        {
+          code: "K",
+          name: "미분법",
+          topics: ["미분계수와 도함수"],
+        },
+      ],
+    },
+  ],
+};
+
+describe("checkTextVocabulary (text.vocabulary)", () => {
+  beforeEach(() => {
+    _resetUnitClassificationCache();
+    _injectUnitClassification(TEST_CLASSIFICATION);
+  });
+
+  it("pass: valid 과목, 중단원, 범위", () => {
+    const xml = makeTextXml("[과목] 수학 I [중단원] 등차수열 [범위] 등차수열");
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "text.vocabulary");
+    expect(issues).toHaveLength(0);
+  });
+
+  it("fail: unknown 과목 produces error", () => {
+    const xml = makeTextXml("[과목] 물리학 I");
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "text.vocabulary");
+    expect(issues.some((i) => i.severity === "error" && i.message.includes("과목"))).toBe(true);
+    expect(issues.some((i) => i.evidence?.includes("물리학 I"))).toBe(true);
+  });
+
+  it("fail: unknown 중단원 produces error", () => {
+    const xml = makeTextXml("[중단원] 열역학");
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "text.vocabulary");
+    expect(issues.some((i) => i.severity === "error" && i.message.includes("중단원"))).toBe(true);
+  });
+
+  it("fail: unknown 범위 produces error", () => {
+    const xml = makeTextXml("[범위] 알수없는범위");
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "text.vocabulary");
+    expect(issues.some((i) => i.severity === "error" && i.message.includes("범위"))).toBe(true);
+  });
+
+  it("pass: valid 범위 matching a topic", () => {
+    const xml = makeTextXml("[범위] 수열의 합");
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "text.vocabulary");
+    expect(issues).toHaveLength(0);
+  });
+
+  it("edge: no vocabulary tags → no issues", () => {
+    const xml = makeTextXml("일반 본문 텍스트");
+    const issues = runDeterministicCheckerRules(xml).filter((i) => i.ruleId === "text.vocabulary");
+    expect(issues).toHaveLength(0);
+  });
+
+  it("checkTextVocabulary direct: unit name also accepted as 중단원", () => {
+    // unit.name "수열" is also in the valid set
+    const xml = makeTextXml("[중단원] 수열");
+    const issues = checkTextVocabulary(xml, "test.xml", TEST_CLASSIFICATION);
+    expect(issues).toHaveLength(0);
   });
 });
