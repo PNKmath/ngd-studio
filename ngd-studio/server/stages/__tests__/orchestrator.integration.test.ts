@@ -1,7 +1,7 @@
 /**
  * orchestrator.integration.test.ts
  *
- * Phase 9 — mock integration e2e test.
+ * Phase 7 cross-language parity + Phase 9 mock integration e2e test.
  *
  * Strategy:
  *  - Mock all AI-calling stage runners (extractor, solver, verifier) via vi.mock so
@@ -18,11 +18,17 @@
  *  - providerTelemetry has entries for solver + verifier (2 per question × 3 = 6) +
  *    builder + checker (1 each = 2 total)
  *  - SSE events contain extraction_review ✗ (bypassed), solver stage events ✓
+ *
+ * Phase 7 (parity suite):
+ *  - All 28 normalization fixtures: TS normalizeParts == Python normalize_parts
+ *  - Spawns Python subprocess per fixture to get a byte-level comparable JSON output.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { readdirSync as readdirSyncNode } from "fs";
 import os from "os";
 import path from "path";
+import { spawnSync } from "child_process";
 import type { AIProviderAdapter, ProviderRunOptions } from "@/lib/ai/types";
 import type { SSEEvent } from "@/lib/claude";
 import { FileBackedStageCache } from "../cache";
@@ -504,4 +510,79 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
       expect(entry.retry).toBe(false);
     }
   }, 30_000);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Phase 7: Cross-language normalizer parity
+//
+// For every fixture in tests/fixtures/parts_normalization/, verify that
+// TS normalizeParts and Python normalize_parts produce byte-level equal JSON.
+//
+// Python is invoked via spawnSync so the test remains deterministic and
+// does not require a live API key.
+// ────────────────────────────────────────────────────────────────────────────
+
+const PARTS_FIXTURES_DIR = path.resolve(__dirname, "../../../tests/fixtures/parts_normalization");
+const PYTHON_EQUATION_PY = path.resolve(__dirname, "../../../../equation.py");
+
+/**
+ * Run Python normalize_parts on the given parts JSON string.
+ * Returns parsed result or throws if Python process fails.
+ */
+function runPythonNormalize(partsJson: string): unknown[] {
+  const pythonBin = process.platform === "win32" ? "python" : "python3";
+  const script = [
+    "import json, sys, os",
+    `sys.path.insert(0, os.path.dirname(r'${PYTHON_EQUATION_PY}'))`,
+    "from equation import normalize_parts",
+    `result = normalize_parts(json.loads(r'''${partsJson.replace(/'/g, "\\'")}'''))`,
+    "print(json.dumps(result, ensure_ascii=False))",
+  ].join("\n");
+
+  const proc = spawnSync(pythonBin, ["-c", script], {
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+
+  if (proc.error) {
+    throw new Error(`Python spawn error: ${proc.error.message}`);
+  }
+  if (proc.status !== 0) {
+    throw new Error(`Python exited ${proc.status}: ${proc.stderr}`);
+  }
+  return JSON.parse(proc.stdout.trim()) as unknown[];
+}
+
+describe("Phase 7: normalizer parity — TS == Python for all fixtures", () => {
+  // Discover all fixture files synchronously (test collection time).
+  const fixtureFiles = readdirSyncNode(PARTS_FIXTURES_DIR)
+    .filter((f) => f.endsWith(".json") && f !== "index.json")
+    .sort();
+
+  for (const file of fixtureFiles) {
+    it(`parity: ${path.basename(file, ".json")}`, async () => {
+      const { normalizeParts } = await import("@/lib/parts/normalize");
+
+      const content = await readFile(path.join(PARTS_FIXTURES_DIR, file), "utf8");
+      const fx = JSON.parse(content) as {
+        id: string;
+        input: { parts: Parameters<typeof normalizeParts>[0] };
+        expected: { parts: unknown[] };
+      };
+
+      // TS result
+      const tsResult = normalizeParts(fx.input.parts);
+
+      // Python result (subprocess)
+      const partsJson = JSON.stringify(fx.input.parts);
+      const pyResult = runPythonNormalize(partsJson);
+
+      // Both should match expected
+      expect(tsResult).toEqual(fx.expected.parts);
+      expect(pyResult).toEqual(fx.expected.parts);
+
+      // Cross-language byte-level equality (canonical JSON comparison)
+      expect(JSON.stringify(tsResult)).toBe(JSON.stringify(pyResult));
+    });
+  }
 });
