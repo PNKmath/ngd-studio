@@ -1,0 +1,8 @@
+<hp:sec xmlns:hp="urn:schemas-microsoft-com:office:office">
+  <hp:p>
+    <hp:run>
+      <hp:tab/>
+      <hp:equation><hp:script>x=1</hp:script></hp:equation>
+    </hp:run>
+  </hp:p>
+</hp:sec>

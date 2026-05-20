@@ -56,6 +56,12 @@ export interface ReviewIssueDraft {
    * fallback "확인".
    */
   question_number?: number;
+  /**
+   * true → this draft was produced by autoValidators.ts (deterministic XML
+   * analysis). reviewer agent must NOT create a draft for the same rule_id
+   * to avoid duplicates.
+   */
+  auto_verified?: boolean;
 }
 
 export interface MutationResult {

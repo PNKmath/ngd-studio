@@ -16,11 +16,17 @@
  * without changing this file.
  */
 
+import { readFile } from "fs/promises";
+import JSZip from "jszip";
 import {
   applyReviewMutations,
   type ReviewIssueDraft,
   type MutationResult,
 } from "../review/mutation";
+import {
+  runAutoValidators,
+  AUTO_VALIDATED_RULE_IDS,
+} from "../review/autoValidators";
 import {
   writeFixedReviewTableEntries,
   runAddReviewTable,
@@ -41,9 +47,14 @@ export interface ReviewRunnerInput {
    * Callable that invokes the reviewer agent (LLM) and returns issue drafts.
    *
    * Callers supply their own implementation (Claude CLI, SDK provider, etc.).
-   * The function receives the same `hwpxPath` and any extra context needed.
+   * The function receives `hwpxPath` and `skipRuleIds` — rule IDs that the
+   * code-level autoValidators already cover, so the agent must not produce
+   * duplicate drafts for them.
    */
-  runReviewerAgent: (hwpxPath: string) => Promise<ReviewIssueDraft[]>;
+  runReviewerAgent: (
+    hwpxPath: string,
+    opts: { skipRuleIds: string[] }
+  ) => Promise<ReviewIssueDraft[]>;
   /** Options forwarded to runAddReviewTable. */
   addReviewTableOpts?: AddReviewTableOptions;
   /** Options forwarded to runReviewPostprocess. */
@@ -51,7 +62,12 @@ export interface ReviewRunnerInput {
 }
 
 export interface ReviewRunnerOutput {
-  /** All drafts returned by the reviewer LLM. */
+  /**
+   * Deterministic drafts produced by autoValidators (auto_verified: true).
+   * These are merged into `drafts` but exposed separately for observability.
+   */
+  autoDrafts: ReviewIssueDraft[];
+  /** All drafts (autoDrafts + agent drafts, rule_id-deduplicated). */
   drafts: ReviewIssueDraft[];
   /** Drafts that were successfully applied to the HWPX. */
   applied: MutationResult["applied"];
@@ -82,8 +98,25 @@ export interface ReviewRunnerOutput {
 export async function runReviewStage(input: ReviewRunnerInput): Promise<ReviewRunnerOutput> {
   const { hwpxPath, runReviewerAgent, addReviewTableOpts, postprocessOpts } = input;
 
-  // ── Step 1: LLM → issue drafts ─────────────────────────────────────────────
-  const drafts = await runReviewerAgent(hwpxPath);
+  // ── Step 0: Read section XML for deterministic validators ──────────────────
+  const sectionXml = await readSectionXml(hwpxPath);
+
+  // ── Step 1a: Deterministic auto-validators ─────────────────────────────────
+  const autoDrafts = runAutoValidators(sectionXml);
+
+  // ── Step 1b: LLM → issue drafts (skipping auto-validated rule IDs) ─────────
+  const agentDrafts = await runReviewerAgent(hwpxPath, {
+    skipRuleIds: AUTO_VALIDATED_RULE_IDS,
+  });
+
+  // Merge: auto drafts take precedence; agent drafts for already-covered
+  // rule_ids are dropped to prevent duplicates.
+  const drafts: ReviewIssueDraft[] = [
+    ...autoDrafts,
+    ...agentDrafts.filter(
+      (d) => !AUTO_VALIDATED_RULE_IDS.includes(d.rule_id ?? "")
+    ),
+  ];
 
   // ── Step 2: Apply mutations ────────────────────────────────────────────────
   const { applied, failed } = await applyReviewMutations(hwpxPath, drafts);
@@ -99,7 +132,25 @@ export async function runReviewStage(input: ReviewRunnerInput): Promise<ReviewRu
   // ── Step 5: Postprocess ───────────────────────────────────────────────────
   await runReviewPostprocess(hwpxPath, postprocessOpts);
 
-  return { drafts, applied, failed, fixedTableEntries, extraTableItems };
+  return { autoDrafts, drafts, applied, failed, fixedTableEntries, extraTableItems };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal: extract Contents/section0.xml from HWPX zip
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function readSectionXml(hwpxPath: string): Promise<string> {
+  const data = await readFile(hwpxPath);
+  const zip = await JSZip.loadAsync(data);
+  const entry = zip.file("Contents/section0.xml");
+  if (!entry) {
+    throw {
+      code: "review_section_missing",
+      message: `Contents/section0.xml not found in HWPX: ${hwpxPath}`,
+      retryable: false,
+    };
+  }
+  return entry.async("string");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

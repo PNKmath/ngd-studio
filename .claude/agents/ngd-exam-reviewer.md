@@ -75,7 +75,21 @@ mutation·테이블 기입·후처리는 모두 orchestrator(reviewRunner.ts)가
 **내용 비교**: PDF 이미지 내용 vs HWPX 텍스트/수식 대조.
 **체크리스트 검증**: XML 분석으로 기계적 검증.
 
-자동 검증 항목 (22개 고정 항목 기준):
+### 자동검증 항목 (생성 금지)
+
+다음 rule_id에 대한 issue draft는 코드(`autoValidators.ts`)가 생성합니다. agent는 **건드리지 마세요**:
+`#1, #4, #5, #6, #7, #9, #14, #15, #17, #19, #20, #22`
+
+위 항목 위반을 발견해도 ReviewIssueDraft를 만들지 마세요 — 중복 생성됩니다.
+
+orchestrator가 `skipRuleIds` 옵션으로 위 목록을 전달합니다. 전달받은 `skipRuleIds` 배열에 있는 rule_id에 대한 issue는 절대 생성하지 마세요.
+
+agent의 책임은 다음에만 한정:
+- PDF↔HWPX 내용 누락/오타 (다중모달 판단)
+- `#2, #3, #8, #10~#13, #16, #18, #21` 등 자동검증 불가 항목
+- 자동검증되지 않은 ad-hoc 오류
+
+자동 검증 항목 참고 (22개 고정 항목 기준, 생성 금지 확인용):
 - #1 배점 위치/수식
 - #4 확률과통계, 좌표 로마체 → `<hp:script>` rm체 패턴
 - #5 therefore/because → `<hp:script>` 뒤 `~`

@@ -1,0 +1,7 @@
+<hp:sec xmlns:hp="urn:schemas-microsoft-com:office:office">
+  <hp:styles>
+    <hp:style name="바탕글" styleId="0"/>
+    <hp:style name="바탕글2" styleId="1"/>
+  </hp:styles>
+  <hp:p><hp:t>본문</hp:t></hp:p>
+</hp:sec>

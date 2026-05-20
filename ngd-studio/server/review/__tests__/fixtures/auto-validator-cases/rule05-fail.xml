@@ -1,0 +1,7 @@
+<hp:sec xmlns:hp="urn:schemas-microsoft-com:office:office">
+  <hp:p>
+    <hp:run>
+      <hp:equation><hp:script>therefore a=b</hp:script></hp:equation>
+    </hp:run>
+  </hp:p>
+</hp:sec>
