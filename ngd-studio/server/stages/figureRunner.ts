@@ -31,6 +31,11 @@ export interface FigureRunnerInput {
   baseDir?: string;
   /** Optional AbortSignal (unused currently — reserved for future cancellation) */
   signal?: AbortSignal;
+  /**
+   * Optional environment variables to merge into the spawned process env.
+   * Used by the orchestrator to inject GEMINI_API_KEY from runtimeEnv.
+   */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface FigureRunnerOutput {
@@ -99,6 +104,7 @@ export async function runFigureStage(
     args,
     cwd: baseDir,
     timeoutMs: 300_000, // 5 minutes for Gemini generation
+    ...(input.env ? { env: input.env } : {}),
   });
 
   if (result.status !== "success") {

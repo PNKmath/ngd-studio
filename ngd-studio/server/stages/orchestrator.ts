@@ -15,7 +15,7 @@ import { runSolverStage } from "./solver";
 import { runVerifierStage } from "./verifier";
 import { runBuilderStage } from "./builder";
 import { runCheckerWithAutoFix } from "./checker";
-import { runStageCommand } from "./commands";
+import { runFigureStage } from "./figureRunner";
 import { readRuntimeEnv } from "../../lib/server/runtimeEnv";
 import { determineStartStage, shouldRunStage } from "./resumeState";
 import { applyVerifierRetry } from "./stagePlan";
@@ -594,8 +594,39 @@ export async function runStageOrchestrator(
 
     // ── Stage 4: Figure ────────────────────────
     if (!checkAborted() && shouldRunStage(startStage, "figure")) {
-      const figureOk = await runFigureStage({ baseDir, cache, send, regenerate: input.figureRegen !== false });
-      if (!figureOk && checkAborted()) return cancelled(providerTelemetry);
+      const regenerate = input.figureRegen !== false;
+      send(stageEvent("figure", "running"));
+      send(progressEvent("figure", 5));
+      send(logEvent("figure", regenerate
+        ? "figure_processor.py를 실행합니다 (Gemini 재생성)."
+        : "figure_processor.py를 실행합니다 (crop만, Gemini 호출 없음)."));
+
+      const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
+      if (regenerate && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
+        send(logEvent(
+          "figure",
+          "GEMINI_API_KEY 미설정 — /settings에서 키를 추가하거나 figureRegen을 끄세요 (crop+워터마크만 적용됨).",
+          "warn",
+        ));
+      }
+
+      const figureResult = await runFigureStage({
+        examDataPath: cache.paths.examData,
+        outputDir: path.join(baseDir, "outputs", "images"),
+        statusOutPath: cache.paths.figureStatus,
+        regenerate,
+        baseDir,
+        env: runtimeEnv as NodeJS.ProcessEnv,
+      });
+
+      if (figureResult.status !== "failed") {
+        send(progressEvent("figure", 100));
+        send(stageEvent("figure", "done", { summary: "figure 처리 완료" }));
+      } else {
+        send(stageEvent("figure", "failed", { summary: "figure_processor.py 실패" }));
+        send(logEvent("figure", "figure_processor.py 실패", "error"));
+        if (checkAborted()) return cancelled(providerTelemetry);
+      }
     }
 
     // ── Stage 5: Builder ───────────────────────
@@ -719,66 +750,6 @@ export async function runStageOrchestrator(
     await persistTelemetry(input, providerTelemetry, "failed");
     return failed(providerTelemetry, message);
   }
-}
-
-// ──────────────────────────────────────────────
-// Figure stage
-// ──────────────────────────────────────────────
-
-interface FigureStageOptions {
-  baseDir: string;
-  cache: StageCache;
-  send: (event: SSEEvent) => void;
-  /** false면 figure_processor.py에 --no-regen 전달 (Gemini 호출 없이 crop만). */
-  regenerate?: boolean;
-}
-
-async function runFigureStage(opts: FigureStageOptions): Promise<boolean> {
-  const { baseDir, cache, send, regenerate = true } = opts;
-
-  send(stageEvent("figure", "running"));
-  send(progressEvent("figure", 5));
-  send(logEvent("figure", regenerate
-    ? "figure_processor.py를 실행합니다 (Gemini 재생성)."
-    : "figure_processor.py를 실행합니다 (crop만, Gemini 호출 없음)."));
-
-  const python = process.platform === "win32" ? "python" : "python3";
-  const scriptPath = path.join(baseDir, "figure_processor.py");
-  const examDataPath = cache.paths.examData;
-
-  const args = [scriptPath, examDataPath];
-  if (!regenerate) args.push("--no-regen");
-
-  // figure_processor.py는 GEMINI_API_KEY를 process.env에서 읽는다.
-  // sse.ts는 .env.local을 process.env에 자동 로드하지 않으므로 runtimeEnv를 명시적으로 전달.
-  const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
-  if (regenerate && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
-    send(logEvent(
-      "figure",
-      "GEMINI_API_KEY 미설정 — /settings에서 키를 추가하거나 figureRegen을 끄세요 (crop+워터마크만 적용됨).",
-      "warn",
-    ));
-  }
-
-  const result = await runStageCommand({
-    command: python,
-    args,
-    cwd: baseDir,
-    env: runtimeEnv as NodeJS.ProcessEnv,
-    timeoutMs: 300_000, // 5 minutes for figure generation
-  });
-
-  if (result.status === "success") {
-    send(progressEvent("figure", 100));
-    send(stageEvent("figure", "done", { summary: "figure 처리 완료" }));
-    return true;
-  }
-
-  send(stageEvent("figure", "failed", {
-    summary: result.stderr.slice(0, 300) || `exit code ${result.exitCode}`,
-  }));
-  send(logEvent("figure", `figure_processor.py 실패: ${result.stderr.slice(0, 300)}`, "error"));
-  return false;
 }
 
 // ──────────────────────────────────────────────
