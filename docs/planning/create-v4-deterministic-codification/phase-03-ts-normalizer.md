@@ -201,3 +201,7 @@ exit 0 — `pnpm tsc --noEmit` 0 errors, normalize.test.ts 56/56, solver.test.ts
 #### Review (orchestrator)
 
 pass — A~I 전부 OK. R-09 text-side는 fixture가 eq-only이므로 동치성 범위 내 정당.
+
+#### Commit
+
+`4b73143` — feat(parts): Phase 3 — TS normalizer (lib/parts/normalize.ts) + solver.ts 통합

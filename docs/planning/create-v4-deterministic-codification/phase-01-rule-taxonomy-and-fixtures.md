@@ -239,3 +239,7 @@ fix_required — Fixture JSON Schema의 `id.pattern`이 MULTI-/IDEMPOTENT- prefi
 #### Review (orchestrator, 2회차)
 
 pass — `id.pattern` 확장 적용 확인. Verification Re-run 재실행 exit 0.
+
+#### Commit
+
+`1caa034` — docs(create-v4): Phase 1 — 규칙 taxonomy + 공유 fixture 28개 셋업

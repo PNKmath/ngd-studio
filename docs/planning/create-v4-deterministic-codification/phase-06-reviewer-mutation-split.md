@@ -168,3 +168,7 @@ exit 0 — pnpm tsc --noEmit 0 errors, server/review/__tests__/mutation.test.ts 
 #### Review (orchestrator)
 
 pass — A~I 전부 OK. e2e 7번 항목은 fixture 부재로 수동 검증 정당, scope 확장은 사용자 승인. 1개 비-차단 노트: buildFixedTableEntries의 문제번호 "확인" 하드코딩은 ReviewIssueDraft 인터페이스 한계로 차기 iteration 이슈.
+
+#### Commit
+
+`b3c543c` — feat(review): Phase 6 — reviewer mutation TS 모듈 분리 + issue-draft-only agent 재작성

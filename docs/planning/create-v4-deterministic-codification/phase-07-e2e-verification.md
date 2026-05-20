@@ -150,3 +150,7 @@ skipped — test 추가(+75줄 parity 블록) + results.md만, 단순화 여지 
 #### Review (orchestrator)
 
 pass — A~I 전부 OK. 33/33·28/28·56/56 수치 3중 정합. 비-차단 노트: Python spawnSync raw string은 test fixture only 컨텍스트.
+
+#### Commit
+
+`3789694` — test(create-v4): Phase 7 — e2e 검증 + cross-language parity + metrics

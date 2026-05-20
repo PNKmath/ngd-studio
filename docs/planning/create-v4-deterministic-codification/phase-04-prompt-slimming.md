@@ -146,3 +146,7 @@ exit 0 — pnpm tsc --noEmit 0 errors, prompts.test.ts 14/14 pass.
 #### Review (orchestrator)
 
 pass — A~I 전부 OK. R-01~R-10 자연어 규칙 제거 + normalizer 위임, 의미 필수 규칙 유지.
+
+#### Commit
+
+`c11e948` — refactor(prompts): Phase 4 — solver/verifier prompt 슬림화 (R-01~R-10 규칙 제거)

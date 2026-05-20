@@ -171,3 +171,7 @@ exit 0 — pnpm tsc --noEmit clean, checker.test.ts 23/23, orchestrator.pipeline
 #### Review (orchestrator)
 
 pass — A~I 전부 OK. RULES map + fix 핸들러 + autoFix wrapper 스펙 일치, idempotent XML mutation 확인.
+
+#### Commit
+
+`d024d92` — feat(checker): Phase 5 — checker auto-fix 모드 (RULES map + fixRunOnEquationsInXml)
