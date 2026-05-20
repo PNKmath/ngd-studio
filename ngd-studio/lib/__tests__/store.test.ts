@@ -61,6 +61,54 @@ describe("setMode('resume')", () => {
     useJobStore.getState().setMode("resume", "solver");
     expect(useJobStore.getState().stages).toHaveLength(6);
   });
+
+  it("resumeFrom='solver': extractor done, solver+ pending", () => {
+    useJobStore.getState().setMode("resume", "solver");
+    const stages = useJobStore.getState().stages;
+    const byName = Object.fromEntries(stages.map((s) => [s.name, s.status]));
+    expect(byName["extractor"]).toBe("done");
+    expect(byName["solver"]).toBe("pending");
+    expect(byName["verifier"]).toBe("pending");
+    expect(byName["figure"]).toBe("pending");
+    expect(byName["builder"]).toBe("pending");
+    expect(byName["checker"]).toBe("pending");
+  });
+
+  it("resumeFrom='verifier': extractor/solver done, verifier+ pending", () => {
+    useJobStore.getState().setMode("resume", "verifier");
+    const stages = useJobStore.getState().stages;
+    const byName = Object.fromEntries(stages.map((s) => [s.name, s.status]));
+    expect(byName["extractor"]).toBe("done");
+    expect(byName["solver"]).toBe("done");
+    expect(byName["verifier"]).toBe("pending");
+    expect(byName["figure"]).toBe("pending");
+    expect(byName["builder"]).toBe("pending");
+    expect(byName["checker"]).toBe("pending");
+  });
+
+  it("resumeFrom='figure': extractor/solver/verifier done, figure+ pending", () => {
+    useJobStore.getState().setMode("resume", "figure");
+    const stages = useJobStore.getState().stages;
+    const byName = Object.fromEntries(stages.map((s) => [s.name, s.status]));
+    expect(byName["extractor"]).toBe("done");
+    expect(byName["solver"]).toBe("done");
+    expect(byName["verifier"]).toBe("done");
+    expect(byName["figure"]).toBe("pending");
+    expect(byName["builder"]).toBe("pending");
+    expect(byName["checker"]).toBe("pending");
+  });
+
+  it("resumeFrom='checker': figure/builder done, checker pending", () => {
+    useJobStore.getState().setMode("resume", "checker");
+    const stages = useJobStore.getState().stages;
+    const byName = Object.fromEntries(stages.map((s) => [s.name, s.status]));
+    expect(byName["extractor"]).toBe("done");
+    expect(byName["solver"]).toBe("done");
+    expect(byName["verifier"]).toBe("done");
+    expect(byName["figure"]).toBe("done");
+    expect(byName["builder"]).toBe("done");
+    expect(byName["checker"]).toBe("pending");
+  });
 });
 
 describe("setMode('crop')", () => {

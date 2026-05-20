@@ -65,7 +65,6 @@ function loadStoredMeta(): MetaValue {
   }
 }
 
-
 export default function CreateV4Page() {
   const reset = useJobStore((s) => s.reset);
   const { startJob, stopJob, pauseJob } = useJobRunner();
@@ -185,7 +184,7 @@ export default function CreateV4Page() {
 
   // 이전 작업 재개 상태
   const [existingImages, setExistingImages] = useState<{ count: number; hasClean: boolean; numbers: number[]; essayNumbers: number[] } | null>(null);
-  const [resumeFrom] = useState("auto");
+  const [resumeFrom, setResumeFrom] = useState("auto");
 
   // figure 상태 + 폴링
   const [figureStatus, setFigureStatus] = useState<FigureStatus | null>(null);
@@ -260,8 +259,6 @@ export default function CreateV4Page() {
 
     await startJob("resume", { pdf: "" }, jobMeta);
   }, [existingImages, meta, resumeFrom, startJob, setV3Meta]);
-
-  const canResume = status === "idle" && !!existingImages;
 
   // figure 확인 패널 표시 여부
   const showFigureConfirm = isDone
@@ -635,6 +632,25 @@ export default function CreateV4Page() {
               <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors font-bold uppercase tracking-tight">Auto-Split</span>
             </label>
             {!hasJob && !existingImages && <span className="text-[9px] text-muted-foreground font-mono opacity-50 uppercase">Ready</span>}
+            {!hasJob && existingImages && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-tight">어디부터?</span>
+                <select
+                  value={resumeFrom}
+                  onChange={(e) => setResumeFrom(e.target.value)}
+                  disabled={submitting}
+                  className="px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
+                >
+                  <option value="auto">자동 (캐시 스캔)</option>
+                  <option value="extractor">추출부터</option>
+                  <option value="solver">풀이부터</option>
+                  <option value="verifier">검증부터</option>
+                  <option value="figure">그림부터</option>
+                  <option value="builder">빌드부터</option>
+                  <option value="checker">검사만</option>
+                </select>
+              </label>
+            )}
           </div>
         </div>
       </div>
@@ -844,56 +860,3 @@ const STAGE_LABEL: Record<AIStageKey, string> = {
   "create.verifier": "검증",
   "review.reviewer": "오검",
 };
-
-// TODO(복구): 원본 AIProviderBadge body는 transcript에 보존되지 않아 stub으로 재작성됨.
-function AIProviderBadge({
-  settings,
-  deepSeekStages,
-  deepSeekBlocksCreate,
-}: {
-  settings: AISettings;
-  deepSeekStages: AIStageKey[];
-  deepSeekBlocksCreate: boolean;
-}) {
-  return (
-    <Card
-      className={cn(
-        "p-3 flex flex-col justify-between transition-colors",
-        deepSeekBlocksCreate ? "border-destructive/40 bg-destructive/5" : "hover:bg-muted/30"
-      )}
-    >
-      <div className="flex items-center justify-between mb-1.5">
-        <h3 className="text-xs font-medium text-muted-foreground">AI Provider</h3>
-        {deepSeekBlocksCreate && <span className="text-[10px] font-bold text-destructive animate-pulse">ERROR</span>}
-      </div>
-      <div className="grid grid-cols-3 gap-x-3 gap-y-1 text-[10px]">
-        {AI_STAGE_KEYS.slice(0, 3).map((stageKey) => {
-          const provider = settings.stageOverrides[stageKey] ?? settings.defaultProvider;
-          const isDeepSeek = provider === "deepseek-v4";
-          return (
-            <div key={stageKey} className="flex flex-col gap-0.5">
-              <span className="text-muted-foreground font-medium uppercase text-[8px]">{STAGE_LABEL[stageKey]}</span>
-              <span className={cn(
-                "font-mono truncate",
-                isDeepSeek ? "text-blue-500 font-bold" : "text-foreground"
-              )}>
-                {PROVIDER_LABEL[provider as AIProviderId] ?? provider}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      {deepSeekBlocksCreate ? (
-        <p className="text-[9px] text-destructive leading-tight mt-1 font-medium">
-          ⚠ extractor는 이미지 지원 Provider 필수
-        </p>
-      ) : deepSeekStages.length > 0 ? (
-        <p className="text-[9px] text-blue-600 dark:text-blue-400 mt-1 font-medium">
-          DeepSeek 활성: {deepSeekStages.map((k) => STAGE_LABEL[k]).join(", ")}
-        </p>
-      ) : (
-        <p className="text-[9px] text-muted-foreground mt-1 italic">Default: {PROVIDER_LABEL[settings.defaultProvider as AIProviderId]}</p>
-      )}
-    </Card>
-  );
-}
