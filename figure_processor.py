@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
-"""NGD Figure Processor - V3: crop → Gemini regenerate → trim + NGD watermark"""
+"""NGD Figure Processor - V4: crop → Gemini regenerate → trim + NGD watermark
 
+CLI usage:
+  python3 figure_processor.py \
+    --exam-data outputs/<sample>/exam_data.json \
+    --output-dir outputs/<sample>/images/ \
+    --status-out outputs/<sample>/figure_status.json \
+    [--no-regen]      # crop+watermark only (Gemini skip)
+    [--question N]    # reprocess single question only
+"""
+
+import argparse
+import io
+import json
 import os
 import sys
-import json
 import time
+from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont
 from google import genai
 from google.genai import types
 
-# argv[1] = exam_data.json 경로 (orchestrator가 전달). 없으면 기본 경로.
-EXAM_DATA_PATH = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "inputs/시험지 제작/.v3cache/exam_data.json"
-QUESTION_IMAGES_DIR = "inputs/시험지 제작/question_images"
-CACHE_DIR = "inputs/시험지 제작/.v3cache"
-OUTPUT_DIR = "outputs/images"
 GEMINI_MODEL = "gemini-3.1-flash-image-preview"
-# --no-regen: Gemini 호출 없이 crop된 원본을 그대로 사용 (trim + watermark만 적용)
-NO_REGEN = "--no-regen" in sys.argv
 
 PROMPT_TEMPLATE = (
     "Redraw this math exam figure cleanly and precisely as a simple diagram on a white background. "
@@ -26,7 +32,7 @@ PROMPT_TEMPLATE = (
 )
 
 
-def aspect_ratio_str(w, h):
+def aspect_ratio_str(w: int, h: int) -> str:
     r = w / h
     if r > 1.5:
         return "16:9"
@@ -40,7 +46,44 @@ def aspect_ratio_str(w, h):
         return "9:16"
 
 
-def trim_and_watermark(img_path, output_path):
+def _is_boundary_uncertain(box: tuple[int, int, int, int], img_w: int, img_h: int,
+                            gen_data: bytes | None) -> bool:
+    """Heuristic: flag crop boundary as uncertain when any of:
+    - extreme aspect ratio (>5:1 or <1:5)
+    - crop bbox touches page boundary
+    - Gemini output dimensions differ by >50% from cropped input
+    """
+    x0, y0, x1, y1 = box
+    cw, ch = x1 - x0, y1 - y0
+    if cw <= 0 or ch <= 0:
+        return True
+
+    # extreme aspect ratio
+    ratio = cw / ch
+    if ratio > 5.0 or ratio < 0.2:
+        return True
+
+    # bbox touches page boundary
+    EDGE_MARGIN = 2
+    if (x0 <= EDGE_MARGIN or y0 <= EDGE_MARGIN
+            or x1 >= img_w - EDGE_MARGIN or y1 >= img_h - EDGE_MARGIN):
+        return True
+
+    # Gemini output size diverges significantly
+    if gen_data is not None:
+        try:
+            gen_img = Image.open(io.BytesIO(gen_data))
+            gw, gh = gen_img.size
+            # check if generated image dimensions differ >50% from cropped input
+            if abs(gw - cw) / max(cw, 1) > 0.5 or abs(gh - ch) / max(ch, 1) > 0.5:
+                return True
+        except Exception:
+            pass
+
+    return False
+
+
+def trim_and_watermark(img_path: str, output_path: str) -> None:
     img = Image.open(img_path).convert("RGBA")
     pixels = img.load()
     w, h = img.size
@@ -49,7 +92,10 @@ def trim_and_watermark(img_path, output_path):
         return px[0] > t and px[1] > t and px[2] > t
 
     top = next((y for y in range(h) if any(not is_white(pixels[x, y]) for x in range(w))), 0)
-    bottom = next((y for y in range(h - 1, -1, -1) if any(not is_white(pixels[x, y]) for x in range(w))), h - 1)
+    bottom = next(
+        (y for y in range(h - 1, -1, -1) if any(not is_white(pixels[x, y]) for x in range(w))),
+        h - 1,
+    )
 
     pad = 15
     cropped = img.crop((0, max(0, top - pad), w, min(h, bottom + pad)))
@@ -62,13 +108,13 @@ def trim_and_watermark(img_path, output_path):
 
     bbox = draw.textbbox((0, 0), "NGD", font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    cw, ch = cropped.size
-    draw.text((cw - tw - 12, ch - th - 10), "NGD", fill=(200, 200, 200, 255), font=font)
+    cw2, ch2 = cropped.size
+    draw.text((cw2 - tw - 12, ch2 - th - 10), "NGD", fill=(200, 200, 200, 255), font=font)
 
     cropped.convert("RGB").save(output_path)
 
 
-def generate_with_gemini(client, ref_path, desc, ar):
+def generate_with_gemini(client, ref_path: str, desc: str, ar: str) -> bytes | None:
     prompt = PROMPT_TEMPLATE.format(desc=f"{desc} " if desc else "")
     ref_image = Image.open(ref_path)
 
@@ -94,102 +140,212 @@ def generate_with_gemini(client, ref_path, desc, ar):
     return None
 
 
-def process_figure(client, prob):
+def process_figure(
+    client,
+    prob: dict,
+    cache_dir: Path,
+    question_images_dir: Path,
+    output_dir: Path,
+    no_regen: bool,
+) -> dict:
+    """Process a single figure problem.
+
+    Returns a per-question status dict conforming to the figure_status.json schema.
+    """
     n = prob["number"]
     info = prob["figure_info"]
     crop_ratio = info.get("crop_ratio")
     desc = info.get("description_en", "")
 
-    src = f"{QUESTION_IMAGES_DIR}/q{n:02d}.png"
-    if not os.path.exists(src):
+    src = question_images_dir / f"q{n:02d}.png"
+    if not src.exists():
         print(f"  [Q{n}] 소스 이미지 없음: {src}")
-        return None
+        return {"status": "failed", "error": f"source image missing: {src}"}
 
-    img = Image.open(src)
+    img = Image.open(str(src))
     iw, ih = img.size
 
     if crop_ratio:
         cr = crop_ratio
-        box = (int(cr[0] * iw), int(cr[1] * ih), int(cr[2] * iw), int(cr[3] * ih))
+        box = (
+            int(cr[0] * iw),
+            int(cr[1] * ih),
+            int(cr[2] * iw),
+            int(cr[3] * ih),
+        )
     else:
         box = (0, 0, iw, ih)
 
     cropped = img.crop(box).convert("RGB")
-    ref_path = f"{CACHE_DIR}/prob{n}_ref.jpg"
-    cropped.save(ref_path, quality=95)
+    ref_path = cache_dir / f"prob{n}_ref.jpg"
+    cropped.save(str(ref_path), quality=95)
 
     cw, ch = cropped.size
     ar = aspect_ratio_str(cw, ch)
-    final_path = f"{OUTPUT_DIR}/prob{n}_final.png"
+    final_path = output_dir / f"prob{n}_final.png"
 
-    if NO_REGEN:
-        # Crop + 워터마크만, Gemini 호출 없음
+    if no_regen:
         print(f"  [Q{n}] crop만 적용 (--no-regen, crop={box})")
-        trim_and_watermark(ref_path, final_path)
+        trim_and_watermark(str(ref_path), str(final_path))
         print(f"  [Q{n}] 완료 → {final_path}")
-        return final_path
+        uncertain = _is_boundary_uncertain(box, iw, ih, None)
+        q_status: dict = {
+            "status": "boundary_uncertain" if uncertain else "ok",
+            "image": str(final_path),
+            "boundary_uncertain": uncertain,
+        }
+        if uncertain:
+            q_status["crop_attempts"] = 1
+            q_status["needs_agent_review"] = True
+        return q_status
 
     print(f"  [Q{n}] Gemini 생성 중... (crop={box}, aspect={ar})")
 
-    data = generate_with_gemini(client, ref_path, desc, ar)
-    if data is None:
+    gen_data = generate_with_gemini(client, str(ref_path), desc, ar)
+    if gen_data is None:
         print(f"  [Q{n}] 생성 실패")
-        return None
+        return {"status": "failed", "error": "gemini generation failed after 3 attempts"}
 
-    gen_path = f"{CACHE_DIR}/prob{n}_generated.png"
-    with open(gen_path, "wb") as f:
-        f.write(data)
+    gen_path = cache_dir / f"prob{n}_generated.png"
+    gen_path.write_bytes(gen_data)
 
-    trim_and_watermark(gen_path, final_path)
+    trim_and_watermark(str(gen_path), str(final_path))
     print(f"  [Q{n}] 완료 → {final_path}")
-    return final_path
+
+    uncertain = _is_boundary_uncertain(box, iw, ih, gen_data)
+    q_status = {
+        "status": "boundary_uncertain" if uncertain else "ok",
+        "image": str(final_path),
+        "boundary_uncertain": uncertain,
+    }
+    if uncertain:
+        q_status["crop_attempts"] = 1
+        q_status["needs_agent_review"] = True
+    return q_status
 
 
-def main():
-    if NO_REGEN:
-        client = None  # Gemini 호출 안 함
+def main() -> None:
+    # Backward-compatible: if the first arg looks like a file path (not a --flag),
+    # treat it as the legacy positional exam_data argument so the existing orchestrator.ts
+    # call (args = [scriptPath, examDataPath, ?--no-regen]) continues to work.
+    _raw = sys.argv[1:]
+    _legacy_exam_data: str | None = None
+    if _raw and not _raw[0].startswith("--"):
+        _legacy_exam_data = _raw[0]
+        sys.argv = [sys.argv[0]] + _raw[1:]
+
+    parser = argparse.ArgumentParser(
+        description="NGD Figure Processor — crop+Gemini+trim+watermark pipeline"
+    )
+    parser.add_argument(
+        "--exam-data",
+        default=_legacy_exam_data or "inputs/시험지 제작/.v3cache/exam_data.json",
+        help="Path to exam_data.json",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="outputs/images",
+        help="Directory to write final images",
+    )
+    parser.add_argument(
+        "--status-out",
+        default=None,
+        help="Path to write figure_status.json (default: <exam-data-dir>/figure_status.json)",
+    )
+    parser.add_argument(
+        "--no-regen",
+        action="store_true",
+        help="Skip Gemini regeneration — crop+watermark only",
+    )
+    parser.add_argument(
+        "--question",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Reprocess only question N",
+    )
+    args = parser.parse_args()
+
+    exam_data_path = Path(args.exam_data)
+    output_dir = Path(args.output_dir)
+    cache_dir = exam_data_path.parent
+    question_images_dir = cache_dir.parent / "question_images"
+
+    if args.status_out:
+        status_out_path = Path(args.status_out)
     else:
+        status_out_path = cache_dir / "figure_status.json"
+
+    if not args.no_regen:
         api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             print("ERROR: GEMINI_API_KEY 환경변수 없음")
             sys.exit(1)
         client = genai.Client(api_key=api_key)
+    else:
+        client = None
 
-    with open(EXAM_DATA_PATH, encoding="utf-8") as f:
+    with open(str(exam_data_path), encoding="utf-8") as f:
         exam_data = json.load(f)
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    figures = [p for p in exam_data["problems"] if p.get("has_figure") and p.get("figure_info")]
+    figures = [
+        p for p in exam_data["problems"]
+        if p.get("has_figure") and p.get("figure_info")
+    ]
+
+    if args.question is not None:
+        figures = [p for p in figures if p["number"] == args.question]
+
     if not figures:
         print("그림 있는 문제 없음, 종료")
-        status_path = f"{CACHE_DIR}/figure_status.json"
-        with open(status_path, "w", encoding="utf-8") as f:
-            json.dump({"completed": True, "success": [], "failed": []}, f, ensure_ascii=False)
+        status_data: dict = {
+            "status": "done",
+            "questions": {},
+        }
+        status_out_path.write_text(
+            json.dumps(status_data, ensure_ascii=False), encoding="utf-8"
+        )
         return
 
     print(f"그림 처리 시작: {len(figures)}개")
-    success, failed = [], []
+    questions_status: dict[str, dict] = {}
 
     for prob in figures:
-        result = process_figure(client, prob)
         n = prob["number"]
-        if result:
-            prob["figure_info"]["final_image"] = result
-            success.append(n)
-        else:
-            failed.append(n)
+        q_result = process_figure(
+            client, prob, cache_dir, question_images_dir, output_dir, args.no_regen
+        )
+        questions_status[str(n)] = q_result
+        if q_result["status"] == "ok" or q_result["status"] == "boundary_uncertain":
+            prob["figure_info"]["final_image"] = q_result["image"]
 
-    with open(EXAM_DATA_PATH, "w", encoding="utf-8") as f:
+    # Derive top-level status
+    statuses = {v["status"] for v in questions_status.values()}
+    if "failed" not in statuses and "boundary_uncertain" not in statuses:
+        top_status = "done"
+    elif "failed" in statuses and all(s == "failed" for s in statuses):
+        top_status = "failed"
+    else:
+        top_status = "partial"
+
+    status_data = {
+        "status": top_status,
+        "questions": questions_status,
+    }
+
+    with open(str(exam_data_path), "w", encoding="utf-8") as f:
         json.dump(exam_data, f, ensure_ascii=False, indent=2)
 
-    status_path = f"{CACHE_DIR}/figure_status.json"
-    with open(status_path, "w", encoding="utf-8") as f:
-        json.dump({"completed": True, "success": success, "failed": failed}, f, ensure_ascii=False)
+    status_out_path.write_text(
+        json.dumps(status_data, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
-    print(f"\n완료: {len(success)}개 성공 {success}")
-    if failed:
-        print(f"실패: {len(failed)}개 {failed}")
+    print(f"\n완료: status={top_status}")
+    failed_qs = [k for k, v in questions_status.items() if v["status"] == "failed"]
+    if failed_qs:
+        print(f"실패: {failed_qs}")
         sys.exit(1)
 
 

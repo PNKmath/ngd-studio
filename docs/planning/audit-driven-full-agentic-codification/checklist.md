@@ -32,15 +32,15 @@ created: 2026-05-20
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-coverage-matrix.md](./phase-01-coverage-matrix.md) | 6 | 0 | 0% | pending | - |
-| 2 | [phase-02-resume-and-cleanup.md](./phase-02-resume-and-cleanup.md) | 9 | 0 | 0% | pending | - |
-| 3 | [phase-03-batch-and-aggregation.md](./phase-03-batch-and-aggregation.md) | 7 | 0 | 0% | pending | - |
-| 4 | [phase-04-figure-pipeline.md](./phase-04-figure-pipeline.md) | 8 | 0 | 0% | pending | - |
-| 5 | [phase-05-checker-additional-rules.md](./phase-05-checker-additional-rules.md) | 7 | 0 | 0% | pending | - |
-| 6 | [phase-06-r07-complete-codify.md](./phase-06-r07-complete-codify.md) | 11 | 0 | 0% | pending | - |
+| 1 | [phase-01-coverage-matrix.md](./phase-01-coverage-matrix.md) | 6 | 6 | 100% | completed | 7e1cf48 |
+| 2 | [phase-02-resume-and-cleanup.md](./phase-02-resume-and-cleanup.md) | 9 | 9 | 100% | completed | ce07f91 |
+| 3 | [phase-03-batch-and-aggregation.md](./phase-03-batch-and-aggregation.md) | 7 | 7 | 100% | completed | 9a35f67 |
+| 4 | [phase-04-figure-pipeline.md](./phase-04-figure-pipeline.md) | 8 | 8 | 100% | completed | (pending commit) |
+| 5 | [phase-05-checker-additional-rules.md](./phase-05-checker-additional-rules.md) | 7 | 7 | 100% | completed | 4136fe6 |
+| 6 | [phase-06-r07-complete-codify.md](./phase-06-r07-complete-codify.md) | 11 | 11 | 100% | completed | 1874fad |
 | 7 | [phase-07-reviewer-auto-validators.md](./phase-07-reviewer-auto-validators.md) | 8 | 0 | 0% | pending | - |
 | 8 | [phase-08-e2e-and-coverage-verification.md](./phase-08-e2e-and-coverage-verification.md) | 5 | 0 | 0% | pending | - |
-| **Total** | | **61** | **0** | **0%** | | |
+| **Total** | | **61** | **48** | **79%** | | |
 
 ## Phase 의존성
 

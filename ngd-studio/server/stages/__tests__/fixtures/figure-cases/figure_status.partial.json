@@ -1,0 +1,21 @@
+{
+  "status": "partial",
+  "questions": {
+    "2": {
+      "status": "ok",
+      "image": "outputs/images/prob2_final.png",
+      "boundary_uncertain": false
+    },
+    "5": {
+      "status": "boundary_uncertain",
+      "image": "outputs/images/prob5_final.png",
+      "boundary_uncertain": true,
+      "crop_attempts": 1,
+      "needs_agent_review": true
+    },
+    "9": {
+      "status": "failed",
+      "error": "gemini quota exceeded"
+    }
+  }
+}
