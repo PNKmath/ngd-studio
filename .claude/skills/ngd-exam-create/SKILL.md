@@ -42,133 +42,48 @@ ngd-exam-create (이 스킬 = 오케스트레이터)
 
 프롬프트를 파싱하여 **신규 실행** vs **부분 재실행(resume)** 을 판별한다.
 
-**프롬프트 패턴**:
+### Resume 명령 파싱
 
-| 프롬프트 예시 | 모드 | 동작 |
-|-------------|------|------|
-| `작업해줘 [메타정보]` | 신규 | 처음부터 전체 실행 |
-| `resume` | 자동 resume | 기존 파일 스캔 → 미완료 지점부터 |
-| `resume --q=3 --from=extractor` | 지정 resume | 3번 extractor부터 재실행 |
-| `resume --q=3,7 --from=extractor` | 지정 resume (복수) | 3,7번 extractor 병렬 재실행 |
-| `resume --from=review_extract` | 추출 검증 resume | 추출 유지 + 검증 화면부터 (solver 미실행 시) |
-| `resume --q=3,7 --from=solver` | 지정 resume | 3,7번 solver부터 재실행 |
-| `resume --from=builder` | Phase 2 resume | builder부터 재실행 |
-| `resume --q=3 --from=cleaned` | 지정 resume | 3번 이미지 정리부터 재실행 |
-| `resume --q=3 --from=image_replace` | 이미지 교체 resume | 3번 원본 이미지 교체 후 정리→추출 자동 재실행 |
-| `resume --from=extractor` | 전체 resume | 모든 문제 extractor부터 재실행 → [EXTRACTION_REVIEW] 출력 |
-| `resume --from=solver` | 전체 resume | 모든 문제 solver부터 재실행 |
-| `resume --from=verifier` | 전체 resume | 모든 문제 verifier부터 재실행 |
-| `resume --from=figure` | Phase 2 resume | figure부터 재실행 |
-| `resume --q=3 --from=figure` | 지정 resume | 3번 그림만 재처리 |
-| `resume --from=confirm` | confirm | figure 결과 확인 완료 → builder 진행 |
+resume 입력 처리는 코드(`ngd-studio/server/stages/resumeCommand.ts`)가 담당한다.
+지원 명령은 코드의 unit test fixture (`server/stages/__tests__/fixtures/resume-commands.json`)에 정의되어 있다.
+agent는 prompt를 그대로 코드로 전달하면 된다.
 
-**프론트엔드 버튼 매핑** (SSE 호출 시 프롬프트로 전달):
-
-| 버튼 | 프롬프트 |
-|------|---------|
-| [문제N 이미지 교체] | `resume --q=N --from=image_replace` |
-| [문제N 이미지 재정리] | `resume --q=N --from=cleaned` |
-| [문제N 재추출] | `resume --q=N --from=extractor` |
-| [추출 결과 검증] | `resume --from=review_extract` |
-| [문제N 해설 재작성] | `resume --q=N --from=solver` |
-| [문제N 검증 재실행] | `resume --q=N --from=verifier` |
-| [전체 이어서] | `resume` |
-| [HWPX 재조립] | `resume --from=builder` |
-| [그림 재처리] | `resume --from=figure` |
-| [문제N 그림 재처리] | `resume --q=N --from=figure` |
-| [확인] | `resume --from=confirm` |
+**프론트엔드 버튼 매핑**: 각 버튼이 전송하는 구조화 명령은 `server/stages/__tests__/fixtures/resume-commands.json` fixture에 정의되어 있다. 버튼별 매핑은 해당 fixture를 참조한다.
 
 #### 0-2. Resume 로직
 
 resume 모드일 때, 지정된 문제/단계 **이후의 파일을 삭제**하고 해당 지점부터 재실행한다.
 
-```python
-import os, json
+cleanup 로직은 `ngd-studio/server/stages/cleanup.ts` (`cleanupFromStage`)가 담당한다.
+상태 감지 로직은 `ngd-studio/server/stages/resumeState.ts` (`detectQuestionStates`)가 담당한다.
 
-def cleanup_from_stage(question_nums, from_stage):
-    """지정 단계 이후의 중간 파일을 삭제한다."""
-    # 단계 순서: cleaned → extractor → solver → verifier → figure
-    stage_files = {
-        'cleaned':        [],  # cleaned 이미지 삭제는 별도 처리
-        'image_replace':  ['_extracted.json', '_solved.json', '_verified.json'],  # cleaned 이미지도 별도 삭제
-        'extractor':      ['_extracted.json', '_solved.json', '_verified.json'],
-        'review_extract': ['_solved.json', '_verified.json'],  # 추출 결과 보존, 해설만 재작성
-        'solver':         ['_solved.json', '_verified.json'],
-        'verifier':       ['_verified.json'],
-        'figure':         [],  # figure 출력 이미지 삭제는 별도 처리
-    }
-
-    # image_replace 전용: cleaned 이미지도 삭제
-    if from_stage == 'image_replace':
-        for n in question_nums:
-            cleaned_path = f'inputs/시험지 제작/question_images/cleaned/q{n:02d}.png'
-            if os.path.exists(cleaned_path):
-                os.remove(cleaned_path)
-                print(f"  삭제: {cleaned_path}")
-
-    # figure 전용: 해당 문제의 figure 출력 이미지 삭제
-    if from_stage == 'figure':
-        for n in question_nums:
-            fig_path = f'outputs/images/prob{n}_final.png'
-            if os.path.exists(fig_path):
-                os.remove(fig_path)
-                print(f"  삭제: {fig_path}")
-        # figure_status.json도 초기화 (재처리 시작)
-        status_path = 'inputs/시험지 제작/.v3cache/figure_status.json'
-        if os.path.exists(status_path):
-            os.remove(status_path)
-            print(f"  삭제: {status_path}")
-
-    suffixes = stage_files.get(from_stage, [])
-    for n in question_nums:
-        for suffix in suffixes:
-            path = f'inputs/시험지 제작/.v3cache/q{n}{suffix}'
-            if os.path.exists(path):
-                os.remove(path)
-                print(f"  삭제: {path}")
-
-def detect_resume_state(total_questions):
-    """기존 파일을 스캔하여 각 문제의 완료 상태를 반환한다."""
-    states = {}
-    for n in range(1, total_questions + 1):
-        if os.path.exists(f'inputs/시험지 제작/.v3cache/q{n}_verified.json'):
-            states[n] = 'verified'
-        elif os.path.exists(f'inputs/시험지 제작/.v3cache/q{n}_solved.json'):
-            states[n] = 'solved'
-        elif os.path.exists(f'inputs/시험지 제작/.v3cache/q{n}_extracted.json'):
-            states[n] = 'extracted'
-        else:
-            states[n] = 'none'
-    return states
-```
-
-**자동 resume** (`resume` — 문제/단계 미지정):
-1. `detect_resume_state()`로 각 문제 상태 확인
+**자동 resume** (문제/단계 미지정):
+1. `detectQuestionStates()`로 각 문제 상태 확인
 2. 모든 문제가 `extracted`이고 `solved`가 하나도 없으면 → **Step 3.5(프론트엔드 편집) 단계로**
 3. `verified` → 스킵, `solved` → verifier부터, `extracted` → solver부터, `none` → extractor부터
 4. 모든 문제가 `verified`이면 Phase 2로 직접 진행
 5. `exam_data.json`이 있고 모든 verified가 있으면 → Phase 2(figure)부터 재실행
 
-**전체 resume with stage** (`--from=<stage>` — `--q` 미지정):
-1. `cleanup_from_stage(list(range(1, total+1)), from_stage)` 실행 — 전체 문제에 적용
+**전체 resume with stage** (stage 지정, 문제 번호 미지정):
+1. `cleanupFromStage(전체 문제, stage)` 실행 — 전체 문제에 적용
 2. 전체 문제를 해당 단계부터 배치 병렬 실행 (Phase 1-A/1-B와 동일 방식)
 3. 완료 후 처리:
-   - `--from=extractor`: 전체 `[EXTRACTION_REVIEW]` 블록 출력 → Step 3.5
-   - `--from=solver`: solver → verifier 배치 처리 (Step 4로 진행)
-   - `--from=verifier`: verifier 배치 처리 후 Step 5로 진행
+   - extractor stage: 전체 `[EXTRACTION_REVIEW]` 블록 출력 → Step 3.5
+   - solver stage: solver → verifier 배치 처리 (Step 4로 진행)
+   - verifier stage: verifier 배치 처리 후 Step 5로 진행
 
-> `--from=extractor/solver/verifier`에서 `--q`가 없으면 항상 이 분기. `--q`가 있으면 아래 "지정 resume"으로.
+> stage만 지정하고 문제 번호가 없으면 항상 이 분기. 문제 번호도 있으면 아래 "지정 resume"으로.
 
-**지정 resume** (`--q=3 --from=solver`):
-1. `cleanup_from_stage([3], 'solver')` 실행
-2. **전체 상태 스캔(`detect_resume_state`) 건너뜀** — 타겟 문제/단계가 명시되었으므로
+**지정 resume** (문제 번호 + stage 지정):
+1. `cleanupFromStage([N], stage)` 실행
+2. **전체 상태 스캔(`detectQuestionStates`) 건너뜀** — 타겟 문제/단계가 명시되었으므로
 3. 해당 문제만 지정 단계부터 재실행
 4. 완료 후 처리 (단계에 따라 다름):
-   - `--from=extractor` (Step 3.5 중 재추출): 해당 문제의 `[EXTRACTION_REVIEW]` 블록만 단독 출력 후 종료 — exam_data.json 재취합 불필요, 다른 문제 JSON 읽기 불필요
-   - `--from=solver` / `--from=verifier`: 해당 문제의 `_verified.json`만 읽어서 기존 `exam_data.json`의 해당 문제 항목만 교체 (전체 재읽기 불필요)
-   - `--from=builder` 이후: Phase 2 해당 단계부터 재실행
+   - extractor stage (Step 3.5 중 재추출): 해당 문제의 `[EXTRACTION_REVIEW]` 블록만 단독 출력 후 종료 — exam_data.json 재취합 불필요, 다른 문제 JSON 읽기 불필요
+   - solver / verifier stage: 해당 문제의 `_verified.json`만 읽어서 기존 `exam_data.json`의 해당 문제 항목만 교체 (전체 재읽기 불필요)
+   - builder stage 이후: Phase 2 해당 단계부터 재실행
 
-**과목 정보 조달** (`--q=N` 시): `exam_data.json`이 있으면 그것에서, 없으면 임의의 기존 `_extracted.json` 1개에서 읽는다. 전체 JSON을 순회하지 않는다.
+**과목 정보 조달** (문제 번호 지정 resume 시): `exam_data.json`이 있으면 그것에서, 없으면 임의의 기존 `_extracted.json` 1개에서 읽는다. 전체 JSON을 순회하지 않는다.
 
 #### 0-3. 캐시 초기화 (신규 실행 시만)
 
@@ -415,13 +330,15 @@ condition_box: null
 
 #### 진행 / 재추출 / 이미지 교체
 
-| 사용자 액션 | 프론트엔드 전송 |
-|-----------|--------------|
-| [진행] 클릭 | `resume --from=solver` → Step 4 시작 |
-| [문제N 재추출] 클릭 | `resume --q=N --from=extractor` → 해당 문제 재추출 후 Step 3.5로 복귀 (복수 선택 시 `--q=N,M`) |
-| [문제N 이미지 교체] 클릭 | 프론트엔드가 새 이미지를 `q{N:02d}.png`로 저장 → `resume --q=N --from=image_replace` |
+| 사용자 액션 | 동작 |
+|-----------|------|
+| [진행] 클릭 | solver stage resume → Step 4 시작 |
+| [문제N 재추출] 클릭 | 해당 문제 extractor stage resume → 재추출 후 Step 3.5로 복귀 (복수 선택 지원) |
+| [문제N 이미지 교체] 클릭 | 프론트엔드가 새 이미지를 `q{N:02d}.png`로 저장 → image_replace stage resume |
 
-**재추출 후 복귀**: `--q=N` (단수) 또는 `--q=N,M,...` (복수) 모두 지원한다.
+각 버튼이 전송하는 구조화 명령 포맷은 `server/stages/__tests__/fixtures/resume-commands.json` 참조.
+
+**재추출 후 복귀**: 단수 또는 복수 문제 번호 지정 모두 지원한다.
 
 - 복수 지정 시 Phase 1-A와 동일하게 **모든 대상 문제를 한 메시지에서 동시에** Agent 호출
 - cleanup → 병렬 extractor 완료 후 재추출된 문제들의 `[EXTRACTION_REVIEW]` 블록을 단독 출력
@@ -439,11 +356,11 @@ total: K  ← 재추출된 문제 수
 [/EXTRACTION_REVIEW]
 ```
 
-**이미지 교체 플로우** (`--from=image_replace`):
+**이미지 교체 플로우** (image_replace stage):
 
 프론트엔드가 먼저 새 이미지를 `inputs/시험지 제작/question_images/q{N:02d}.png`에 저장한 뒤 Claude를 호출한다. Claude는 다음 순서로 처리한다:
 
-1. `cleanup_from_stage([N], 'image_replace')` 실행
+1. `cleanupFromStage([N], 'image_replace')` 실행 (`ngd-studio/server/stages/cleanup.ts`)
    - `cleaned/q{N:02d}.png` 삭제
    - `q{N}_extracted.json`, `q{N}_solved.json`, `q{N}_verified.json` 삭제
 2. 교체된 원본 이미지를 Read 도구로 표시 (교체 확인용)
@@ -604,11 +521,11 @@ Bash("python3 figure_processor.py", run_in_background=True)
 
 그림이 없는 시험지는 이 단계를 건너뛰고 바로 `.v3cache/figure_status.json`에 완료 상태를 기록한다.
 
-**job 종료**: figure 백그라운드 시작 후 Claude는 job을 종료한다(status="done"). 프론트엔드가 `figure_status.json`을 polling하여 완료 시 `outputs/images/prob{N}_final.png` 이미지를 표시한다. 사용자가 이미지를 확인하고 [확인] 버튼을 누르면 `resume --from=confirm`이 전송된다.
+**job 종료**: figure 백그라운드 시작 후 Claude는 job을 종료한다(status="done"). 프론트엔드가 `figure_status.json`을 polling하여 완료 시 `outputs/images/prob{N}_final.png` 이미지를 표시한다. 사용자가 이미지를 확인하고 [확인] 버튼을 누르면 confirm stage resume이 전송된다.
 
-#### 5-3. --from=confirm 처리
+#### 5-3. confirm stage 처리
 
-`resume --from=confirm` 수신 시:
+confirm stage resume 수신 시:
 1. figure 완료 여부 확인 (`.v3cache/figure_status.json` 존재 확인)
 2. 미완료면 완료까지 대기
 3. 완료 후 바로 Step 6(Builder)로 진행

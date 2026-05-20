@@ -2,6 +2,43 @@ import { access } from "fs/promises";
 import type { StageCache } from "./cache";
 
 /**
+ * Per-question state from cache scan.
+ * Matches the 4-state classification in SKILL.md:130-143 (detect_resume_state).
+ */
+export type QuestionState = "none" | "extracted" | "solved" | "verified";
+
+/**
+ * Scan cache files and return a map of question number → completion state.
+ * Codifies SKILL.md:130-143 `detect_resume_state` Python logic as a deterministic TS function.
+ */
+export async function detectQuestionStates(
+  cache: StageCache,
+  questionNums: number[]
+): Promise<Map<number, QuestionState>> {
+  const entries = await Promise.all(
+    questionNums.map(async (n) => {
+      const [hasVerified, hasSolved, hasExtracted] = await Promise.all([
+        fileExists(cache.verifierResultPath(n)),
+        fileExists(cache.solverResultPath(n)),
+        fileExists(cache.extractorResultPath(n)),
+      ]);
+      let state: QuestionState;
+      if (hasVerified) {
+        state = "verified";
+      } else if (hasSolved) {
+        state = "solved";
+      } else if (hasExtracted) {
+        state = "extracted";
+      } else {
+        state = "none";
+      }
+      return [n, state] as const;
+    })
+  );
+  return new Map(entries);
+}
+
+/**
  * Ordered list of workflow stages. Each stage is identified by a string key.
  * "confirm" is treated as equivalent to "builder" (figure review complete).
  */
@@ -82,7 +119,7 @@ async function detectFromCache(
   cache: StageCache,
   questionNumbers: number[]
 ): Promise<DetermineStartStageResult> {
-  // Determine per-question completion for each model stage.
+  // Determine per-question completion for each model stage independently.
   const extractorDone: number[] = [];
   const solverDone: number[] = [];
   const verifierDone: number[] = [];
@@ -142,16 +179,8 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 /**
- * Compare two WorkflowStage values by their position in the pipeline.
- * Returns negative if a < b, 0 if equal, positive if a > b.
- */
-function compareStages(a: WorkflowStage, b: WorkflowStage): number {
-  return STAGE_ORDER.indexOf(a) - STAGE_ORDER.indexOf(b);
-}
-
-/**
  * Return true if `target` stage should run given a `startStage`.
  */
 export function shouldRunStage(startStage: WorkflowStage, target: WorkflowStage): boolean {
-  return compareStages(startStage, target) <= 0;
+  return STAGE_ORDER.indexOf(startStage) <= STAGE_ORDER.indexOf(target);
 }
