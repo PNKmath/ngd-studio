@@ -1,10 +1,11 @@
 ---
 phase: 1
 title: audit coverage 매트릭스 + 후보별 현재 코드 상태 정리
-status: pending
+status: completed
 depends_on: []
 scope:
   - docs/planning/audit-driven-full-agentic-codification/coverage-matrix.md
+e2e_triggers: []
 intervention_likely: false
 intervention_reason: ""
 ---
@@ -111,12 +112,12 @@ audit `docs/planning/agent-provider-operating-model/deterministic-code-candidate
 
 ## 체크리스트
 
-- [ ] `coverage-matrix.md` 신규 생성 — 위 5개 그룹(A/B/C/D/E) 39행 헤더 작성
-- [ ] 각 행마다 Read/Grep으로 현재 코드 상태 직접 확인 + 인용 (음성 추측 금지)
-- [ ] 각 행에 "본 task cover"가 어느 Phase인지 명시 (Phase 2~7)
-- [ ] 각 행에 **agentic→code 동치성 검증 방법** 명시 (fixture-based / shadow-run / rule citation 중 1개 이상)
-- [ ] 검증 명령(grep/find) 행마다 1개 이상 첨부 — `/phase-run` 검증 단계 자동 실행 가능 형식
-- [ ] 매트릭스 마지막에 "전체 cover 진행률" 요약 표 추가 (Phase 8이 100% 확인용으로 사용)
+- [x] `coverage-matrix.md` 신규 생성 — 위 5개 그룹(A/B/C/D/E) 39행 헤더 작성
+- [x] 각 행마다 Read/Grep으로 현재 코드 상태 직접 확인 + 인용 (음성 추측 금지)
+- [x] 각 행에 "본 task cover"가 어느 Phase인지 명시 (Phase 2~7)
+- [x] 각 행에 **agentic→code 동치성 검증 방법** 명시 (fixture-based / shadow-run / rule citation 중 1개 이상)
+- [x] 검증 명령(grep/find) 행마다 1개 이상 첨부 — `/phase-run` 검증 단계 자동 실행 가능 형식
+- [x] 매트릭스 마지막에 "전체 cover 진행률" 요약 표 추가 (Phase 8이 100% 확인용으로 사용)
 
 ## 영향 범위
 
@@ -142,3 +143,43 @@ grep -c "본 task cover" docs/planning/audit-driven-full-agentic-codification/co
 grep -cE "^### A[0-9]" docs/planning/audit-driven-full-agentic-codification/coverage-matrix.md
 # expected: 12
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-20 KST) — completed
+**상태**: completed
+**소요 시간**: 약 15분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+audit doc의 5개 그룹(A/B/C/D/E) 39행을 모두 포함하는 `coverage-matrix.md`를 신규 생성함. 각 행마다 실제 코드 Read/Grep으로 현재 상태를 직접 확인 후 기록. 선행 task에서 구현된 항목 21개(코드화됨), 부분 구현 8개, agentic 잔존 10개로 분류. 각 행에 본 task Phase 매핑, agentic→code 동치성 검증 방법, grep 검증 명령 첨부.
+
+#### 변경 파일
+- `docs/planning/audit-driven-full-agentic-codification/coverage-matrix.md` (신규, +약 350줄)
+- `docs/planning/audit-driven-full-agentic-codification/phase-01-coverage-matrix.md` (수정, 체크리스트 6/6 완료 + 실행 결과 추가)
+
+#### 검증 결과
+- [x] 파일 존재: `test -f coverage-matrix.md` → pass
+- [x] 39행 충족: `grep -cE "^### [A-E][0-9]"` → 39
+- [x] "본 task cover" 39개: `grep -c "본 task cover"` → 39
+- [x] A그룹 12개: `grep -cE "^### A[0-9]"` → 12
+
+#### 추가 발견사항
+- A9(checker) 현재 7개 규칙 구현됨, 미구현은 D3(연산자 공백), D6(endNote), D8(lineBreak/bold), D9(vocabulary) 4개 — Phase 5에서 cover 예정
+- C5(`classifyBuildError`) 미구현 — `normalizeBuilderError`만 있고 heuristic 분류 없음
+- B1~B2(parseResumeCommand, cleanupFromStage) 완전 agentic 잔존 — Phase 2 최우선
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+pass — 2 files in scope (phase-01-coverage-matrix.md self + coverage-matrix.md)
+
+#### Verification Re-run (orchestrator)
+exit 0 — 39/39/12 모두 일치, worker `VERIFICATION: pass` 와 동일.
+
+#### Simplify (orchestrator)
+skipped — 문서 only phase (markdown). 코드 정리 대상 없음.
+
+#### Review (orchestrator)
+pass — ISSUES: 0. 39행/체크 일치/scope 준수.
