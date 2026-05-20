@@ -39,7 +39,9 @@ function normalizePart(part: Part): Part {
     s = operatorSpaces(s);               // R-10
     return { eq: s };
   }
-  // {t} and {br} parts are passed through unchanged.
+  if ("t" in part) {
+    return { t: enforceRmUnits(part.t) }; // R-09 (text-side)
+  }
   return part;
 }
 

@@ -50,6 +50,12 @@ export interface ReviewIssueDraft {
   suggested_fix?: string;
   /** Identifier matching one of the 22 fixed checklist items (e.g. "#9"). */
   rule_id?: string;
+  /**
+   * Problem number (1-based) where the issue was found. When present, the
+   * fixed-table entry's "issueNumbers" column lists these numbers; absent →
+   * fallback "확인".
+   */
+  question_number?: number;
 }
 
 export interface MutationResult {

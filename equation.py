@@ -37,6 +37,8 @@ def _normalize_part(part: dict) -> dict:
         script = _enforce_rm_units(script)       # R-09
         script = _add_operator_spaces_top_level(script)  # R-10
         return {**part, "eq": script}
+    if "t" in part:
+        return {**part, "t": _enforce_rm_units(part["t"])}  # R-09 (text-side)
     return part
 
 

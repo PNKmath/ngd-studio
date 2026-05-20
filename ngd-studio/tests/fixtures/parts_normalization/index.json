@@ -100,6 +100,11 @@
     "description": "rm체 이미 적용된 경우 — idempotent"
   },
   {
+    "file": "R-09-text-side.json",
+    "rule_ids": ["R-09"],
+    "description": "{t} 파트에도 R-09 적용 — phase-02/03 spec 명시 동작"
+  },
+  {
     "file": "R-10-basic.json",
     "rule_ids": ["R-10"],
     "description": "binary 연산자 앞뒤 공백 보장"

@@ -109,21 +109,33 @@ export async function runReviewStage(input: ReviewRunnerInput): Promise<ReviewRu
 /**
  * Group applied drafts by `rule_id` (items 1–22) and produce FixedTableEntries.
  *
- * For each rule_id like "#9", extract the number and collect unique problem
- * numbers from the issue location / description. Falls back to "확인" when
- * no specific numbers can be determined.
+ * For each rule_id like "#9", collect `question_number` values into a
+ * comma-separated list. Drafts without a question_number contribute to a
+ * "확인" fallback for that item.
  */
 function buildFixedTableEntries(applied: ReviewIssueDraft[]): FixedTableEntry[] {
-  const seen = new Set<number>();
+  const byItem = new Map<number, Set<number>>();
+  const fallback = new Set<number>();
 
   for (const draft of applied) {
     const numMatch = draft.rule_id?.match(/#(\d+)/);
     if (!numMatch) continue;
     const itemNum = parseInt(numMatch[1], 10);
-    if (itemNum >= 1 && itemNum <= 22) seen.add(itemNum);
+    if (itemNum < 1 || itemNum > 22) continue;
+
+    if (!byItem.has(itemNum)) byItem.set(itemNum, new Set());
+    if (typeof draft.question_number === "number") {
+      byItem.get(itemNum)!.add(draft.question_number);
+    } else {
+      fallback.add(itemNum);
+    }
   }
 
-  return [...seen].map((itemNumber) => ({ itemNumber, issueNumbers: "확인" }));
+  return [...byItem.entries()].map(([itemNumber, qSet]) => {
+    if (qSet.size === 0) return { itemNumber, issueNumbers: "확인" };
+    const sorted = [...qSet].sort((a, b) => a - b).join(",");
+    return { itemNumber, issueNumbers: fallback.has(itemNumber) ? `${sorted},확인` : sorted };
+  });
 }
 
 /**

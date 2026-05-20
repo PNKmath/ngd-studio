@@ -26,7 +26,8 @@ mutation·테이블 기입·후처리는 모두 orchestrator(reviewRunner.ts)가
       "snippet": "<verbatim text or XML that contains the error>"
     },
     "suggested_fix": "<verbatim replacement for snippet, or omit if unclear>",
-    "rule_id": "#N (1–22 체크리스트 번호, 해당 시)"
+    "rule_id": "#N (1–22 체크리스트 번호, 해당 시)",
+    "question_number": 5
   }
 ]
 ```
@@ -39,6 +40,7 @@ mutation·테이블 기입·후처리는 모두 orchestrator(reviewRunner.ts)가
 - **`suggested_fix`**: `snippet`과 동일한 길이/위치를 대체하는 verbatim 수정본.
   - 확실하지 않으면 필드를 **생략**한다 (null 금지).
 - **`rule_id`**: 22개 고정 항목 중 해당하는 번호 (`#1`~`#22`). 해당 없으면 생략.
+- **`question_number`**: 이슈가 발견된 문제 번호 (1-based 정수). 편집오검 내역표의 "문제 번호" 열에 그대로 사용된다. 식별 불가능하면 **생략** (코드가 "확인"으로 fallback).
 - **`issue_type`**: `typo` (오타), `missing` (누락), `checklist_violation` (규칙 위반).
 
 ## 작업 절차
