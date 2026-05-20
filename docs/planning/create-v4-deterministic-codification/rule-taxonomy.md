@@ -91,11 +91,18 @@
 
 - **카테고리**: equation-syntax
 - **적용 대상**: parts[].eq
-- **transform**: 수식이 `_` 로 시작하거나, 연산자 패턴 없이 순수 `_{token}` 이 맨 앞에 오는 경우 → `{prev} LSUB {token}` 형태로 재구성
-- **idempotent**: yes
+- **transform**: R-08 적용 후 잔존 leading `_` → `{} LSUB {token}` 형태로 변환 (2-pass 알고리즘)
+- **idempotent**: yes (결과가 `{` 로 시작하므로 재매칭 안 됨)
 - **출처**: solverPrompt.ts:31
-- **codifiable**: partial (context-aware parsing 필요 — leading `_` 만 처리. 내부 `_` 는 정상)
-- **예시**: `"_n C _r"` → 이 패턴 자체는 R-08로 처리; 독립 leading: `"_{n} P_{r}"` → 이미 올바름; `eq: "_n"` 단독 → 주의 필요 (blank base + LSUB)
+- **codifiable**: yes (2-pass after R-08)
+- **알고리즘**:
+  1. R-08 먼저 적용 → `_nC_r` / `_nP_r` / `_nH_r` 패턴 처리
+  2. R-07 적용 → 잔존 leading `_` (R-08에 매칭 안 된 것) → `{} LSUB {token}` 변환
+- **예시**:
+  - `"_n"` → `"{} LSUB {n}"`  (단독 leading `_` → LSUB 변환)
+  - `"_{n+1}"` → `"{} LSUB {n+1}"`  (중괄호 토큰도 동일 처리)
+  - `"_5C_3"` → `"{it\`_5\`}{rm C}_{it 3}"` (R-08이 먼저 처리, R-07 무영향)
+  - `"a_n + b_{n+1}"` → `"a_n + b_{n+1}"` (내부 `_` 는 leading 아님, 변환 안 함)
 
 ---
 
@@ -134,6 +141,12 @@
 - **idempotent**: yes
 - **출처**: solverPrompt.ts:28
 - **codifiable**: partial (unary minus 구분이 어려움. top-level binary operator만 처리)
+- **단항 minus 동작 명세** (Python ↔ TS 동치 — 2026-05-21 정렬):
+  - 수식 시작(앞에 아무것도 없음) 또는 다른 연산자 뒤 → unary context → 해당 연산자는 spacing 없음
+  - `"=-2"` → `"=-2"` (`=` 가 수식 첫 토큰 → unary, spacing 없음)
+  - `"= -2"` → `"= -2"` (공백이 raw token으로 보존; `=` 는 unary, `-` 도 unary)
+  - `"k =-1"` → `"k = -1"` (`k` 뒤 `=` 는 binary → spacing; `-` 는 `=` 뒤 → unary → 앞 공백 보존)
+  - `"-1 + 2"` → `"-1 + 2"` (leading `-` 는 unary 불변)
 - **예시**: `"x+y=3"` → `"x + y = 3"`, `"x^{n+1}"` → `"x^{n+1}"` (지수 내부는 불변), `"-1 + 2"` → `"-1 + 2"` (unary minus 불변)
 
 ---
@@ -213,7 +226,7 @@
 | R-04 | cdots 역따옴표 | yes |
 | R-05 | 쉼표 뒤 ~ | partial |
 | R-06 | LEFT/RIGHT 공백 | yes |
-| R-07 | leading _ → LSUB | partial |
+| R-07 | leading _ → LSUB | yes (2-pass after R-08) |
 | R-08 | 순열/조합 정규화 | yes |
 | R-09 | rm체 단위 | partial |
 | R-10 | 연산자 공백 | partial |

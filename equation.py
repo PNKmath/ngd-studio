@@ -32,8 +32,8 @@ def _normalize_part(part: dict) -> dict:
         script = _wrap_cdots(script)             # R-04
         script = _comma_tilde(script)            # R-05
         script = _left_right_space(script)       # R-06
-        script = _leading_underscore_to_lsub(script)  # R-07
-        script = _fix_permutation_combination(script)  # R-08
+        script = _fix_permutation_combination(script)  # R-08 (before R-07)
+        script = _leading_underscore_to_lsub(script)  # R-07 (2-pass: after R-08)
         script = _enforce_rm_units(script)       # R-09
         script = _add_operator_spaces_top_level(script)  # R-10
         return {**part, "eq": script}
@@ -218,25 +218,17 @@ def _comma_tilde(script: str) -> str:
     n = len(script)
     while i < n:
         if script[i] == ',':
-            # look ahead
             j = i + 1
             if j < n and script[j] == '~':
-                # already ',~'
+                # already ',~' — leave as-is
                 result.append(',')
             elif j < n and script[j] == ' ':
-                # ', something' → ',~ something'
+                # ', ' → ',~ ' (insert ~ between comma and space)
                 result.append(',~')
-                # skip the space — R-05 replaces ', ' with ',~'
-                # Actually looking at fixture: "(a, b, c)" → "(a,~ b,~ c)"
-                # The space is consumed by the '~' replacement
-                i += 1  # skip the space char (we'll add it via the next loop iter? No)
-                # Actually the output is ",~" not ",~ " — the space is replaced by ~
-                # fixture: (a, b, c) → (a,~ b,~ c): so the space stays but ~ is inserted
-                # So ", b" → ",~ b": insert ~ between comma and space
-                # Let's re-do: we keep the space but insert ~ before it
+                i += 1  # consume the space (re-emitted below)
                 result.append(' ')
             else:
-                # ',' followed by non-space non-tilde
+                # ',' followed by non-space, non-tilde
                 result.append(',~')
         else:
             result.append(script[i])
@@ -259,21 +251,6 @@ def _left_right_space(script: str) -> str:
     script = re.sub(r'\bLEFT\(', 'LEFT (', script)
     script = re.sub(r'\bRIGHT\)', 'RIGHT )', script)
     return script
-
-
-# ---------------------------------------------------------------------------
-# R-07: leading _ → LSUB (partial — only detectable leading patterns)
-# ---------------------------------------------------------------------------
-
-def _leading_underscore_to_lsub(script: str) -> str:
-    """R-07: Leading '_' at start of eq is potentially problematic.
-
-    Per rule-taxonomy: partial codifiable — only leading _ without a base is
-    a problem. R-08 handles the nCr/nPr patterns which are the primary source.
-    Standalone leading _ (e.g. '_n' alone) is flagged but NOT auto-converted
-    (context required). This function is a no-op per fixture R-07-basic.
-    """
-    return script  # no-op: R-07 is partial, R-08 covers the main patterns
 
 
 # ---------------------------------------------------------------------------
@@ -308,6 +285,32 @@ def _fix_permutation_combination(script: str) -> str:
         return f'{{it`{base_sub}`}}{{rm {op}}}_{{it {exp_val}}}'
 
     return _COMB_PATTERN.sub(_replace, script)
+
+
+# ---------------------------------------------------------------------------
+# R-07: leading _ → LSUB (2-pass: applied after R-08)
+# ---------------------------------------------------------------------------
+
+_LEADING_UNDERSCORE_RE = re.compile(r'^(\s*)_(\{[^}]+\}|[A-Za-z0-9]+)(.*)$', re.DOTALL)
+
+
+def _leading_underscore_to_lsub(script: str) -> str:
+    """R-07: leading '_' → '{} LSUB {token}' transform.
+
+    2-pass algorithm: this function is called AFTER R-08, so any _nC_r / _nP_r / _nH_r
+    patterns have already been converted. Only residual leading '_' patterns remain.
+
+    Idempotent: '{} LSUB {n}' form starts with '{' (not '_') so it won't re-match.
+    R-08 already handled nCr/nPr/nHr so the only remaining leading '_' is a genuine
+    LSUB context (e.g. '_n' alone, or '_{n+1}').
+    """
+    m = _LEADING_UNDERSCORE_RE.match(script)
+    if not m:
+        return script
+    prefix, token, rest = m.groups()
+    # token이 {x} 형태면 중괄호 유지, 아니면 단일 토큰 중괄호 추가
+    token_braced = token if token.startswith('{') else '{' + token + '}'
+    return f"{prefix}{{}} LSUB {token_braced}{rest}"
 
 
 # ---------------------------------------------------------------------------
@@ -359,14 +362,6 @@ def _add_operator_spaces_top_level(script: str) -> str:
     Operators inside {} (subscripts/superscripts) are NOT touched.
     Unary minus at start or after another operator is NOT touched.
     """
-    """Add spaces around binary operators only at depth 0 (outside {})."""
-    # We rebuild the string character by character, tracking depth
-    # Operators to space: + - = < >
-    # But we need to be careful about:
-    # - Unary minus/plus (at start, or after another operator)
-    # - Operators inside {}
-    # - Operators inside backticks
-
     tokens = _tokenize_for_spacing(script)
     return _apply_spacing(tokens)
 
@@ -465,15 +460,10 @@ def _apply_spacing(tokens: list) -> str:
                 # Skip any immediately following space tokens
                 # (handled by: when we encounter the next token, just append it)
         else:
-            # For raw tokens: if we just emitted a space after an op,
-            # skip leading spaces in this raw token
+            # Collapse double-space when a raw space follows an operator space
             if result and result[-1] == ' ' and tval == ' ':
-                # Check if prev output was an operator space we just added
-                # Only collapse if it would double-space after an op
-                # Strategy: just don't add this space if we already added one
-                # We check by looking at result[-2] for the operator char
                 if len(result) >= 2 and result[-2] in '+-=<>':
-                    continue  # skip this space, we already have one
+                    continue  # skip redundant space after binary op
             result.append(tval)
 
     return ''.join(result)

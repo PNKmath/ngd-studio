@@ -33,8 +33,8 @@ function normalizePart(part: Part): Part {
     s = wrapCdots(s);                     // R-04
     s = commaTilde(s);                    // R-05
     s = leftRightSpace(s);               // R-06
-    s = leadingUnderscoreToLsub(s);      // R-07 (partial — handled via R-08 for nCr/nPr/nHr)
-    s = fixPermutationCombination(s);    // R-08
+    s = fixPermutationCombination(s);    // R-08 (before R-07: 2-pass)
+    s = leadingUnderscoreToLsub(s);      // R-07 (2-pass: applied after R-08)
     s = enforceRmUnits(s);               // R-09 (eq-side unit enforcement)
     s = operatorSpaces(s);               // R-10
     return { eq: s };
@@ -246,24 +246,31 @@ function leftRightSpace(s: string): string {
   return s;
 }
 
-// ─── R-07: leading _ (partial) ────────────────────────────────────────────────
+// ─── R-07: leading _ → LSUB (2-pass: applied after R-08) ─────────────────────
 
 /**
- * R-07: leading underscore detection.
- * Per fixtures: R-07 is partial/context-aware. The fixture R-07-basic shows
- * "_n" stays as "_n" (no transform — flag only). The fixture R-07-internal
- * shows internal subscripts are fine and unchanged.
+ * R-07: leading '_' → '{} LSUB {token}' transform.
  *
- * The R-08 handler covers nCr/nPr/nHr patterns which use leading underscore.
- * Standalone leading _ without a C/P/H context is left alone per fixtures.
+ * 2-pass algorithm: called AFTER R-08 (fixPermutationCombination), so any
+ * _nC_r / _nP_r / _nH_r patterns are already converted. Only residual
+ * leading '_' patterns remain for LSUB transformation.
+ *
+ * Idempotent: '{} LSUB {n}' starts with '{' (not '_') so it won't re-match.
+ *
+ * Examples:
+ *   "_n"       → "{} LSUB {n}"
+ *   "_{n+1}"   → "{} LSUB {n+1}"
+ *   "x^2_n"    → "x^2_n"     (not leading)
+ *   "_5C_3"    → already handled by R-08 → "{it`_5`}{rm C}_{it 3}"  (no leading _ left)
  */
 function leadingUnderscoreToLsub(s: string): string {
-  // R-07 is partial/context-aware per rule-taxonomy.
-  // Standalone leading _ without permutation/combination context:
-  // fixture R-07-basic: "_n" → "_n" (no change)
-  // We rely on R-08 for the codifiable cases (nCr, nPr, nHr).
-  // This function is a no-op for the partial case.
-  return s;
+  // Match leading _ followed by a braced group or a simple alphanumeric token
+  const m = s.match(/^(\s*)_(\{[^}]+\}|[A-Za-z0-9]+)([\s\S]*)$/);
+  if (!m) return s;
+  const [, prefix, token, rest] = m;
+  // Preserve existing braces, or wrap bare token in braces
+  const tokenBraced = token.startsWith("{") ? token : `{${token}}`;
+  return `${prefix}{} LSUB ${tokenBraced}${rest}`;
 }
 
 // ─── R-08: 순열/조합 패턴 정규화 ──────────────────────────────────────────────
@@ -404,18 +411,23 @@ function operatorSpaces(s: string): string {
     if (OPS.test(c)) {
       const trimmedResult = result.trimEnd();
 
-      // Check for unary context: nothing before, or previous non-space char is an operator
-      const prevSignificant = trimmedResult.replace(/\s+$/, "");
-      const lastChar = prevSignificant.length > 0 ? prevSignificant[prevSignificant.length - 1] : "";
+      // Check for unary context: nothing before, or previous non-space char is an operator.
+      // NOTE: We check prevSignificant on trimmedResult (without trailing spaces).
+      // This matches Python _apply_spacing which looks at the original tokens list:
+      // an operator is "unary" if prev_non_space is None (start of expr) or another operator.
+      const lastChar = trimmedResult.length > 0 ? trimmedResult[trimmedResult.length - 1] : "";
       const isUnary =
         lastChar === "" || OPS.test(lastChar) || lastChar === "(" || lastChar === "{";
 
-      if (isUnary && (c === "-" || c === "+")) {
-        // Unary: keep as-is (no extra spacing)
-        result = trimmedResult + c;
+      if (isUnary) {
+        // Unary context: no extra spacing added.
+        // However, if the result has a trailing space (added by a preceding binary operator),
+        // preserve exactly one space so "x = -1" stays "x = -1" (Python parity).
+        // Python preserves raw space tokens before unary operators.
+        // We do NOT skip trailing input spaces after unary ops — Python preserves them.
+        const hasTrailingSpace = result.length > 0 && result[result.length - 1] === " ";
+        result = (hasTrailingSpace ? trimmedResult + " " : trimmedResult) + c;
         i++;
-        // Skip trailing spaces after unary op
-        while (i < s.length && s[i] === " ") i++;
         continue;
       }
 

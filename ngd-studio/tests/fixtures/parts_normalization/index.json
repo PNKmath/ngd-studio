@@ -72,12 +72,17 @@
   {
     "file": "R-07-basic.json",
     "rule_ids": ["R-07"],
-    "description": "leading _ 로 시작하는 eq 필드 경고 케이스"
+    "description": "leading _ → {} LSUB {token} 변환 (2-pass after R-08)"
   },
   {
     "file": "R-07-internal-subscript-ok.json",
     "rule_ids": ["R-07"],
     "description": "내부 _ (첨자)는 leading이 아니므로 변환 대상 아님"
+  },
+  {
+    "file": "R-07-leading-lsub.json",
+    "rule_ids": ["R-07"],
+    "description": "중괄호 토큰 leading _ → {} LSUB {n+1} 변환 (idempotent)"
   },
   {
     "file": "R-08-basic.json",
@@ -113,6 +118,36 @@
     "file": "R-10-exponent-interior.json",
     "rule_ids": ["R-10"],
     "description": "지수 내부 연산자는 공백 보강 대상 아님"
+  },
+  {
+    "file": "R-10-unary-minus.json",
+    "rule_ids": ["R-10"],
+    "description": "단항 minus 앞뒤 공백 — Python ↔ TS 동치 (운영 데이터 기반)"
+  },
+  {
+    "file": "OP-q1-parity.json",
+    "rule_ids": ["R-10"],
+    "description": "운영 데이터 q1 스냅샷 — cross-language parity 회귀 방지"
+  },
+  {
+    "file": "OP-q2-parity.json",
+    "rule_ids": ["R-10"],
+    "description": "운영 데이터 q2 스냅샷 — cross-language parity 회귀 방지"
+  },
+  {
+    "file": "OP-q6-parity.json",
+    "rule_ids": ["R-10"],
+    "description": "운영 데이터 q6 스냅샷 — cross-language parity 회귀 방지"
+  },
+  {
+    "file": "OP-q12-parity.json",
+    "rule_ids": ["R-10"],
+    "description": "운영 데이터 q12 스냅샷 — cross-language parity 회귀 방지"
+  },
+  {
+    "file": "OP-q19-parity.json",
+    "rule_ids": ["R-10"],
+    "description": "운영 데이터 q19 스냅샷 — cross-language parity 회귀 방지"
   },
   {
     "file": "IDEMPOTENT-01-already-normalized-eq.json",

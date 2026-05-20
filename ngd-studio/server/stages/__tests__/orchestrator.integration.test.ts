@@ -528,18 +528,23 @@ const PYTHON_EQUATION_PY = path.resolve(__dirname, "../../../../equation.py");
 /**
  * Run Python normalize_parts on the given parts JSON string.
  * Returns parsed result or throws if Python process fails.
+ *
+ * Data is passed via stdin to avoid shell quoting/escaping issues with
+ * arbitrary JSON content (e.g. single quotes, backslashes in part text).
  */
 function runPythonNormalize(partsJson: string): unknown[] {
   const pythonBin = process.platform === "win32" ? "python" : "python3";
+  // Read JSON from stdin to avoid embedding arbitrary JSON in script string literals.
   const script = [
     "import json, sys, os",
     `sys.path.insert(0, os.path.dirname(r'${PYTHON_EQUATION_PY}'))`,
     "from equation import normalize_parts",
-    `result = normalize_parts(json.loads(r'''${partsJson.replace(/'/g, "\\'")}'''))`,
+    "result = normalize_parts(json.loads(sys.stdin.read()))",
     "print(json.dumps(result, ensure_ascii=False))",
   ].join("\n");
 
   const proc = spawnSync(pythonBin, ["-c", script], {
+    input: partsJson,
     encoding: "utf8",
     timeout: 10_000,
   });
