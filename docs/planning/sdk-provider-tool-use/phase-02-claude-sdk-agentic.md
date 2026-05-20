@@ -147,3 +147,6 @@ exit 0 — tsc + claudeSdkAgenticLoop 6/6 + providerSupportsTools 6/6 pass.
 
 #### Review (orchestrator)
 pass — 스펙 일치, sandbox 적용, tool_use loop/maxTurns 구현 정합, 회귀 없음.
+
+#### Commit
+`95b18a0` feat(ai): Phase 2 — claude-sdk agentic loop (tool_use + allowedTools + maxTurns)

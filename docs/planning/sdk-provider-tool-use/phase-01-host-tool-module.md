@@ -183,3 +183,6 @@ exit 0 — tsc --noEmit 통과 + hostTools.test.ts 19/19 pass (spec의 `lib/ai/t
 
 #### Review (orchestrator)
 pass — 스펙 일치, sandbox 로직(prefix-attack/path traversal/root 케이스) 정확, scope 누출 없음, 검증 기록 정합.
+
+#### Commit
+`753f4b3` feat(ai): Phase 1 — host-side tool module (Read/Grep/Glob + sandbox)

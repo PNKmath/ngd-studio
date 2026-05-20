@@ -143,3 +143,6 @@ exit 0 — tsc + openaiSdkAgentic 5/5 pass.
 
 #### Review (orchestrator)
 pass — Chat Completions function calling + agentic loop + maxTurns 정합, sandbox 적용, 회귀 없음.
+
+#### Commit
+`fb3c6da` feat(ai): Phase 3 — openai-sdk agentic loop (function calling + allowedTools + maxTurns)
