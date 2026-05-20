@@ -265,6 +265,17 @@ describe("#19 validateChoiceSpacing", () => {
     expect(drafts[0]?.rule_id).toBe("#19");
     expect(drafts[0]?.auto_verified).toBe(true);
   });
+
+  it("detects cross-paragraph false-negative: prev paragraph tabs must not bleed into next paragraph", async () => {
+    // rule19-fail-crossparagraph.xml: 첫 단락에 탭 3개, 두 번째/세 번째 단락에 탭 0~1개 + 선지
+    // → 현재 buggy 코드는 첫 단락 탭을 합산해 두 번째 단락 선지를 통과시킴 (false-negative)
+    // → 수정 후에는 단락별로 탭을 카운트해 위반을 검출해야 함
+    const xml = await loadFixture("rule19-fail-crossparagraph.xml");
+    const drafts = validateChoiceSpacing(xml);
+    expect(drafts.length).toBeGreaterThanOrEqual(1);
+    expect(drafts[0]?.rule_id).toBe("#19");
+    expect(drafts[0]?.auto_verified).toBe(true);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

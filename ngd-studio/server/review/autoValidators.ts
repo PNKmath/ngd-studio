@@ -327,16 +327,22 @@ export function validateCommaTilde(sectionXml: string): ReviewIssueDraft[] {
 export function validateChoiceSpacing(sectionXml: string): ReviewIssueDraft[] {
   const drafts: ReviewIssueDraft[] = [];
   // 선지 패턴: ① ② ③ ④ ⑤ 또는 circled numbers in text
-  // 검사: 선지 번호 앞의 탭 수
-  const choiceRe = /(<hp:p[^>]*>[\s\S]*?)(①|②|③|④|⑤)/g;
-  let m: RegExpExecArray | null;
-  while ((m = choiceRe.exec(sectionXml)) !== null) {
-    const before = m[1] ?? "";
-    // Count <hp:tab/> occurrences in the content before this choice
-    const tabCount = (before.match(/<hp:tab[\s/]/g) ?? []).length;
-    if (tabCount < 3) {
-      const snippet = (m[0] ?? "").slice(0, 200);
-      drafts.push(makeDraft("#19", snippet, `hp:p[선지${m[2]}앞tab<3]`));
+  // 검사: 선지 번호 앞의 탭 수 — 단락(hp:p) 단위로 끊어서 이전 단락의 탭이 누적되지 않도록 함
+  const paraRe = /(<hp:p[^>]*>)([\s\S]*?)(<\/hp:p>)/g;
+  let para: RegExpExecArray | null;
+  while ((para = paraRe.exec(sectionXml)) !== null) {
+    const paraContent = para[2] ?? "";
+    // 이 단락 안에 선지 기호가 있는지 확인
+    const choiceRe = /([\s\S]*?)(①|②|③|④|⑤)/g;
+    let m: RegExpExecArray | null;
+    while ((m = choiceRe.exec(paraContent)) !== null) {
+      const before = m[1] ?? "";
+      // 이 단락 내에서 선지 기호 앞에 있는 <hp:tab/> 개수만 카운트
+      const tabCount = (before.match(/<hp:tab[\s/]/g) ?? []).length;
+      if (tabCount < 3) {
+        const snippet = ((para[0] ?? "")).slice(0, 200);
+        drafts.push(makeDraft("#19", snippet, `hp:p[선지${m[2]}앞tab<3]`));
+      }
     }
   }
   return drafts;

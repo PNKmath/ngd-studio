@@ -1,0 +1,11 @@
+<hp:sec xmlns:hp="urn:schemas-microsoft-com:office:office">
+  <!-- 첫 번째 단락: 탭 3개 포함, 선지 없음 -->
+  <hp:p>
+    <hp:tab/><hp:tab/><hp:tab/><hp:t>문제 본문 텍스트</hp:t>
+  </hp:p>
+  <!-- 두 번째 단락: 탭 0개 + 선지(circled-1)
+       현재 버그: choiceRe가 첫 단락의 hp:p에서 시작해 선지까지 lazy-match하므로
+       before 캡처에 첫 단락 탭 3개가 포함되어 tabCount=3 -> 통과 (false-negative).
+       두 번째 hp:p에서 시작하는 별도 매칭이 생성되지 않아 위반이 미검출됨. -->
+  <hp:p><hp:t>①</hp:t></hp:p>
+</hp:sec>
