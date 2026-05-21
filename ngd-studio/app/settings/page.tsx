@@ -39,9 +39,9 @@ interface ProviderOption {
 const providerOptions: ProviderOption[] = [
   {
     id: "auto",
-    label: "자동",
-    detail: "현재는 Claude CLI로 실행하고, 이후 작업 특성 기반 추천으로 확장합니다.",
-    resolved: "Claude CLI (기본)",
+    label: "기본 (Claude Code CLI)",
+    detail: "Stage override 미지정 시 모든 stage를 Claude Code CLI로 실행합니다.",
+    resolved: "Claude CLI",
     vision: "supported",
     visionNote: "추출 단계 사용 가능",
     authNote: "claude auth login 또는 ANTHROPIC_API_KEY",
