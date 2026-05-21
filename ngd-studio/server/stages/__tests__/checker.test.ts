@@ -22,6 +22,8 @@ import {
   checkTextVocabulary,
   _resetUnitClassificationCache,
   _injectUnitClassification,
+  _resetUnitClassificationMiddleCache,
+  _injectUnitClassificationMiddle,
   type UnitClassification,
 } from "../checker";
 
@@ -532,5 +534,77 @@ describe("checkTextVocabulary (text.vocabulary)", () => {
     const xml = makeTextXml("[중단원] 수열");
     const issues = checkTextVocabulary(xml, "test.xml", TEST_CLASSIFICATION);
     expect(issues).toHaveLength(0);
+  });
+
+  it("checkTextVocabulary direct: accepts array of classifications (union)", () => {
+    // Passing an array is the new generalised signature
+    const xml = makeTextXml("[과목] 수학 I [중단원] 등차수열");
+    const issues = checkTextVocabulary(xml, "test.xml", [TEST_CLASSIFICATION]);
+    expect(issues).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. NEW: schoolLevel 분기 (Phase 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Minimal middle-school classification fixture. */
+const TEST_CLASSIFICATION_MIDDLE: UnitClassification = {
+  subjects: [
+    {
+      code: "중1",
+      name: "중학교 1학년",
+      grade: 1,
+      units: [
+        {
+          code: "A",
+          name: "소인수분해",
+          topics: ["소수와 합성수 및 소인수분해", "최대공약수 및 최소공배수"],
+        },
+      ],
+    },
+  ],
+};
+
+describe("schoolLevel branching (text.vocabulary)", () => {
+  beforeEach(() => {
+    _resetUnitClassificationCache();
+    _resetUnitClassificationMiddleCache();
+    _injectUnitClassification(TEST_CLASSIFICATION);        // 고등: 수학 I / 수학 II
+    _injectUnitClassificationMiddle(TEST_CLASSIFICATION_MIDDLE); // 중학교: 소인수분해
+  });
+
+  it("(a) schoolLevel='중' + 중학교 vocab pass — 소인수분해 is valid", () => {
+    const xml = makeTextXml("[과목] 중학교 1학년 [중단원] 소인수분해");
+    const issues = runDeterministicCheckerRules(xml, "section0.xml", { schoolLevel: "중" }).filter(
+      (i) => i.ruleId === "text.vocabulary",
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it("(b) schoolLevel='중' + 고등 only vocab (수학 I) → error", () => {
+    // 수학 I is from high-school classification; with schoolLevel='중' only middle vocab is checked
+    const xml = makeTextXml("[과목] 수학 I");
+    const issues = runDeterministicCheckerRules(xml, "section0.xml", { schoolLevel: "중" }).filter(
+      (i) => i.ruleId === "text.vocabulary",
+    );
+    // 수학 I not in middle classification → error
+    expect(issues.some((i) => i.severity === "error" && i.message.includes("과목"))).toBe(true);
+  });
+
+  it("(c) schoolLevel 미지정 + 중학교 + 고등 vocab 모두 pass (union)", () => {
+    // Without schoolLevel, both classifications are unioned — all vocab passes
+    const xmlHigh = makeTextXml("[과목] 수학 I [중단원] 등차수열");
+    const xmlMiddle = makeTextXml("[과목] 중학교 1학년 [중단원] 소인수분해");
+
+    const issuesHigh = runDeterministicCheckerRules(xmlHigh, "section0.xml").filter(
+      (i) => i.ruleId === "text.vocabulary",
+    );
+    const issuesMiddle = runDeterministicCheckerRules(xmlMiddle, "section0.xml").filter(
+      (i) => i.ruleId === "text.vocabulary",
+    );
+
+    expect(issuesHigh).toHaveLength(0);
+    expect(issuesMiddle).toHaveLength(0);
   });
 });

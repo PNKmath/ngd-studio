@@ -224,11 +224,8 @@ export async function runStageOrchestrator(
 
   function onLeave(stage: PipelineStageName, n: number, status: "completed" | "failed"): void {
     const c = stageCounter[stage];
-    if (status === "completed") {
-      c.completed++;
-    } else {
-      c.failed++;
-    }
+    if (status === "completed") c.completed++;
+    else c.failed++;
 
     const done = c.completed + c.failed;
     const label = stage === "extractor" ? "추출" : stage === "solver" ? "풀이" : "검증";
@@ -715,12 +712,12 @@ export async function runStageOrchestrator(
 
       const hwpxPath = outputFile
         ? (path.isAbsolute(outputFile) ? outputFile : path.join(baseDir, outputFile))
-        : "";
+        : undefined;
 
       const checkerStartedAt = Date.now();
       const maxAttempts = input.checkerMaxAttempts ?? 2;
       const { result: checkerResult, autofixed } = await runCheckerWithAutoFix(
-        { hwpxPath: hwpxPath || undefined },
+        { hwpxPath, schoolLevel: input.meta.schoolLevel },
         maxAttempts
       );
 

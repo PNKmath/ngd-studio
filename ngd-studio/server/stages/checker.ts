@@ -34,6 +34,12 @@ const UNIT_CLASSIFICATION_PATH = join(
   "../../../.claude/data/unit_classification.json",
 );
 
+/** Path to unit_classification_middle.json (중학교). */
+const UNIT_CLASSIFICATION_MIDDLE_PATH = join(
+  __dirname,
+  "../../../.claude/data/unit_classification_middle.json",
+);
+
 /**
  * Load unit_classification.json once and cache the result.
  * Returns null if the file cannot be read (rule is skipped, warning logged).
@@ -65,6 +71,40 @@ export function _injectUnitClassification(data: UnitClassification): void {
   _unitClassificationCache = data;
 }
 
+/** Cached middle-school classification data (false = not yet attempted; null = load failed). */
+let _unitClassificationMiddleCache: UnitClassification | null | false = false;
+
+/**
+ * Load unit_classification_middle.json once and cache the result.
+ * Returns null if the file cannot be read (rule is skipped, warning logged).
+ */
+async function loadUnitClassificationMiddle(): Promise<UnitClassification | null> {
+  if (_unitClassificationMiddleCache !== false) {
+    return _unitClassificationMiddleCache === null ? null : _unitClassificationMiddleCache;
+  }
+  try {
+    const raw = await readFile(UNIT_CLASSIFICATION_MIDDLE_PATH, "utf8");
+    _unitClassificationMiddleCache = JSON.parse(raw) as UnitClassification;
+    return _unitClassificationMiddleCache;
+  } catch {
+    console.warn(
+      `[checker] unit_classification_middle.json not found at ${UNIT_CLASSIFICATION_MIDDLE_PATH} — middle vocabulary skipped`,
+    );
+    _unitClassificationMiddleCache = null;
+    return null;
+  }
+}
+
+/** Reset middle cache (used in tests). */
+export function _resetUnitClassificationMiddleCache(): void {
+  _unitClassificationMiddleCache = false;
+}
+
+/** Inject middle classification data directly (used in tests). */
+export function _injectUnitClassificationMiddle(data: UnitClassification): void {
+  _unitClassificationMiddleCache = data;
+}
+
 export type CheckerIssueSeverity = "error" | "warning" | "info";
 
 export interface CheckerIssue {
@@ -80,6 +120,8 @@ export interface CheckerStageInput {
   hwpxPath?: string;
   sectionXmlPath?: string;
   sectionXml?: string;
+  /** School level for vocabulary rule; drives which classification JSON is used. */
+  schoolLevel?: "중" | "고";
 }
 
 export interface CheckerStageOutput {
@@ -103,7 +145,7 @@ interface SectionSource {
 // ──────────────────────────────────────────────
 
 interface RuleHandler {
-  detect: (xml: string, file: string) => CheckerIssue[];
+  detect: (xml: string, file: string, context?: { schoolLevel?: "중" | "고" }) => CheckerIssue[];
   /**
    * Optional deterministic XML-level fix.
    * When present, `runCheckerWithAutoFix` will apply this before triggering a
@@ -140,10 +182,12 @@ export async function runCheckerStage(input: CheckerStageInput): Promise<StageRe
   const startedAt = new Date().toISOString();
 
   try {
-    // Pre-load unit classification (cached after first call; no-op if already loaded).
+    // Pre-load unit classifications (cached after first call; no-op if already loaded).
     await loadUnitClassification();
+    await loadUnitClassificationMiddle();
     const source = await loadSectionSource(input);
-    const issues = runDeterministicCheckerRules(source.xml, source.file);
+    const context = { schoolLevel: input.schoolLevel };
+    const issues = runDeterministicCheckerRules(source.xml, source.file, context);
     const fallbackReasons = issues
       .filter((issue) => issue.fallbackRequired)
       .map((issue) => `${issue.ruleId}: ${issue.message}`);
@@ -184,10 +228,14 @@ export async function runCheckerStage(input: CheckerStageInput): Promise<StageRe
   }
 }
 
-export function runDeterministicCheckerRules(sectionXml: string, file = "Contents/section0.xml"): CheckerIssue[] {
+export function runDeterministicCheckerRules(
+  sectionXml: string,
+  file = "Contents/section0.xml",
+  context?: { schoolLevel?: "중" | "고" },
+): CheckerIssue[] {
   const issues: CheckerIssue[] = [];
   for (const handler of Object.values(RULES)) {
-    issues.push(...handler.detect(sectionXml, file));
+    issues.push(...handler.detect(sectionXml, file, context));
   }
   return issues;
 }
@@ -219,8 +267,9 @@ export async function runCheckerWithAutoFix(
   input: CheckerStageInput,
   maxAttempts = 2,
 ): Promise<CheckerAutoFixResult> {
-  // Pre-load unit classification before running any rules.
+  // Pre-load unit classifications before running any rules.
   await loadUnitClassification();
+  await loadUnitClassificationMiddle();
   // Load source XML once so we can mutate it in the fix loop.
   const source = await loadSectionSource(input).catch(() => null);
 
@@ -232,6 +281,7 @@ export async function runCheckerWithAutoFix(
 
   let xml = source.xml;
   let autofixed = false;
+  const context = { schoolLevel: input.schoolLevel };
 
   function buildResult(issues: CheckerIssue[]): CheckerAutoFixResult {
     const ok = issues.every((i) => i.severity !== "error");
@@ -271,7 +321,7 @@ export async function runCheckerWithAutoFix(
   }
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const issues = runDeterministicCheckerRules(xml, source.file);
+    const issues = runDeterministicCheckerRules(xml, source.file, context);
 
     // Any fixable issue (error or warning with fix?) — including fallbackRequired warnings
     const fixableIssues = issues.filter((i) => RULES[i.ruleId]?.fix);
@@ -651,47 +701,71 @@ function checkSectionStyleFormat(xml: string, file: string): CheckerIssue[] {
 // ──────────────────────────────────────────────
 
 /**
- * Synchronous wrapper for text.vocabulary — uses the cached classification.
- * Returns empty array if classification is not yet loaded (caller must preload via loadUnitClassification()).
+ * Synchronous wrapper for text.vocabulary — uses the cached classifications.
+ * Branches by schoolLevel:
+ *   "중" → uses middle-school classification only
+ *   "고" → uses high-school classification only
+ *   undefined → union of both (관대 기본값, backward-compatible)
+ * Returns empty array if no classification is loaded.
  */
-function checkTextVocabularySync(xml: string, file: string): CheckerIssue[] {
-  if (_unitClassificationCache === null || _unitClassificationCache === false) {
-    return [];
+function checkTextVocabularySync(xml: string, file: string, context?: { schoolLevel?: "중" | "고" }): CheckerIssue[] {
+  const high = _unitClassificationCache || null;
+  const middle = _unitClassificationMiddleCache || null;
+
+  const target: UnitClassification[] = [];
+  if (context?.schoolLevel === "중") {
+    if (middle) target.push(middle);
+  } else if (context?.schoolLevel === "고") {
+    if (high) target.push(high);
+  } else {
+    // 미지정 → 양쪽 union fallback (관대 기본값)
+    if (high) target.push(high);
+    if (middle) target.push(middle);
   }
-  return checkTextVocabulary(xml, file, _unitClassificationCache);
+
+  if (target.length === 0) return [];
+  return checkTextVocabulary(xml, file, target);
 }
 
 /**
- * Validate 중단원/과목/범위 text against unit_classification.json.
+ * Validate 중단원/과목/범위 text against one or more UnitClassification objects.
  *
  * Scans all hp:t nodes for:
- *  - [중단원] VALUE — must match a known topic in unit_classification.json
+ *  - [중단원] VALUE — must match a known topic in the classification(s)
  *  - [과목] VALUE   — must match a known subject name
  *  - [범위] VALUE   — must match a topic within the expected subject/unit combination
+ *
+ * When multiple classifications are provided (e.g. high + middle union), vocab from
+ * all of them is unioned — a value matching ANY classification passes.
  */
 export function checkTextVocabulary(
   xml: string,
   file: string,
-  unitClassification: UnitClassification,
+  unitClassifications: UnitClassification | UnitClassification[],
 ): CheckerIssue[] {
   const issues: CheckerIssue[] = [];
 
-  // Collect all subject names and all topics from both current + legacy curricula
+  // Normalise to array for uniform handling
+  const classificationArray = Array.isArray(unitClassifications) ? unitClassifications : [unitClassifications];
+
+  // Collect all subject names and all topics from all classifications (current + legacy)
   const allSubjectNames = new Set<string>();
   const allTopics = new Set<string>();
   const allUnitNames = new Set<string>();
 
-  const allSubjects = [
-    ...unitClassification.subjects,
-    ...(unitClassification.legacy?.subjects ?? []),
-  ];
+  for (const classification of classificationArray) {
+    const allSubjects = [
+      ...classification.subjects,
+      ...(classification.legacy?.subjects ?? []),
+    ];
 
-  for (const subject of allSubjects) {
-    allSubjectNames.add(subject.name);
-    for (const unit of subject.units) {
-      allUnitNames.add(unit.name);
-      for (const topic of unit.topics) {
-        allTopics.add(topic);
+    for (const subject of allSubjects) {
+      allSubjectNames.add(subject.name);
+      for (const unit of subject.units) {
+        allUnitNames.add(unit.name);
+        for (const topic of unit.topics) {
+          allTopics.add(topic);
+        }
       }
     }
   }
