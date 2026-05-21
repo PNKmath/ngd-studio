@@ -4,11 +4,21 @@ import type { PipelineStage } from "@/components/pipeline/PipelineView";
 import type { LogEntry } from "@/components/log/LogStream";
 import type { ReviewItem } from "@/lib/reviewParser";
 
+export interface QuestionFigureResult {
+  /** "ok": 그림 처리 성공, "failed": 실패, "boundary_uncertain": 경계 재조정 필요 */
+  status: "ok" | "failed" | "boundary_uncertain";
+  /** 생성된 그림 파일의 경로 (있을 때) */
+  image?: string;
+  /** 실패 시 에러 메시지 */
+  error?: string;
+}
+
 export interface QuestionResult {
   number: number;
   extracted?: Record<string, unknown>;
   solved?: Record<string, unknown>;
   verified?: Record<string, unknown>;
+  figure?: QuestionFigureResult;
   updatedAt: string;
 }
 
@@ -54,6 +64,8 @@ export interface JobState {
   setResult: (result: JobState["result"]) => void;
   setReviewItems: (items: ReviewItem[]) => void;
   updateQuestionResult: (number: number, phase: string, content: Record<string, unknown>) => void;
+  /** 주어진 번호들에 대해 빈 QuestionResult stub을 생성. 이미 존재하면 건드리지 않음. */
+  seedQuestionResults: (numbers: number[]) => void;
   setV3Meta: (meta: V3Meta) => void;
   setExtractionReviewActive: (active: boolean) => void;
   setSelectedQuestionNumber: (n: number | null) => void;
@@ -170,5 +182,18 @@ export const useJobStore = create<JobState>((set) => ({
           },
         },
       };
+    }),
+
+  seedQuestionResults: (numbers) =>
+    set((state) => {
+      const next = { ...state.questionResults };
+      let changed = false;
+      for (const n of numbers) {
+        if (next[n] === undefined) {
+          next[n] = { number: n, updatedAt: "" };
+          changed = true;
+        }
+      }
+      return changed ? { questionResults: next } : state;
     }),
 }));

@@ -546,7 +546,7 @@ describe("orchestrator per-question pipeline", () => {
     // Verifier will run (not cached)
     verifierQueues.set(1, [MOCK_VERIFIER_RESPONSE_Q1_PASS]);
 
-    const { send } = makeSseCollector();
+    const { events, send } = makeSseCollector();
     const { runExtractorStage } = await import("../extractor");
     const { runSolverStage } = await import("../solver");
     const { runVerifierStage } = await import("../verifier");
@@ -582,6 +582,29 @@ describe("orchestrator per-question pipeline", () => {
     );
     expect(verifierTelemetry).toHaveLength(1);
     expect(verifierTelemetry[0]?.status).toBe("success");
+
+    // ── Cache-hit emit: extracted/solved 결과가 SSE로 흘러나와야 한다 ─────
+    // Navigator dot이 캐시 hit 상태도 정확히 반영하려면 신규 계산과 동일한
+    // event=question 이벤트가 emit되어야 한다.
+    const extractedEvent = events.find(
+      (e) =>
+        e.event === "question"
+        && (e.data as Record<string, unknown>).stage === "extracted"
+        && (e.data as Record<string, unknown>).number === 1
+    );
+    expect(extractedEvent).toBeDefined();
+    expect((extractedEvent!.data as Record<string, unknown>).status).toBe("ok");
+    expect((extractedEvent!.data as Record<string, unknown>).data).toEqual(MOCK_EXTRACTOR_RESPONSE_Q1);
+
+    const solvedEvent = events.find(
+      (e) =>
+        e.event === "question"
+        && (e.data as Record<string, unknown>).stage === "solved"
+        && (e.data as Record<string, unknown>).number === 1
+    );
+    expect(solvedEvent).toBeDefined();
+    expect((solvedEvent!.data as Record<string, unknown>).status).toBe("ok");
+    expect((solvedEvent!.data as Record<string, unknown>).data).toEqual(MOCK_SOLVER_RESPONSE_Q1);
   }, 30_000);
 
   // ────────────────────────────────────────────────────────────────────────

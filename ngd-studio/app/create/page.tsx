@@ -24,6 +24,23 @@ import {
 import type { AIProviderId, AIStageKey } from "@/lib/ai";
 
 type FigureStatus = { pending: boolean; done: boolean; success: number[]; failed: number[]; images: string[] };
+type QuestionFigureCacheState = {
+  status: "ok" | "failed" | "boundary_uncertain";
+  image?: string;
+};
+type QuestionCacheStateMap = Record<number, {
+  extracted: boolean;
+  solved: boolean;
+  verified: boolean;
+  figure?: QuestionFigureCacheState;
+}>;
+type ExistingImages = {
+  count: number;
+  hasClean: boolean;
+  numbers: number[];
+  essayNumbers: number[];
+  cacheState?: QuestionCacheStateMap;
+};
 type BuildStatus = {
   pending: boolean;
   status?: "running" | "retrying" | "fallback" | "success" | "failed";
@@ -67,6 +84,41 @@ function loadStoredMeta(): MetaValue {
   }
 }
 
+/**
+ * 디스크 캐시 상태를 store에 미리 채운다.
+ *
+ * 1. 모든 qNum에 대해 빈 stub entry를 seed → Navigator가 추출되지 않은 문제도 표시.
+ * 2. cacheState가 있으면 그걸 기준으로 존재하는 phase만 fetch.
+ *    (없으면 backward-compat: 3 phase 모두 시도)
+ * 3. figure는 fetch 없이 cacheState 값을 그대로 사용.
+ */
+async function preloadQuestionResultsFromCache(
+  qNums: number[],
+  cacheState: QuestionCacheStateMap | undefined,
+): Promise<void> {
+  const store = useJobStore.getState();
+  store.seedQuestionResults(qNums);
+
+  const phaseKeys = ["extracted", "solved", "verified"] as const;
+  for (const num of qNums) {
+    const state = cacheState?.[num];
+    for (const phase of phaseKeys) {
+      // cacheState가 있고 해당 phase가 없다고 명시되면 fetch 스킵
+      if (state && !state[phase]) continue;
+      try {
+        const res = await fetch(`/api/v3cache-data?q=${num}&phase=${phase}`);
+        if (res.ok) {
+          const data = await res.json();
+          store.updateQuestionResult(num, phase, data);
+        }
+      } catch { /* ignore */ }
+    }
+    if (state?.figure) {
+      store.updateQuestionResult(num, "figure", state.figure as unknown as Record<string, unknown>);
+    }
+  }
+}
+
 export default function CreateV4Page() {
   const reset = useJobStore((s) => s.reset);
   const { startJob, stopJob, pauseJob } = useJobRunner();
@@ -95,20 +147,9 @@ export default function CreateV4Page() {
     // Pre-load all question data from cache
     fetch("/api/question-images")
       .then((r) => r.json())
-      .then(async (existingImages) => {
+      .then(async (existingImages: ExistingImages) => {
         const qNums = [...(existingImages.numbers || []), ...(existingImages.essayNumbers || [])];
-        const phases = ["extracted", "solved", "verified"];
-        for (const num of qNums) {
-          for (const phase of phases) {
-            try {
-              const res = await fetch(`/api/v3cache-data?q=${num}&phase=${phase}`);
-              if (res.ok) {
-                const data = await res.json();
-                useJobStore.getState().updateQuestionResult(num, phase, data);
-              }
-            } catch { /* ignore */ }
-          }
-        }
+        await preloadQuestionResultsFromCache(qNums, existingImages.cacheState);
         await startJob("resume", { pdf: "" }, jobMeta);
       })
       .catch(() => {});
@@ -186,7 +227,7 @@ export default function CreateV4Page() {
   }, [v3Meta, hasJob]);
 
   // 이전 작업 재개 상태
-  const [existingImages, setExistingImages] = useState<{ count: number; hasClean: boolean; numbers: number[]; essayNumbers: number[] } | null>(null);
+  const [existingImages, setExistingImages] = useState<ExistingImages | null>(null);
 
   // figure 상태 + 폴링
   const [figureStatus, setFigureStatus] = useState<FigureStatus | null>(null);
@@ -246,19 +287,7 @@ export default function CreateV4Page() {
 
     // Pre-load all question data from cache
     const qNums = [...(existingImages.numbers || []), ...(existingImages.essayNumbers || [])];
-    const phases = ["extracted", "solved", "verified"];
-
-    for (const num of qNums) {
-      for (const phase of phases) {
-        try {
-          const res = await fetch(`/api/v3cache-data?q=${num}&phase=${phase}`);
-          if (res.ok) {
-            const data = await res.json();
-            useJobStore.getState().updateQuestionResult(num, phase, data);
-          }
-        } catch { /* ignore */ }
-      }
-    }
+    await preloadQuestionResultsFromCache(qNums, existingImages.cacheState);
 
     await startJob("resume", { pdf: "" }, jobMeta);
   }, [existingImages, meta, startJob, setV3Meta]);

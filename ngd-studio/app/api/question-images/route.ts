@@ -1,9 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir, rm, readdir } from "fs/promises";
+import { writeFile, mkdir, rm, readdir, readFile } from "fs/promises";
 import path from "path";
 
 const BASE_DIR = path.resolve(process.cwd(), "..");
 const IMAGES_DIR = path.join(BASE_DIR, "inputs", "시험지 제작", "question_images");
+const CACHE_DIR = path.join(BASE_DIR, "inputs", "시험지 제작", ".v3cache");
+const FIGURE_STATUS_PATH = path.join(CACHE_DIR, "figure_status.json");
+
+type FigurePhaseStatus = "ok" | "failed" | "boundary_uncertain";
+
+interface QuestionCacheState {
+  extracted: boolean;
+  solved: boolean;
+  verified: boolean;
+  figure?: { status: FigurePhaseStatus; image?: string };
+}
+
+async function scanCacheState(numbers: number[]): Promise<Record<number, QuestionCacheState>> {
+  let cacheFiles = new Set<string>();
+  try {
+    const entries = await readdir(CACHE_DIR);
+    cacheFiles = new Set(entries);
+  } catch { /* cache dir missing */ }
+
+  let figureStatus: { questions?: Record<string, { status?: FigurePhaseStatus; image?: string }> } = {};
+  try {
+    const raw = await readFile(FIGURE_STATUS_PATH, "utf-8");
+    figureStatus = JSON.parse(raw);
+  } catch { /* figure_status.json missing → no figure state */ }
+
+  const result: Record<number, QuestionCacheState> = {};
+  for (const n of numbers) {
+    const padded = String(n).padStart(2, "0");
+    const state: QuestionCacheState = {
+      extracted: cacheFiles.has(`q${padded}_extracted.json`),
+      solved: cacheFiles.has(`q${padded}_solved.json`),
+      verified: cacheFiles.has(`q${padded}_verified.json`),
+    };
+    const figQ = figureStatus.questions?.[String(n)] ?? figureStatus.questions?.[padded];
+    if (figQ && figQ.status) {
+      state.figure = { status: figQ.status, ...(figQ.image ? { image: figQ.image } : {}) };
+    }
+    result[n] = state;
+  }
+  return result;
+}
 
 export async function GET() {
   try {
@@ -31,11 +72,14 @@ export async function GET() {
     } catch { /* no cleaned folder */ }
     const hasClean = cleanedFiles.some((f) => qRegex.test(f) || essayRegex.test(f));
 
+    const cacheState = await scanCacheState([...numbers, ...essayNumbers]);
+
     return NextResponse.json({
       count: numbers.length + essayNumbers.length,
       numbers,
       essayNumbers,
       hasClean,
+      cacheState,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Read failed";

@@ -37,6 +37,7 @@ function QuestionListItem({
   const ext = qr.extracted as Record<string, unknown> | undefined;
   const sol = qr.solved as Record<string, unknown> | undefined;
   const ver = qr.verified as Record<string, unknown> | undefined;
+  const fig = qr.figure;
   const verStatus = ver ? String((ver as Record<string, unknown>).status ?? "") : "";
   const hasFigure = !!(ext as Record<string, unknown> | undefined)?.has_figure;
   const subtopic = ext && (ext.subtopic ?? "") ? String(ext.subtopic) : "";
@@ -46,6 +47,29 @@ function QuestionListItem({
       ? "bg-destructive/70"
       : "bg-[var(--color-status-success)]/70"
     : "bg-muted";
+
+  // figure dot 색/title 결정:
+  //  - 그림 결과 도착(fig 있음): status에 따라 색
+  //  - 그림 필요(has_figure)지만 결과 없음: 회색 "그림 대기"
+  //  - 그림 불필요: dot 숨김
+  let figDotCls = "";
+  let figDotTitle = "";
+  if (fig) {
+    if (fig.status === "ok") {
+      figDotCls = "bg-[var(--color-status-success)]/70";
+      figDotTitle = "그림 완료";
+    } else if (fig.status === "failed") {
+      figDotCls = "bg-destructive/70";
+      figDotTitle = "그림 실패";
+    } else {
+      // boundary_uncertain
+      figDotCls = "bg-amber-400/70";
+      figDotTitle = "그림 경계 재조정 필요";
+    }
+  } else if (hasFigure) {
+    figDotCls = "bg-muted";
+    figDotTitle = "그림 대기";
+  }
 
   return (
     <button
@@ -75,10 +99,10 @@ function QuestionListItem({
           title={ver ? (verStatus === "fail" ? "검증 실패" : "검증 완료") : "검증 대기"}
           className={`w-1.5 h-1.5 rounded-full ${verDotCls}`}
         />
-        {hasFigure && (
+        {figDotCls && (
           <span
-            title="그림 필요"
-            className="w-1.5 h-1.5 rounded-full bg-muted"
+            title={figDotTitle}
+            className={`w-1.5 h-1.5 rounded-full ${figDotCls}`}
           />
         )}
       </span>

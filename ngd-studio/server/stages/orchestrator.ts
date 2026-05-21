@@ -290,6 +290,14 @@ export async function runStageOrchestrator(
 
     if (skipExtractor) {
       extractedOutput = await readCacheJson(cache.extractorResultPath(n));
+      // 캐시 hit: UI에 결과를 흘려준다. 라이브 모드든 resume이든
+      // Navigator dot이 일관되게 켜지도록 신규 계산과 동일한 이벤트를 emit한다.
+      if (extractedOutput != null) {
+        send({
+          event: "question",
+          data: { number: n, stage: "extracted", status: "ok", data: extractedOutput },
+        });
+      }
     } else {
       const result = await extractSem.acquire(async () => {
         if (isAborted()) throw new Error("aborted");
@@ -344,6 +352,12 @@ export async function runStageOrchestrator(
 
     if (skipSolver) {
       solvedOutput = await readCacheJson(cache.solverResultPath(n));
+      if (solvedOutput != null) {
+        send({
+          event: "question",
+          data: { number: n, stage: "solved", status: "ok", data: solvedOutput },
+        });
+      }
     } else {
       const result = await solveSem.acquire(async () => {
         if (isAborted()) throw new Error("aborted");
@@ -399,6 +413,17 @@ export async function runStageOrchestrator(
     if (verifierExplicitlySkipped) {
       send(stageEvent("verifier", "done", { summary: "스킵됨 (사용자 설정)" }));
       send(logEvent("verifier", `Q${n} 검증 스킵 (verifierMaxAttempts=${verifierMaxAttempts})`));
+    }
+
+    // 캐시 hit: verifier 결과를 UI에 흘려준다 (verifier 블록은 통째로 스킵되므로 별도 처리).
+    if (skipVerifier && state.verified) {
+      const cachedVerified = await readCacheJson(cache.verifierResultPath(n));
+      if (cachedVerified != null) {
+        send({
+          event: "question",
+          data: { number: n, stage: "verified", status: "ok", data: cachedVerified },
+        });
+      }
     }
 
     if (!skipVerifier) {
@@ -641,6 +666,10 @@ export async function runStageOrchestrator(
         env: runtimeEnv as NodeJS.ProcessEnv,
       });
 
+      // figure_status.json을 읽어 문제별 결과를 SSE로 흘려준다.
+      // (figureRunner는 partial/failed 상태에도 status 파일을 쓰므로 항상 시도.)
+      await emitFigureQuestionEvents(cache.paths.figureStatus, send);
+
       if (figureResult.status !== "failed") {
         send(progressEvent("figure", 100));
         send(stageEvent("figure", "done", { summary: "figure 처리 완료" }));
@@ -785,6 +814,37 @@ async function readCacheJson(filePath: string): Promise<unknown> {
     return JSON.parse(text) as unknown;
   } catch {
     return null;
+  }
+}
+
+interface FigureStatusFile {
+  questions?: Record<string, { status?: string; image?: string; error?: string }>;
+}
+
+/**
+ * figure_status.json을 읽어 문제별 figure 결과를 SSE `question` 이벤트로 흘려준다.
+ * Navigator의 그림 dot이 완료/실패/경계불확실을 정확히 반영하도록 한다.
+ */
+async function emitFigureQuestionEvents(
+  statusPath: string,
+  send: (event: SSEEvent) => void,
+): Promise<void> {
+  const parsed = await readCacheJson(statusPath) as FigureStatusFile | null;
+  if (!parsed?.questions) return;
+  for (const [key, q] of Object.entries(parsed.questions)) {
+    const n = Number(key);
+    if (!Number.isFinite(n)) continue;
+    // SSE envelope status는 항상 "ok"로 둔다 — figure 단계의 ok/failed/boundary_uncertain
+    // 구분은 payload 내부 status 필드로 전달하여 클라이언트 핸들러 필터에 막히지 않도록 한다.
+    const payload: Record<string, unknown> = {
+      status: q?.status ?? "ok",
+      ...(q?.image ? { image: q.image } : {}),
+      ...(q?.error ? { error: q.error } : {}),
+    };
+    send({
+      event: "question",
+      data: { number: n, stage: "figure", status: "ok", data: payload },
+    });
   }
 }
 
