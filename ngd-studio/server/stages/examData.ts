@@ -2,6 +2,33 @@ import { readFile, writeFile } from "fs/promises";
 import type { StageCache } from "./cache";
 
 /**
+ * Per-question cache merge contract (A안 — verifier = gating only).
+ *
+ * Cache files store disjoint field sets, NOT progressively-enriched versions of
+ * the same object. They must be merged, not picked:
+ *
+ *   _extracted.json : problem definition
+ *                     (type, score, parts, choices, has_figure, condition_box,
+ *                      bogi_box, data_table, explanation_table, figure_info, ...)
+ *                     — produced by extractor, kept as-is throughout the pipeline.
+ *
+ *   _solved.json    : { number, answer, explanation_parts } only
+ *                     — produced by solver. On verifier-feedback retries the
+ *                       orchestrator re-runs solver, which OVERWRITES this file,
+ *                       so the latest _solved.json always carries the corrected
+ *                       answer/explanation (see orchestrator.ts applyVerifierRetry).
+ *
+ *   _verified.json  : { number, status, issues, feedback } only
+ *                     — gating ledger. NEVER contains answer/explanation_parts or
+ *                       problem-definition fields, so MUST NOT participate in
+ *                       problem-body merge. Used by orchestrator to decide
+ *                       pass/fail and to seed solver retry feedback.
+ *
+ * The canonical merged problem = { ...extracted, ...solved }.
+ * build_hwpx.py / assemble.py expect this shape (e.g. prob["type"], prob["parts"]).
+ */
+
+/**
  * Exam metadata matching the `info` key in exam_data.json.
  * Field names match build_hwpx.py / figure_processor.py consumption.
  */
@@ -43,8 +70,10 @@ export interface ExamDataOutput {
 /**
  * Build and write exam_data.json by merging per-question cache files.
  *
- * Priority: verified (_verified.json) > solved (_solved.json) > extracted (q{N}.json)
- * Throws if any requested question number cannot be read from any source.
+ * Merge: { ...extracted, ...solved }. _verified.json is gating only and never
+ * contributes problem-body fields. Both _extracted and _solved are REQUIRED
+ * (orchestrator only invokes this with question numbers that passed the
+ * solver stage), so missing either raises.
  */
 export async function buildExamDataJson(input: {
   cache: StageCache;
@@ -55,7 +84,7 @@ export async function buildExamDataJson(input: {
   const problems: ExamDataProblem[] = [];
 
   for (const n of questionNumbers) {
-    const problem = await readQuestionWithFallback(cache, n);
+    const problem = await mergeQuestionSources(cache, n, { requireSolved: true });
     problems.push(problem);
   }
 
@@ -99,29 +128,40 @@ function normalizeMeta(meta: ExamMetaInput): ExamMetaInput {
 }
 
 /**
- * Read the best available JSON for question number `n`.
- * Priority: verified > solved > extracted
+ * Merge per-question cache sources into a single problem object.
+ *
+ * Layers: base = _extracted.json (problem definition);
+ *         overlay = _solved.json (answer + explanation_parts).
+ * _verified.json is intentionally NOT a source — see contract at top of file.
+ *
+ * - `requireSolved: true`  → solver result must exist (orchestrator main path).
+ * - `requireSolved: false` → solver result may be absent; extracted-only is
+ *   returned (aggregate path may want to surface partially-processed problems).
+ * If _extracted is missing this always throws — no fallback can produce the
+ * problem-definition fields (type/score/parts/choices) build_hwpx.py requires.
  */
-async function readQuestionWithFallback(
+async function mergeQuestionSources(
   cache: StageCache,
-  n: number
+  n: number,
+  opts: { requireSolved: boolean }
 ): Promise<ExamDataProblem> {
-  const candidates = [
-    cache.verifierResultPath(n),
-    cache.solverResultPath(n),
-    cache.questionJsonPath(n),
-  ];
+  const [extracted, solved] = await Promise.all([
+    tryReadJson(cache.extractorResultPath(n)),
+    tryReadJson(cache.solverResultPath(n)),
+  ]);
 
-  for (const path of candidates) {
-    const content = await tryReadJson(path);
-    if (content !== null) {
-      return content;
-    }
+  if (!extracted) {
+    throw new Error(
+      `missing extracted for Q${n}: _extracted.json could not be read (problem definition required)`
+    );
+  }
+  if (opts.requireSolved && !solved) {
+    throw new Error(
+      `missing solved for Q${n}: _solved.json could not be read (answer/explanation required)`
+    );
   }
 
-  throw new Error(
-    `missing extracted/solved/verified for Q${n}: none of the cache files could be read`
-  );
+  return solved ? { ...extracted, ...solved } : extracted;
 }
 
 async function tryReadJson(filePath: string): Promise<ExamDataProblem | null> {
@@ -148,12 +188,15 @@ export interface AggregateResult {
 }
 
 /**
- * Aggregate all per-question verified JSON files into `exam_data.json`.
+ * Aggregate per-question cache files into `exam_data.json` with partial-skip policy.
  *
  * Codifies SKILL.md Step 5-1 "JSON 취합":
- * - Priority: verified (_verified.json) > solved (_solved.json) > extracted (q{N}.json)
- * - If a question is present in `totalQuestions` but cannot be read from any
- *   source, it is added to `skippedQuestions` (rather than throwing).
+ * - Merge: { ...extracted, ...solved }. _verified.json is gating-only and never merged.
+ * - A question is INCLUDED only when its _extracted.json exists; _solved.json is
+ *   strongly preferred (carries answer/explanation), but extracted-only problems
+ *   are still surfaced so the caller can see partial progress.
+ * - Problems whose _extracted.json is missing are reported in `skippedQuestions`
+ *   rather than throwing.
  * - If ALL questions are skipped, throws `AggregateError`.
  *
  * For orchestrator-level usage where strict counting is required:
@@ -173,7 +216,7 @@ export async function aggregateVerifiedProblems(
 
   for (const n of totalQuestions) {
     try {
-      const problem = await readQuestionWithFallback(cache, n);
+      const problem = await mergeQuestionSources(cache, n, { requireSolved: false });
       problems.push(problem);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);

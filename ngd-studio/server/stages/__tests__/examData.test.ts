@@ -30,71 +30,166 @@ async function makeCache(baseDir: string): Promise<FileBackedStageCache> {
   return new FileBackedStageCache(examDir);
 }
 
-describe("buildExamDataJson", () => {
-  it("merges verified, solved, and extracted with correct priority", async () => {
+// ──────────────────────────────────────────────
+// Realistic per-question cache fixtures.
+// Mirrors actual disjoint schemas:
+//   extracted: problem definition (type/score/parts/choices/...)
+//   solved   : { number, answer, explanation_parts }
+//   verified : { number, status, issues, feedback }  — gating only
+// ──────────────────────────────────────────────
+
+function makeExtracted(n: number): Record<string, unknown> {
+  return {
+    number: n,
+    type: "choice",
+    score: "3.8",
+    difficulty: "하",
+    subtopic: "정적분",
+    has_figure: false,
+    figure_info: null,
+    parts: [{ t: `Q${n} 본문` }, { eq: "x^2" }],
+    choices: [
+      [{ t: "① " }, { eq: "1" }],
+      [{ t: "② " }, { eq: "2" }],
+    ],
+    condition_box: null,
+    bogi_box: null,
+    data_table: null,
+    explanation_table: null,
+  };
+}
+
+function makeSolved(n: number, answer = "⑤"): Record<string, unknown> {
+  return {
+    number: n,
+    answer,
+    explanation_parts: [
+      { t: `Q${n} 풀이` },
+      { eq: "x^2 + 1" },
+      { br: true },
+      { t: "따라서 정답." },
+    ],
+  };
+}
+
+function makeVerified(n: number, status: "pass" | "fail" = "pass"): Record<string, unknown> {
+  return {
+    number: n,
+    status,
+    issues: [],
+    feedback: null,
+  };
+}
+
+describe("buildExamDataJson — merge contract (A안: verifier = gating only)", () => {
+  it("merges extracted (problem definition) + solved (answer/explanation) into one problem object", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
-    // q1: has verified
-    const q1Verified = { number: 1, text: "Q1 text", answer: "1", source: "verified" };
-    await writeFile(cache.verifierResultPath(1), JSON.stringify(q1Verified), "utf8");
-
-    // q2: has only solved (no verified)
-    const q2Solved = { number: 2, text: "Q2 text", answer: "2", source: "solved" };
-    await writeFile(cache.solverResultPath(2), JSON.stringify(q2Solved), "utf8");
-
-    // q3: has only extracted (no solved, no verified)
-    const q3Extracted = { number: 3, text: "Q3 text", source: "extracted" };
-    await writeFile(cache.questionJsonPath(3), JSON.stringify(q3Extracted), "utf8");
-
-    const meta = {
-      school: "테스트고등학교",
-      grade: 2,
-      subject: "수학 I",
-      semester: "1학기",
-      exam_type: "중간",
-      year: 2025,
-    };
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(makeExtracted(1)), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
 
     const result = await buildExamDataJson({
       cache,
-      meta,
-      questionNumbers: [1, 2, 3],
+      meta: { school: "테스트고", year: 2025 },
+      questionNumbers: [1],
     });
 
-    // Problems are in order
-    expect(result.problems).toHaveLength(3);
-    expect(result.problems[0]).toMatchObject({ number: 1, source: "verified" });
-    expect(result.problems[1]).toMatchObject({ number: 2, source: "solved" });
-    expect(result.problems[2]).toMatchObject({ number: 3, source: "extracted" });
-
-    // Meta is included under `info` key
-    expect(result.info).toMatchObject({
-      school: "테스트고등학교",
-      grade: 2,
-      subject: "수학 I",
-    });
-
-    // File written correctly
-    const written = JSON.parse(await readFile(cache.paths.examData, "utf8")) as {
-      info: typeof meta;
-      problems: typeof result.problems;
-    };
-    expect(written.info).toMatchObject(meta);
-    expect(written.problems).toHaveLength(3);
+    const p = result.problems[0] as Record<string, unknown>;
+    // Extractor-side fields survive
+    expect(p.type).toBe("choice");
+    expect(p.score).toBe("3.8");
+    expect(p.parts).toEqual([{ t: "Q1 본문" }, { eq: "x^2" }]);
+    expect(p.choices).toBeDefined();
+    expect(p.has_figure).toBe(false);
+    // Solver-side fields are layered on top
+    expect(p.answer).toBe("⑤");
+    expect(p.explanation_parts).toBeDefined();
+    expect(Array.isArray(p.explanation_parts)).toBe(true);
   });
 
-  it("throws a clear error when a question number has no cache files", async () => {
+  it("solved fields override extracted on key conflict (number stays consistent)", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
-    // q1 exists
-    await writeFile(
-      cache.questionJsonPath(1),
-      JSON.stringify({ number: 1, text: "Q1" }),
-      "utf8"
-    );
-    // q4 does NOT exist
+    // Both files carry `number` — solved-side should win since merge is { ...extracted, ...solved }
+    await writeFile(cache.extractorResultPath(2), JSON.stringify(makeExtracted(2)), "utf8");
+    await writeFile(cache.solverResultPath(2), JSON.stringify(makeSolved(2, "③")), "utf8");
+
+    const result = await buildExamDataJson({
+      cache,
+      meta: { school: "테스트고", year: 2025 },
+      questionNumbers: [2],
+    });
+    const p = result.problems[0] as Record<string, unknown>;
+    expect(p.number).toBe(2);
+    expect(p.answer).toBe("③");
+  });
+
+  it("does NOT merge _verified.json into the problem body (verifier = gating ledger only)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    await writeFile(cache.extractorResultPath(3), JSON.stringify(makeExtracted(3)), "utf8");
+    await writeFile(cache.solverResultPath(3), JSON.stringify(makeSolved(3)), "utf8");
+    // _verified carries gating fields that must NEVER appear on the problem
+    await writeFile(cache.verifierResultPath(3), JSON.stringify(makeVerified(3, "pass")), "utf8");
+
+    const result = await buildExamDataJson({
+      cache,
+      meta: { school: "테스트고", year: 2025 },
+      questionNumbers: [3],
+    });
+    const p = result.problems[0] as Record<string, unknown>;
+
+    // problem fields preserved
+    expect(p.type).toBe("choice");
+    expect(p.answer).toBe("⑤");
+    // verifier-side fields must NOT leak into the problem body
+    expect(p.status).toBeUndefined();
+    expect(p.issues).toBeUndefined();
+    expect(p.feedback).toBeUndefined();
+  });
+
+  it("throws when extracted is missing (problem definition unavailable)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    // Only solved — no extracted file at all
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
+
+    await expect(
+      buildExamDataJson({
+        cache,
+        meta: { school: "학교" },
+        questionNumbers: [1],
+      })
+    ).rejects.toThrow(/Q1/);
+  });
+
+  it("throws when solved is missing (answer/explanation unavailable)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    // Only extracted — no solver result
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(makeExtracted(1)), "utf8");
+
+    await expect(
+      buildExamDataJson({
+        cache,
+        meta: { school: "학교" },
+        questionNumbers: [1],
+      })
+    ).rejects.toThrow(/Q1/);
+  });
+
+  it("throws for a question with no cache files at all", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(makeExtracted(1)), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
+    // Q4 entirely missing
 
     await expect(
       buildExamDataJson({
@@ -102,7 +197,7 @@ describe("buildExamDataJson", () => {
         meta: { school: "학교" },
         questionNumbers: [1, 4],
       })
-    ).rejects.toThrow("missing extracted/solved/verified for Q4");
+    ).rejects.toThrow(/Q4/);
   });
 
   it("count match: problems.length === questionNumbers.length on full success", async () => {
@@ -110,7 +205,8 @@ describe("buildExamDataJson", () => {
     const cache = await makeCache(base);
 
     for (const n of [1, 2, 3]) {
-      await writeFile(cache.verifierResultPath(n), JSON.stringify({ number: n }), "utf8");
+      await writeFile(cache.extractorResultPath(n), JSON.stringify(makeExtracted(n)), "utf8");
+      await writeFile(cache.solverResultPath(n), JSON.stringify(makeSolved(n)), "utf8");
     }
 
     const result = await buildExamDataJson({
@@ -119,17 +215,39 @@ describe("buildExamDataJson", () => {
       questionNumbers: [1, 2, 3],
     });
 
-    // audit doc line 19 "count match" condition
     expect(result.problems).toHaveLength(3);
     const written = JSON.parse(await readFile(cache.paths.examData, "utf8")) as { problems: unknown[] };
     expect(written.problems).toHaveLength(3);
   });
 
-  it("schoolLevel='중' → filename_base 에 [중] 포함 + info.school_level === '중'", async () => {
+  it("regression guard: assembled problem carries every field build_hwpx.py reads", async () => {
+    // assemble.py:300-310 reads: type, score, parts, choices, answer, explanation_parts, has_figure, figure_info.
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
-    await writeFile(cache.questionJsonPath(1), JSON.stringify({ number: 1 }), "utf8");
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(makeExtracted(1)), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
+
+    const result = await buildExamDataJson({
+      cache,
+      meta: { school: "테스트고", year: 2025 },
+      questionNumbers: [1],
+    });
+    const p = result.problems[0] as Record<string, unknown>;
+
+    for (const key of ["type", "score", "parts", "choices", "answer", "explanation_parts", "has_figure"]) {
+      expect(p[key], `field ${key} must survive into merged problem`).not.toBeUndefined();
+    }
+  });
+});
+
+describe("buildExamDataJson — info / meta normalization", () => {
+  it("schoolLevel='중' → filename_base contains [중] + info.school_level === '중'", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(makeExtracted(1)), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
 
     const meta = {
       school: "테스트중학교",
@@ -151,11 +269,12 @@ describe("buildExamDataJson", () => {
     expect(result.info.filename_base).not.toContain("[고]");
   });
 
-  it("schoolLevel 미지정 → filename_base 에 [고] 포함 (legacy 회귀 없음)", async () => {
+  it("schoolLevel unspecified → filename_base contains [고] (legacy default)", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
-    await writeFile(cache.questionJsonPath(1), JSON.stringify({ number: 1 }), "utf8");
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(makeExtracted(1)), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
 
     const meta = {
       school: "테스트고등학교",
@@ -166,7 +285,6 @@ describe("buildExamDataJson", () => {
       year: 2025,
       code: "NGD",
       region: "경기",
-      // schoolLevel 미지정 — default "고" 적용
     };
 
     const result = await buildExamDataJson({ cache, meta, questionNumbers: [1] });
@@ -181,11 +299,8 @@ describe("buildExamDataJson", () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
-    await writeFile(
-      cache.questionJsonPath(1),
-      JSON.stringify({ number: 1 }),
-      "utf8"
-    );
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(makeExtracted(1)), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
 
     const meta = {
       school: "소명여자고등학교",
@@ -201,38 +316,33 @@ describe("buildExamDataJson", () => {
       total_pages: 4,
     };
 
-    const result = await buildExamDataJson({
-      cache,
-      meta,
-      questionNumbers: [1],
-    });
+    const result = await buildExamDataJson({ cache, meta, questionNumbers: [1] });
 
     expect(result.info).toMatchObject(meta);
     expect(result.problems).toHaveLength(1);
 
-    // normalizeMeta also injects camelCase + filename_base defaults
     expect(result.info.examType).toBe("기말");
     expect(result.info.filename_base).toBeTypeOf("string");
 
-    // Verify the written file preserves all meta fields
-    const written = JSON.parse(await readFile(cache.examDataPath(), "utf8")) as {
-      info: typeof meta;
-    };
+    const written = JSON.parse(await readFile(cache.examDataPath(), "utf8")) as { info: typeof meta };
     expect(written.info).toMatchObject(meta);
   });
 });
 
 // ──────────────────────────────────────────────
-// aggregateVerifiedProblems — Phase 3
+// aggregateVerifiedProblems — Phase 3 (partial-skip policy)
 // ──────────────────────────────────────────────
 
-describe("aggregateVerifiedProblems", () => {
-  it("aggregates all verified problems and returns AggregateResult", async () => {
+describe("aggregateVerifiedProblems — merge contract (verifier = gating only)", () => {
+  it("aggregates all problems when extracted + solved exist for every question", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
     for (const n of [1, 2, 3]) {
-      await writeFile(cache.verifierResultPath(n), JSON.stringify({ number: n, status: "pass" }), "utf8");
+      await writeFile(cache.extractorResultPath(n), JSON.stringify(makeExtracted(n)), "utf8");
+      await writeFile(cache.solverResultPath(n), JSON.stringify(makeSolved(n)), "utf8");
+      // verifier presence is irrelevant — should never affect output
+      await writeFile(cache.verifierResultPath(n), JSON.stringify(makeVerified(n, "pass")), "utf8");
     }
 
     const result = await aggregateVerifiedProblems(cache, [1, 2, 3], { school: "테스트고" });
@@ -242,39 +352,65 @@ describe("aggregateVerifiedProblems", () => {
     expect(result.skippedQuestions).toHaveLength(0);
     expect(result.examDataPath).toBe(cache.paths.examData);
 
-    const written = JSON.parse(await readFile(cache.paths.examData, "utf8")) as { problems: unknown[] };
+    const written = JSON.parse(await readFile(cache.paths.examData, "utf8")) as {
+      problems: Array<Record<string, unknown>>;
+    };
     expect(written.problems).toHaveLength(3);
+    // Each problem must carry merged fields, none of the verifier fields
+    for (const p of written.problems) {
+      expect(p.type).toBe("choice");
+      expect(p.parts).toBeDefined();
+      expect(p.answer).toBeDefined();
+      expect(p.status).toBeUndefined();
+      expect(p.issues).toBeUndefined();
+    }
   });
 
-  it("skips missing questions and reports them in skippedQuestions (partial verified)", async () => {
+  it("includes extracted-only problems (partial progress surface), skips questions without extracted", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
-    // Q1 has verified, Q2 has only extracted, Q3 missing entirely
-    await writeFile(cache.verifierResultPath(1), JSON.stringify({ number: 1 }), "utf8");
-    await writeFile(cache.questionJsonPath(2), JSON.stringify({ number: 2 }), "utf8");
-    // Q3: no file at all
+    // Q1 fully OK → included with merged answer
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(makeExtracted(1)), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
+    // Q2 extracted-only (solver in progress) → included to surface partial progress
+    await writeFile(cache.extractorResultPath(2), JSON.stringify(makeExtracted(2)), "utf8");
+    // Q3 absent entirely → skipped
+    // Q4 verified-only (no problem definition) → skipped (no extracted to base the merge on)
+    await writeFile(cache.verifierResultPath(4), JSON.stringify(makeVerified(4, "pass")), "utf8");
 
-    const result = await aggregateVerifiedProblems(cache, [1, 2, 3], { school: "학교" });
+    const result = await aggregateVerifiedProblems(cache, [1, 2, 3, 4], { school: "학교" });
 
-    expect(result.totalQuestions).toBe(3);
-    expect(result.includedQuestions).toBe(2); // Q1 + Q2
-    expect(result.skippedQuestions).toHaveLength(1);
-    expect(result.skippedQuestions[0]?.number).toBe(3);
-    expect(result.skippedQuestions[0]?.reason).toContain("Q3");
+    expect(result.totalQuestions).toBe(4);
+    expect(result.includedQuestions).toBe(2);
+    const skippedNums = result.skippedQuestions.map((s) => s.number).sort();
+    expect(skippedNums).toEqual([3, 4]);
+
+    const written = JSON.parse(await readFile(cache.paths.examData, "utf8")) as {
+      problems: Array<Record<string, unknown>>;
+    };
+    // Q1 has answer; Q2 carries problem definition but no answer (extracted-only)
+    const q1 = written.problems.find((p) => p.number === 1)!;
+    const q2 = written.problems.find((p) => p.number === 2)!;
+    expect(q1.answer).toBe("⑤");
+    expect(q2.answer).toBeUndefined();
+    expect(q2.type).toBe("choice");
   });
 
-  it("throws AggregateError when ALL questions are missing (typed error)", async () => {
+  it("throws AggregateError when ALL questions are missing the required sources", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
-    // No files written — all questions will fail
+    // verifier-only fixture is intentionally insufficient
+    await writeFile(cache.verifierResultPath(1), JSON.stringify(makeVerified(1, "pass")), "utf8");
+    await writeFile(cache.verifierResultPath(2), JSON.stringify(makeVerified(2, "pass")), "utf8");
+
     await expect(
       aggregateVerifiedProblems(cache, [1, 2], { school: "학교" })
     ).rejects.toThrow(AggregateError);
   });
 
-  it("AggregateError message mentions total and 'all skipped'", async () => {
+  it("AggregateError message mentions 'all skipped' and lists each cause", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
@@ -290,27 +426,27 @@ describe("aggregateVerifiedProblems", () => {
     expect((thrown as AggregateError).errors).toHaveLength(2);
   });
 
-  it("falls back from verified → solved → extracted in priority order", async () => {
+  it("does not merge verifier fields into included problems (regression guard)", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);
 
-    // Q1: verified only
-    await writeFile(cache.verifierResultPath(1), JSON.stringify({ number: 1, source: "verified" }), "utf8");
-    // Q2: solved only
-    await writeFile(cache.solverResultPath(2), JSON.stringify({ number: 2, source: "solved" }), "utf8");
-    // Q3: extracted only
-    await writeFile(cache.questionJsonPath(3), JSON.stringify({ number: 3, source: "extracted" }), "utf8");
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(makeExtracted(1)), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
+    await writeFile(
+      cache.verifierResultPath(1),
+      JSON.stringify({ number: 1, status: "fail", issues: [{ category: "math_accuracy", description: "x" }], feedback: "redo" }),
+      "utf8"
+    );
 
-    const result = await aggregateVerifiedProblems(cache, [1, 2, 3], {});
-
-    expect(result.includedQuestions).toBe(3);
-    expect(result.skippedQuestions).toHaveLength(0);
+    const result = await aggregateVerifiedProblems(cache, [1], { school: "학교" });
+    expect(result.includedQuestions).toBe(1);
 
     const written = JSON.parse(await readFile(cache.paths.examData, "utf8")) as {
-      problems: Array<{ number: number; source: string }>;
+      problems: Array<Record<string, unknown>>;
     };
-    expect(written.problems[0]).toMatchObject({ source: "verified" });
-    expect(written.problems[1]).toMatchObject({ source: "solved" });
-    expect(written.problems[2]).toMatchObject({ source: "extracted" });
+    const p = written.problems[0];
+    expect(p.status).toBeUndefined();
+    expect(p.issues).toBeUndefined();
+    expect(p.feedback).toBeUndefined();
   });
 });
