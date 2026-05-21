@@ -10,13 +10,20 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // Import from relative paths (tsx doesn't support @/ alias)
-import { toWslPath, fromWslPath, type SSEEvent } from "../lib/claude";
+import { toWslPath, fromWslPath, transformToSSE, type SSEEvent } from "../lib/claude";
 import {
   normalizeProviderId,
   resolveProviderId,
+  runAIProvider,
+  MAX_PROVIDER_ATTEMPTS,
+  createProviderAttemptLog,
+  createProviderRetryLog,
+  createProviderTelemetryEntry,
+  shouldRetryProviderAttempt,
   type AIProviderId,
   type AIStageKey,
 } from "../lib/ai";
+import { readRuntimeEnv } from "../lib/server/runtimeEnv";
 import { normalizeStageOverrides, normalizeStageSkip, type StageOverrideMap, type StageSkipMap } from "../lib/ai/settings";
 import type { ProviderTelemetryEntry } from "../lib/ai/retry";
 import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
@@ -28,6 +35,162 @@ import { runLegacyPromptJob } from "./stages/jobRunner";
 import { runStageOrchestrator } from "./stages/orchestrator";
 import { shouldUseCodeOrchestrator } from "./stages/branchHelper";
 export { shouldUseCodeOrchestrator } from "./stages/branchHelper";
+
+// ---------------------------------------------------------------------------
+// runCropJob — inline helper for crop mode (no HWPX output, no stage model)
+// ---------------------------------------------------------------------------
+async function runCropJob({
+  prompt,
+  requestedProvider,
+  jobId,
+  send,
+  isClientDisconnected,
+  setActiveProviderProcess,
+  activeProcesses,
+}: {
+  prompt: string;
+  requestedProvider: AIProviderId;
+  jobId: string;
+  send: (e: SSEEvent) => void;
+  isClientDisconnected: () => boolean;
+  setActiveProviderProcess: (p: ChildProcess | null) => void;
+  activeProcesses: Set<ChildProcess>;
+}): Promise<{ status: "done" | "failed" | "cancelled"; resultSummary?: string; providerTelemetry: ProviderTelemetryEntry[] }> {
+  const currentStage = { name: "" };
+  let resultSummary = "";
+  let finalStatus: "done" | "failed" | "cancelled" = "done";
+  let hadResultEvent = false;
+  const providerTelemetry: ProviderTelemetryEntry[] = [];
+
+  for (let attempt = 1; attempt <= MAX_PROVIDER_ATTEMPTS; attempt += 1) {
+    const attemptStartedAt = Date.now();
+    let providerFailed = false;
+    let attemptErrorSummary = "";
+
+    send({
+      event: "log",
+      data: {
+        stage: "system",
+        message: createProviderAttemptLog(requestedProvider as Exclude<AIProviderId, "auto">, attempt),
+        timestamp: new Date().toISOString(),
+        level: "info",
+      },
+    });
+
+    const { process: proc, events, exitCode, metadata } = runAIProvider(prompt, {
+      provider: requestedProvider,
+      cwd: BASE_DIR,
+      env: readRuntimeEnv(),
+      maxTurns: 30,
+      mode: "crop",
+      jobId,
+      stageKey: undefined,
+    });
+
+    setActiveProviderProcess(proc);
+    activeProcesses.add(proc);
+    proc.on("close", () => {
+      activeProcesses.delete(proc);
+      setActiveProviderProcess(null);
+    });
+
+    send({
+      event: "log",
+      data: {
+        stage: "system",
+        message: proc.pid !== undefined
+          ? `CLI 프로세스 시작됨 (PID: ${proc.pid}). API 연결 대기중...`
+          : `${metadata.label} 호출 시작. API 연결 대기중...`,
+        timestamp: new Date().toISOString(),
+        level: "info",
+      },
+    });
+
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      const msg = chunk.toString().trim();
+      if (msg) {
+        send({
+          event: "log",
+          data: {
+            stage: "system",
+            message: `[stderr] ${msg.slice(0, 300)}`,
+            timestamp: new Date().toISOString(),
+            level: "warn",
+          },
+        });
+      }
+    });
+
+    for await (const event of events) {
+      const sseEvents = transformToSSE(event, currentStage);
+      for (const sse of sseEvents) {
+        if (sse.event === "result") {
+          hadResultEvent = true;
+          resultSummary = (sse.data.result as string) ?? "";
+          finalStatus = sse.data.status === "success" ? "done" : "failed";
+          providerFailed = sse.data.status !== "success";
+          if (providerFailed) attemptErrorSummary = resultSummary.slice(0, 300);
+        }
+        if (sse.event === "error") {
+          finalStatus = "failed";
+          providerFailed = true;
+          attemptErrorSummary = ((sse.data.message as string) ?? "Provider error").slice(0, 300);
+        }
+        send(sse);
+      }
+    }
+
+    const code = await exitCode;
+    if (code !== 0) {
+      finalStatus = "failed";
+      if (!attemptErrorSummary) attemptErrorSummary = `${metadata.label} exited with code ${code}`;
+    }
+
+    const clientDisconnected = isClientDisconnected();
+    const retry = shouldRetryProviderAttempt({ attempt, exitCode: code, providerFailed, aborted: clientDisconnected });
+    providerTelemetry.push(createProviderTelemetryEntry({
+      stageKey: undefined,
+      requestedProvider: metadata.requestedProvider,
+      resolvedProvider: metadata.provider,
+      attempt,
+      status: clientDisconnected ? "cancelled" : providerFailed || code !== 0 ? "failed" : "success",
+      elapsedMs: Date.now() - attemptStartedAt,
+      retry,
+      errorSummary: attemptErrorSummary || undefined,
+      externalCostUsd: metadata.externalCostUsd,
+    }));
+
+    if (!retry) {
+      if (code !== 0 && !currentStage.name) {
+        send({ event: "error", data: { message: `${metadata.label} exited with code ${code}` } });
+        finalStatus = "failed";
+      }
+      break;
+    }
+
+    send({
+      event: "log",
+      data: {
+        stage: "system",
+        message: createProviderRetryLog(metadata.provider, attempt),
+        timestamp: new Date().toISOString(),
+        level: "warn",
+      },
+    });
+  }
+
+  if (!hadResultEvent && isClientDisconnected()) {
+    finalStatus = "cancelled";
+  }
+
+  return {
+    status: finalStatus,
+    resultSummary: resultSummary || undefined,
+    providerTelemetry,
+  };
+}
+
+// ---------------------------------------------------------------------------
 
 const PORT = parseInt(process.env.SSE_PORT ?? "3021", 10);
 const __server_file = fileURLToPath(import.meta.url);
@@ -298,6 +461,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   // Kill on client disconnect (중단/일시정지 버튼 또는 브라우저 닫기)
   let clientDisconnected = false;
   let activeProviderProcess: ChildProcess | null = null;
+  const setActiveProviderProcess = (proc: ChildProcess | null) => { activeProviderProcess = proc; };
   const disconnectAbort = new AbortController();
   req.on("close", () => {
     clientDisconnected = true;
@@ -394,7 +558,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           send,
           isResponseDestroyed: () => res.destroyed,
           isClientDisconnected: () => clientDisconnected,
-          setActiveProviderProcess: (proc) => { activeProviderProcess = proc; },
+          setActiveProviderProcess,
           activeProcesses,
         });
         outputFile = legacyResult.outputFile ?? "";
@@ -403,6 +567,20 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         finalProviderMetadata = legacyResult.providerMetadata;
         providerTelemetry = legacyResult.providerTelemetry;
       }
+    } else if (mode === "crop") {
+      // crop 전용 인라인 헬퍼 — runLegacyPromptJob 에 의존하지 않음
+      const cropResult = await runCropJob({
+        prompt,
+        requestedProvider,
+        jobId,
+        send,
+        isClientDisconnected: () => clientDisconnected,
+        setActiveProviderProcess,
+        activeProcesses,
+      });
+      finalStatus = cropResult.status;
+      resultSummary = cropResult.resultSummary ?? "";
+      providerTelemetry = cropResult.providerTelemetry;
     } else {
       // skill 실행 (extractor → solver → verifier → figure 까지)
       const legacyResult = await runLegacyPromptJob({
@@ -416,7 +594,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         send,
         isResponseDestroyed: () => res.destroyed,
         isClientDisconnected: () => clientDisconnected,
-        setActiveProviderProcess: (proc) => { activeProviderProcess = proc; },
+        setActiveProviderProcess,
         activeProcesses,
       });
 
