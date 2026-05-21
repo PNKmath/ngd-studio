@@ -5,6 +5,25 @@ import path from "path";
 import { existsSync } from "fs";
 import { runStageOrchestrator, type OrchestratorResult } from "@/server/stages/orchestrator";
 import { normalizeStageOverrides, type StageOverrideMap } from "@/lib/ai/settings";
+import { createStageCache } from "@/server/stages/cache";
+import { cleanupFromStage } from "@/server/stages/cleanup";
+import type { ResumeStage } from "@/server/stages/resumeCommand";
+
+const RESUME_STAGES: readonly ResumeStage[] = [
+  "extractor",
+  "review_extract",
+  "solver",
+  "verifier",
+  "figure",
+  "confirm",
+  "builder",
+  "cleaned",
+  "image_replace",
+] as const;
+
+function asResumeStage(s: string): ResumeStage | null {
+  return (RESUME_STAGES as readonly string[]).includes(s) ? (s as ResumeStage) : null;
+}
 
 const DATA_DIR = path.join(process.cwd(), "data/jobs");
 const BASE_DIR = path.resolve(process.cwd(), "..");
@@ -251,6 +270,25 @@ export async function POST(
       });
 
       try {
+        if (isResumeCommand) {
+          const stage = asResumeStage(resumeFrom);
+          if (stage) {
+            const cache = createStageCache(BASE_DIR);
+            const result = await cleanupFromStage(cache, questionNumbers, stage);
+            const deletedCount = result.deleted.length;
+            if (deletedCount > 0) {
+              send({
+                event: "log",
+                data: {
+                  stage: "system",
+                  message: `resume cleanup: ${stage} 기준 캐시 ${deletedCount}개 삭제`,
+                  timestamp: new Date().toISOString(),
+                  level: "info",
+                },
+              });
+            }
+          }
+        }
         const orchResult = await runStageOrchestrator({
           mode: "resume",
           resumeFrom,
