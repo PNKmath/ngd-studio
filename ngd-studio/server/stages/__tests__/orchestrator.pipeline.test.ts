@@ -40,6 +40,7 @@ import {
   MOCK_VERIFIER_RESPONSE_Q3_PASS,
   MOCK_VERIFIER_RESPONSE_Q1_FAIL,
 } from "./fixtures/mockCodexResponses";
+import type { ReviewRunnerOutput } from "../reviewRunner";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Per-question response maps — module-level mutable state injected before each test
@@ -217,6 +218,34 @@ vi.mock("../verifier", async (importOriginal) => {
       const delayMs = stageDelays.verifier.get(n) ?? 0;
       const provider = makeMockProvider(response, { id: "deepseek-v4", delayMs });
       return real.runVerifierStage({ ...input, provider });
+    }),
+  };
+});
+
+// reviewRunner mock — runReviewStage는 HWPX 실제 파일 ops가 필요하므로 stub으로 대체.
+// runReviewerAgent는 호출하지 않음 — 테스트는 SSE 이벤트와 telemetry 구조만 검증.
+// (runReviewerAgent 내부에서 real provider를 spawn하면 timeout이 발생하므로 생략)
+vi.mock("../reviewRunner", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../reviewRunner")>();
+  return {
+    ...real,
+    runReviewStage: vi.fn(async (_input: Parameters<typeof real.runReviewStage>[0]): Promise<ReviewRunnerOutput> => {
+      const mockApplied = [
+        {
+          issue_type: "typo" as const,
+          location: { file: "Contents/section0.xml", snippet: "<hp:t>오타</hp:t>" },
+          suggested_fix: "<hp:t>수정</hp:t>",
+          question_number: 1,
+        },
+      ];
+      return {
+        autoDrafts: [],
+        drafts: mockApplied,
+        applied: mockApplied,
+        failed: [],
+        fixedTableEntries: [],
+        extraTableItems: [],
+      };
     }),
   };
 });
@@ -754,4 +783,116 @@ describe("orchestrator per-question pipeline", () => {
     expect(verifierTelemetry[1]?.status).toBe("success");
     expect(verifierTelemetry[1]?.retry).toBe(true);
   }, 30_000);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Review mode orchestrator tests
+// ────────────────────────────────────────────────────────────────────────────
+
+describe("orchestrator review mode", () => {
+  let baseDir: string;
+  let cache: FileBackedStageCache;
+
+  beforeEach(async () => {
+    baseDir = await makeTempDir();
+    cache = await makeCache(baseDir);
+  });
+
+  // ── (E) review mode: runReviewStage wired correctly — SSE events & result verified
+  it("(E) review mode — runReviewStage called, SSE stage events emitted, result is done", async () => {
+    // Create a fake HWPX path (doesn't need to exist — runReviewStage is stubbed)
+    const hwpxPath = path.join(baseDir, "test.hwpx");
+    await writeFile(hwpxPath, "fake-hwpx", "utf8");
+
+    const { events, send } = makeSseCollector();
+    const { runReviewStage } = await import("../reviewRunner");
+    vi.clearAllMocks();
+
+    const { runStageOrchestrator } = await import("../orchestrator");
+    const result = await runStageOrchestrator({
+      mode: "review",
+      hwpxPath,
+      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      questionImages: [],
+      stageOverrides: {},
+      baseDir,
+      send,
+      isAborted: () => false,
+      cache,
+    });
+
+    // ── runReviewStage should have been called exactly once ──────────────────
+    expect(runReviewStage).toHaveBeenCalledTimes(1);
+    const callArg = (runReviewStage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as {
+      hwpxPath: string;
+      runReviewerAgent: unknown;
+    };
+    expect(callArg.hwpxPath).toBe(hwpxPath);
+    expect(typeof callArg.runReviewerAgent).toBe("function");
+
+    // ── Result should be done ────────────────────────────────────────────────
+    expect(result.status).toBe("done");
+    expect(result.outputFile).toBe(hwpxPath);
+    expect(result.resultSummary).toContain("오검 완료");
+
+    // ── SSE: reviewer stage events should include running → done ─────────────
+    const reviewerRunning = events.find(
+      (e) => e.event === "stage" && (e.data as Record<string, unknown>).name === "reviewer"
+        && (e.data as Record<string, unknown>).status === "running"
+    );
+    expect(reviewerRunning).toBeDefined();
+
+    const reviewerDone = events.find(
+      (e) => e.event === "stage" && (e.data as Record<string, unknown>).name === "reviewer"
+        && (e.data as Record<string, unknown>).status === "done"
+    );
+    expect(reviewerDone).toBeDefined();
+
+    // ── SSE: result event should be "success" ────────────────────────────────
+    const resultEv = events.find((e) => e.event === "result");
+    expect(resultEv).toBeDefined();
+    expect((resultEv?.data as Record<string, unknown>)?.status).toBe("success");
+  }, 15_000);
+
+  // ── (F) review mode: missing hwpxPath → fails immediately
+  it("(F) review mode — missing hwpxPath → failed result without calling runReviewStage", async () => {
+    const { events, send } = makeSseCollector();
+    const { runReviewStage } = await import("../reviewRunner");
+    vi.clearAllMocks();
+
+    const { runStageOrchestrator } = await import("../orchestrator");
+    const result = await runStageOrchestrator({
+      mode: "review",
+      // hwpxPath intentionally omitted
+      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      questionImages: [],
+      stageOverrides: {},
+      baseDir,
+      send,
+      isAborted: () => false,
+      cache,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(runReviewStage).not.toHaveBeenCalled();
+
+    // Result event should be "failed"
+    const resultEv = events.find((e) => e.event === "result");
+    expect(resultEv).toBeDefined();
+    expect((resultEv?.data as Record<string, unknown>)?.status).toBe("failed");
+  }, 10_000);
+
+  // ── (G) auto default resolve: empty stageOverrides → review.reviewer adapter is claude-cli
+  it("(G) auto default resolve — empty stageOverrides, review.reviewer resolves to claude-cli", async () => {
+    const { getProviderAdapter } = await import("@/lib/ai/registry");
+
+    // Simulate what getProviderForStage("review.reviewer", {}) does:
+    // stageOverrides["review.reviewer"] ?? "auto" → "auto" → resolveProviderId("auto") → "claude-cli"
+    const emptyOverrides = {};
+    const stageKey = "review.reviewer" as const;
+    const id = (emptyOverrides as Record<string, string>)[stageKey] ?? "auto";
+    const adapter = getProviderAdapter(id as Parameters<typeof getProviderAdapter>[0]);
+
+    expect(adapter.id).toBe("claude-cli");
+  }, 5_000);
 });

@@ -28,13 +28,16 @@ import {
   resultEvent,
 } from "./events";
 import type { JobStore } from "./jobStore";
+import { runReviewStage } from "./reviewRunner";
+import type { ReviewIssueDraft } from "../review/mutation";
+import { collectProviderText, parseModelJsonOutput } from "./modelHarness";
 
 // ──────────────────────────────────────────────
 // Public interfaces
 // ──────────────────────────────────────────────
 
 export interface OrchestratorInput {
-  mode: "create" | "resume";
+  mode: "create" | "resume" | "review";
   /** Stage to resume from: "extractor"|"solver"|"verifier"|"figure"|"builder"|"confirm"|"checker" */
   resumeFrom?: string;
   meta: ExamMetaInput;
@@ -50,6 +53,10 @@ export interface OrchestratorInput {
   checkerMaxAttempts?: number;
   /** verifier 재시도 최대 횟수. 0 = verifier 단계 스킵, 기본 3. 범위 1~5 (>=1일 때만 적용). */
   verifierMaxAttempts?: number;
+  /** review mode 전용: 검수 대상 HWPX 경로 (orchestrator 내부에서 mutate). */
+  hwpxPath?: string;
+  /** review mode 전용: 자유 텍스트 추가 지시 (followup 등). reviewer prompt 에 append. */
+  additionalInstruction?: string;
   baseDir: string;
   send: (event: SSEEvent) => void;
   isAborted: () => boolean;
@@ -155,12 +162,188 @@ function getProviderForStage(
 }
 
 // ──────────────────────────────────────────────
-// Orchestrator entry point
+// Review mode orchestrator
 // ──────────────────────────────────────────────
+
+/** System prompt embedded from .claude/agents/ngd-exam-reviewer.md */
+const REVIEWER_SYSTEM_PROMPT = `너는 NGD 오검(오류검수) 전문 에이전트다. **이슈 초안(ReviewIssueDraft[]) 생성만** 담당한다.
+HWPX 파일을 직접 수정하거나, 편집오검 내역표를 기입하거나, fix_namespaces.py를 실행하지 않는다.
+mutation·테이블 기입·후처리는 모두 orchestrator(reviewRunner.ts)가 결정적 코드로 처리한다.
+
+## 출력 형식
+
+반드시 **JSON 배열**만 반환한다 (설명 텍스트 없이, 코드 블록으로 감싸기 가능):
+
+\`\`\`json
+[
+  {
+    "issue_type": "typo" | "missing" | "checklist_violation",
+    "location": {
+      "file": "Contents/section0.xml",
+      "xpath": "optional/xpath/hint",
+      "snippet": "<verbatim text or XML that contains the error>"
+    },
+    "suggested_fix": "<verbatim replacement for snippet, or omit if unclear>",
+    "rule_id": "#N (1–22 체크리스트 번호, 해당 시)",
+    "question_number": 5
+  }
+]
+\`\`\`
+
+### 필드 규칙
+
+- **snippet**: HWPX section0.xml에서 찾을 수 있는 **그대로(verbatim)** 잘라낸 텍스트/XML.
+- **suggested_fix**: snippet과 동일한 길이/위치를 대체하는 verbatim 수정본. 확실하지 않으면 필드를 **생략**한다 (null 금지).
+- **rule_id**: 22개 고정 항목 중 해당하는 번호 (#1~#22). 해당 없으면 생략.
+- **question_number**: 이슈가 발견된 문제 번호 (1-based 정수). 식별 불가능하면 **생략**.
+- **issue_type**: typo (오타), missing (누락), checklist_violation (규칙 위반).
+
+## 자동검증 항목 (생성 금지)
+
+skipRuleIds 배열에 있는 rule_id에 대한 issue는 절대 생성하지 마세요.
+코드(autoValidators.ts)가 이미 처리: #1, #4, #5, #6, #7, #9, #14, #15, #17, #19, #20, #22
+
+## 판단 기준
+
+- 확실한 오타만 suggested_fix 포함 — 애매하면 생략
+- snippet은 반드시 HWPX XML에서 실제로 찾을 수 있는 문자열이어야 함
+- 동일한 오류 패턴이 여러 문제에 걸쳐 있으면 각각 별도 entry로 분리
+- 이슈가 없으면 빈 배열 [] 반환`;
+
+function buildReviewerPrompt(
+  hwpxPath: string,
+  skipRuleIds: string[],
+  additionalInstruction?: string
+): string {
+  const skipList = skipRuleIds.length > 0
+    ? `\n\n다음 rule_id에 대한 issue는 생성하지 마세요 (코드에서 자동 처리): ${skipRuleIds.join(", ")}`
+    : "";
+
+  const addendum = additionalInstruction
+    ? `\n\n## 추가 지시\n${additionalInstruction}`
+    : "";
+
+  return `${REVIEWER_SYSTEM_PROMPT}${skipList}${addendum}
+
+## 작업 대상
+
+HWPX 파일: ${hwpxPath}
+
+1. HWPX ZIP을 열어 Contents/section0.xml을 읽고 문제별 데이터 추출
+2. 내용 비교 및 체크리스트 검증
+3. ReviewIssueDraft[] JSON 배열만 출력 (이슈 없으면 빈 배열 [])`;
+}
+
+async function runReviewModeOrchestrator(
+  input: OrchestratorInput
+): Promise<OrchestratorResult> {
+  const { hwpxPath, send, stageOverrides, additionalInstruction } = input;
+  const providerTelemetry: ProviderTelemetryEntry[] = [];
+
+  // hwpxPath is required for review mode
+  if (!hwpxPath) {
+    send(logEvent("reviewer", "review mode: hwpxPath가 지정되지 않았습니다.", "error"));
+    send(resultEvent("failed", "hwpxPath is required for review mode"));
+    return { status: "failed", resultSummary: "hwpxPath is required for review mode", providerTelemetry };
+  }
+
+  // Build reviewer adapter
+  const reviewerAdapter = getProviderForStage("review.reviewer", stageOverrides);
+
+  const reviewStartedAt = Date.now();
+
+  send(stageEvent("reviewer", "running"));
+  send(progressEvent("reviewer", 5));
+  send(logEvent("reviewer", `오검 시작: ${hwpxPath}`));
+
+  try {
+    const runReviewerAgent = async (
+      targetHwpxPath: string,
+      opts: { skipRuleIds: string[] }
+    ): Promise<ReviewIssueDraft[]> => {
+      const prompt = buildReviewerPrompt(targetHwpxPath, opts.skipRuleIds, additionalInstruction);
+
+      const providerResult = reviewerAdapter.run(prompt, {
+        stageKey: "review.reviewer",
+        mode: "review",
+        allowedTools: ["Read", "Bash", "Glob", "Grep"],
+      });
+
+      const { text, exitCode } = await collectProviderText(providerResult);
+
+      providerTelemetry.push(
+        createProviderTelemetryEntry({
+          stageKey: "review.reviewer",
+          workflowStageKey: "review.reviewer",
+          requestedProvider: reviewerAdapter.id,
+          resolvedProvider: reviewerAdapter.id,
+          attempt: 1,
+          status: exitCode === 0 ? "success" : "failed",
+          elapsedMs: Date.now() - reviewStartedAt,
+          retry: false,
+          errorSummary: exitCode !== 0 ? `exit code ${exitCode}` : undefined,
+        })
+      );
+
+      if (exitCode !== 0) {
+        throw new Error(`Reviewer provider exited with code ${exitCode}`);
+      }
+
+      // Parse JSON array from output
+      const parsed = parseModelJsonOutput(text);
+      if (!parsed.ok) {
+        throw new Error(`Reviewer output parse failed: ${parsed.error.message}`);
+      }
+
+      const value = parsed.value;
+      if (!Array.isArray(value)) {
+        throw new Error("Reviewer output must be a JSON array of ReviewIssueDraft");
+      }
+
+      return value as ReviewIssueDraft[];
+    };
+
+    send(progressEvent("reviewer", 20));
+
+    const reviewOutput = await runReviewStage({
+      hwpxPath,
+      runReviewerAgent,
+    });
+
+    const appliedCount = reviewOutput.applied.length;
+    const failedCount = reviewOutput.failed.length;
+    const summary = `오검 완료: ${appliedCount}건 적용, ${failedCount}건 미적용`;
+
+    send(progressEvent("reviewer", 100));
+    send(stageEvent("reviewer", "done", { summary }));
+    send(resultEvent("success", summary, hwpxPath));
+
+    await persistTelemetry(input, providerTelemetry, "done");
+
+    return {
+      status: "done",
+      outputFile: hwpxPath,
+      resultSummary: summary,
+      providerTelemetry,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    send(stageEvent("reviewer", "failed", { summary: message }));
+    send(logEvent("reviewer", `오검 실패: ${message}`, "error"));
+    send(resultEvent("failed", message));
+    await persistTelemetry(input, providerTelemetry, "failed");
+    return { status: "failed", resultSummary: message, providerTelemetry };
+  }
+}
 
 export async function runStageOrchestrator(
   input: OrchestratorInput
 ): Promise<OrchestratorResult> {
+  // Route to review mode orchestrator if mode === "review"
+  if (input.mode === "review") {
+    return runReviewModeOrchestrator(input);
+  }
+
   const { baseDir, send, isAborted, stageOverrides, meta, questionImages } = input;
 
   const cache = input.cache ?? createStageCache(baseDir);
@@ -215,6 +398,12 @@ export async function runStageOrchestrator(
 
   type PipelineStageName = "extractor" | "solver" | "verifier";
 
+  const stageLabel: Record<PipelineStageName, string> = {
+    extractor: "추출",
+    solver: "풀이",
+    verifier: "검증",
+  };
+
   function onEnter(stage: PipelineStageName, n: number): void {
     const c = stageCounter[stage];
     c.entered++;
@@ -222,7 +411,7 @@ export async function runStageOrchestrator(
       // First question entering this stage — emit "running".
       send(stageEvent(stage, "running"));
     }
-    send(logEvent(stage, `Q${n} ${stage === "extractor" ? "추출" : stage === "solver" ? "풀이" : "검증"} 시작`));
+    send(logEvent(stage, `Q${n} ${stageLabel[stage]} 시작`));
   }
 
   function onLeave(stage: PipelineStageName, n: number, status: "completed" | "failed"): void {
@@ -231,9 +420,8 @@ export async function runStageOrchestrator(
     else c.failed++;
 
     const done = c.completed + c.failed;
-    const label = stage === "extractor" ? "추출" : stage === "solver" ? "풀이" : "검증";
     const resultLabel = status === "completed" ? "완료" : "실패";
-    send(logEvent(stage, `Q${n} ${label} ${resultLabel}`));
+    send(logEvent(stage, `Q${n} ${stageLabel[stage]} ${resultLabel}`));
     send(progressEvent(stage, Math.round((done / c.total) * 100)));
 
     if (done === c.total) {
