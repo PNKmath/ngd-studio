@@ -69,7 +69,7 @@ export function FigureResultSection({
           <div className="grid grid-cols-2 gap-2">
             {figureProblems.map((q) => {
               const retry = retryCount[q.number] ?? 0;
-              const src = `/api/file?path=${encodeURIComponent(`outputs/images/prob${q.number}_final.png`)}&_r=${retry}`;
+              const src = `/api/file?path=${encodeURIComponent(`outputs/images/prob${q.number}_final.png`)}&_r=${retry}&v=${encodeURIComponent(q.updatedAt ?? "")}`;
               const loaded = loadedSet.has(q.number);
               return (
                 <div key={q.number} className="space-y-1">

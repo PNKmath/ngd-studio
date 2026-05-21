@@ -691,6 +691,23 @@ export default function CreateV4Page() {
                 자동 분할 <span className="font-normal opacity-70">(Gemini API 사용)</span>
               </span>
             </label>
+            <label
+              className="flex items-center gap-2 cursor-pointer group"
+              title="추출 전에 nano-banana로 문제 이미지의 손글씨/필기 흔적을 제거합니다. 인쇄된 텍스트·수식·표는 그대로 유지. 체크 해제 시 원본 이미지로 진행."
+            >
+              <input
+                type="checkbox"
+                checked={aiSettings.imageCleaningEnabled}
+                onChange={(e) => setAiSettings(writeAISettings({
+                  ...aiSettings,
+                  imageCleaningEnabled: e.target.checked,
+                }))}
+                className="accent-primary w-3.5 h-3.5"
+              />
+              <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors font-bold tracking-tight">
+                이미지 정리 <span className="font-normal opacity-70">(손글씨 제거, Gemini API 사용)</span>
+              </span>
+            </label>
             <div className="flex items-center gap-3">
               <label
                 className="flex items-center gap-1.5"
@@ -828,7 +845,7 @@ export default function CreateV4Page() {
               />
             ) : (
               <div className="flex flex-col h-full">
-                <div className="shrink-0 border-b px-6 py-3 bg-background/50">
+                <div className="shrink-0 border-b px-6 py-3 bg-background/50 max-h-[50vh] overflow-y-auto">
                   <QuestionPanelHeader />
                 </div>
                 <div className="shrink-0 px-4 py-2 border-b bg-muted/20 flex items-center justify-between">

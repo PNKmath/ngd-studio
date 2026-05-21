@@ -52,10 +52,11 @@ describe("AI settings storage", () => {
 
   it("writes normalized settings", () => {
     const storage = createStorage();
-    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true, checkerMaxAttempts: 2, verifierMaxAttempts: 3, stageSkip: {} }, storage)).toEqual({
+    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true, imageCleaningEnabled: true, checkerMaxAttempts: 2, verifierMaxAttempts: 3, stageSkip: {} }, storage)).toEqual({
       defaultProvider: "claude-cli",
       stageOverrides: {},
       figureRegen: true,
+      imageCleaningEnabled: true,
       checkerMaxAttempts: 2,
       verifierMaxAttempts: 3,
       stageSkip: {},
@@ -129,6 +130,7 @@ describe("AI settings storage", () => {
         "review.reviewer": "deepseek-v4",
       },
       figureRegen: true,
+      imageCleaningEnabled: true,
       checkerMaxAttempts: 2,
       verifierMaxAttempts: 3,
       stageSkip: {},
@@ -140,6 +142,7 @@ describe("AI settings storage", () => {
         "review.reviewer": "deepseek-v4",
       },
       figureRegen: true,
+      imageCleaningEnabled: true,
       checkerMaxAttempts: 2,
       verifierMaxAttempts: 3,
       stageSkip: {},
@@ -192,6 +195,7 @@ describe("AI settings storage", () => {
       defaultProvider: "auto",
       stageOverrides: {},
       figureRegen: true,
+      imageCleaningEnabled: true,
       checkerMaxAttempts: 2,
       verifierMaxAttempts: 3,
       stageSkip: {},

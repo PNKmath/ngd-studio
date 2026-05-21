@@ -87,8 +87,10 @@ export async function determineStartStage(
   cache: StageCache,
   questionNumbers: number[]
 ): Promise<DetermineStartStageResult> {
-  // Explicit override — trust the caller.
-  if (resumeFrom) {
+  // "auto" sentinel from the [작업 재개] button → fall through to disk-scan.
+  // (Without this, normalizeResumeName falls back to "extractor" and re-runs
+  // every downstream stage including figure even when artifacts already exist.)
+  if (resumeFrom && resumeFrom !== "auto") {
     const normalized = normalizeResumeName(resumeFrom);
     return {
       startStage: normalized,
@@ -96,7 +98,7 @@ export async function determineStartStage(
     };
   }
 
-  // Auto-detect from cache.
+  // Auto-detect from cache (resumeFrom undefined or "auto").
   return detectFromCache(cache, questionNumbers);
 }
 

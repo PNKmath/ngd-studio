@@ -104,6 +104,7 @@ export function useJobRunner() {
             provider: selectedProvider,
             stageOverrides: aiSettings.stageOverrides,
             figureRegen: aiSettings.figureRegen,
+            imageCleaningEnabled: aiSettings.imageCleaningEnabled,
             checkerMaxAttempts: aiSettings.checkerMaxAttempts,
             verifierMaxAttempts: aiSettings.verifierMaxAttempts,
             stageSkip: aiSettings.stageSkip,

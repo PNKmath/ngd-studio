@@ -25,10 +25,25 @@ from google.genai import types
 GEMINI_MODEL = "gemini-3.1-flash-image-preview"
 
 PROMPT_TEMPLATE = (
-    "Redraw this math exam figure cleanly and precisely as a simple diagram on a white background. "
+    "You are extracting a math diagram from a scanned Korean math exam "
+    "question. The reference image is a crop region that may also contain "
+    "extraneous content around the figure (parts of problem text, answer "
+    "choice markers, page edges, handwriting). Identify the geometric figure "
+    "within the crop and output ONLY that figure on a clean white background. "
+    "\n\n"
+    "Remove handwriting, pen marks, smudges, scan artifacts, and any "
+    "non-figure content (surrounding Korean text, choice markers like ①②③④⑤, "
+    "page margins, problem numbers). "
+    "Keep all geometric elements (lines, curves, axes, shapes), labels "
+    "(letters, numbers, point names like A B C P), angle markers, length "
+    "markers, and printed annotations that belong to the figure exactly as "
+    "they appear in the reference. "
     "{desc}"
-    "Simple, geometric, textbook-style, black-and-white, white background, clean crisp lines. "
-    "No text, no numbers, no labels, no handwriting."
+    "Maintain the exact composition, proportions, and label positions of the "
+    "figure itself. "
+    "Output crisp black lines on a white background, textbook print quality. "
+    "Do not redraw, restructure, or simplify — only clean and extract the "
+    "figure."
 )
 
 
@@ -157,10 +172,16 @@ def process_figure(
     crop_ratio = info.get("crop_ratio")
     desc = info.get("description_en", "")
 
-    src = question_images_dir / f"q{n:02d}.png"
-    if not src.exists():
-        print(f"  [Q{n}] 소스 이미지 없음: {src}")
-        return {"status": "failed", "error": f"source image missing: {src}"}
+    # cleaned/q{N}.png가 존재하면 우선 사용 (손글씨 제거된 ref가 figure 품질에 유리)
+    cleaned_src = question_images_dir / "cleaned" / f"q{n:02d}.png"
+    raw_src = question_images_dir / f"q{n:02d}.png"
+    if cleaned_src.exists():
+        src = cleaned_src
+    elif raw_src.exists():
+        src = raw_src
+    else:
+        print(f"  [Q{n}] 소스 이미지 없음: {raw_src}")
+        return {"status": "failed", "error": f"source image missing: {raw_src}"}
 
     img = Image.open(str(src))
     iw, ih = img.size

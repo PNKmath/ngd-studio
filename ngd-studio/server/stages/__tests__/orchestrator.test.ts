@@ -257,6 +257,20 @@ describe("determineStartStage", () => {
     expect(result.startStage).toBe("extractor");
     expect(result.targetQuestions).toEqual([2]);
   });
+
+  it("treats 'auto' sentinel same as undefined (disk-scan, not extractor fallback)", async () => {
+    // [작업 재개] 버튼이 보내는 'auto' 값이 normalizeResumeName의 unknown fallback으로
+    // 빠지면서 figure 단계가 다시 도는 회귀를 막는다.
+    await mkdir(cache.paths.cacheDir, { recursive: true });
+    await writeFile(cache.extractorResultPath(1), JSON.stringify({ ok: true }), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify({ ok: true }), "utf8");
+    await writeFile(cache.verifierResultPath(1), JSON.stringify({ ok: true }), "utf8");
+    // figure_status.json 존재 → figure 단계 skip 되어야 함
+    await writeFile(cache.paths.figureStatus, JSON.stringify({ status: "done", questions: {} }), "utf8");
+
+    const result = await determineStartStage("auto", cache, [1]);
+    expect(result.startStage).toBe("builder");
+  });
 });
 
 // ──────────────────────────────────────────────

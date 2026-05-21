@@ -26,6 +26,7 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
   defaultProvider: "auto",
   stageOverrides: {},
   figureRegen: true,
+  imageCleaningEnabled: true,
   checkerMaxAttempts: 2,
   verifierMaxAttempts: 3,
   stageSkip: {},
@@ -36,6 +37,8 @@ export interface AISettings {
   stageOverrides: StageOverrideMap;
   /** Gemini(nano-banana)로 그림을 재생성할지 여부. false면 crop+워터마크만. */
   figureRegen: boolean;
+  /** nano-banana로 문제 이미지의 손글씨/필기 흔적을 정리할지 여부. false면 원본 그대로 사용. */
+  imageCleaningEnabled: boolean;
   /** checker auto-fix 시도 최대 횟수. 0 = 검사만, 기본 2. 범위 0~5. */
   checkerMaxAttempts: number;
   /** verifier 재시도 최대 횟수. 0 = verifier 단계 스킵, 기본 3. 범위 0~5. */
@@ -182,6 +185,7 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
       defaultProvider: normalizeSelectableProviderId(parsed.defaultProvider),
       stageOverrides: normalizeStageOverrides(parsed.stageOverrides),
       figureRegen: parsed.figureRegen !== false,
+      imageCleaningEnabled: parsed.imageCleaningEnabled !== false,
       checkerMaxAttempts: normalizeCheckerMaxAttempts(parsed.checkerMaxAttempts),
       verifierMaxAttempts: normalizeVerifierMaxAttempts(
         parsed.verifierMaxAttempts,
@@ -205,6 +209,7 @@ export function writeAISettings(settings: AISettings, storage = getBrowserStorag
     defaultProvider: normalizeSelectableProviderId(settings.defaultProvider),
     stageOverrides: normalizeStageOverrides(settings.stageOverrides),
     figureRegen: settings.figureRegen !== false,
+    imageCleaningEnabled: settings.imageCleaningEnabled !== false,
     checkerMaxAttempts: normalizeCheckerMaxAttempts(settings.checkerMaxAttempts),
     verifierMaxAttempts,
     stageSkip,

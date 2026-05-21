@@ -6,8 +6,10 @@ export interface StageCachePaths {
   cacheDir: string;
   previousCacheDir: string;
   questionImagesDir: string;
+  cleanedImagesDir: string;
   examData: string;
   figureStatus: string;
+  cleaningStatus: string;
   buildStatus: string;
 }
 
@@ -21,6 +23,7 @@ export interface QuestionCacheState {
 export interface StageCache {
   readonly paths: StageCachePaths;
   questionImagePath(questionNumber: number): string;
+  cleanedImagePath(questionNumber: number): string;
   questionJsonPath(questionNumber: number): string;
   extractorResultPath(questionNumber: number): string;
   solverResultPath(questionNumber: number): string;
@@ -44,13 +47,16 @@ export class FileBackedStageCache implements StageCache {
 
   constructor(examDir: string) {
     const cacheDir = path.join(examDir, ".v3cache");
+    const questionImagesDir = path.join(examDir, "question_images");
     this.paths = {
       examDir,
       cacheDir,
       previousCacheDir: path.join(examDir, ".v3cache_prev"),
-      questionImagesDir: path.join(examDir, "question_images"),
+      questionImagesDir,
+      cleanedImagesDir: path.join(questionImagesDir, "cleaned"),
       examData: path.join(cacheDir, "exam_data.json"),
       figureStatus: path.join(cacheDir, "figure_status.json"),
+      cleaningStatus: path.join(cacheDir, "cleaning_status.json"),
       buildStatus: path.join(cacheDir, "build_status.json"),
     };
   }
@@ -61,6 +67,10 @@ export class FileBackedStageCache implements StageCache {
 
   questionImagePath(questionNumber: number): string {
     return path.join(this.paths.questionImagesDir, `q${this.pad(questionNumber)}.png`);
+  }
+
+  cleanedImagePath(questionNumber: number): string {
+    return path.join(this.paths.cleanedImagesDir, `q${this.pad(questionNumber)}.png`);
   }
 
   questionJsonPath(questionNumber: number): string {

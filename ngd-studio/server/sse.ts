@@ -136,6 +136,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     provider?: AIProviderId;
     stageOverrides?: Partial<Record<AIStageKey, AIProviderId>>;
     figureRegen?: boolean;
+    imageCleaningEnabled?: boolean;
     checkerMaxAttempts?: number;
     verifierMaxAttempts?: number;
     stageSkip?: Partial<Record<string, boolean>>;
@@ -325,6 +326,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         stageOverrides,
         stageSkip,
         figureRegen: body.figureRegen,
+        imageCleaningEnabled: body.imageCleaningEnabled,
         checkerMaxAttempts: body.checkerMaxAttempts,
         verifierMaxAttempts: body.verifierMaxAttempts,
         baseDir: BASE_DIR,

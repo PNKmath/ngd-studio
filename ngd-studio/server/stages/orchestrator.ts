@@ -1,5 +1,5 @@
 import path from "path";
-import { readFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import type { SSEEvent } from "@/lib/claude";
 import type { AIProviderId } from "@/lib/ai/types";
 import { getProviderAdapter } from "@/lib/ai/registry";
@@ -16,6 +16,7 @@ import { runVerifierStage } from "./verifier";
 import { runBuilderStage } from "./builder";
 import { runCheckerWithAutoFix } from "./checker";
 import { runFigureStage } from "./figureRunner";
+import { runCleanerStage } from "./cleanerRunner";
 import { readRuntimeEnv } from "../../lib/server/runtimeEnv";
 import { determineStartStage, shouldRunStage } from "./resumeState";
 import { applyVerifierRetry } from "./stagePlan";
@@ -43,6 +44,8 @@ export interface OrchestratorInput {
   stageSkip?: StageSkipMap;
   /** Gemini로 그림을 재생성할지. false면 crop+워터마크만 (figure_processor.py --no-regen). default true. */
   figureRegen?: boolean;
+  /** nano-banana로 문제 이미지의 손글씨/필기 흔적을 정리할지. default true. false면 원본 그대로. */
+  imageCleaningEnabled?: boolean;
   /** checker auto-fix 시도 최대 횟수. 0 = 검사만, 기본 2. 범위 0~5. */
   checkerMaxAttempts?: number;
   /** verifier 재시도 최대 횟수. 0 = verifier 단계 스킵, 기본 3. 범위 1~5 (>=1일 때만 적용). */
@@ -548,6 +551,57 @@ export async function runStageOrchestrator(
   }
 
   try {
+    // ── Stage 0: Image cleaning (nano-banana) ─────────────────────────────
+    // extractor 진입 전에 손글씨/필기 흔적을 제거해 추출 정확도와 figure ref 품질을 함께 끌어올린다.
+    // 토글 OFF면 원본을 cleaned/로 복사만(spawn은 함). resume에서 cleaned가 이미 있으면 skip.
+    const runCleaner = shouldRunStage(startStage, "extractor");
+    if (runCleaner && !checkAborted()) {
+      const cleaningEnabled = input.imageCleaningEnabled !== false;
+      const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
+      let cleanFlag = cleaningEnabled;
+      if (cleanFlag && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
+        send(logEvent(
+          "create.cleaned",
+          "GEMINI_API_KEY 미설정 — nano-banana 정리 생략, 원본 그대로 진행합니다.",
+          "warn",
+        ));
+        cleanFlag = false;
+      }
+      // 이미 모든 문제의 cleaned가 존재하면 spawn 자체를 건너뛴다.
+      const needCleaning = await needsCleaningRun(cache, questionNumbers);
+      if (!needCleaning) {
+        send(stageEvent("create.cleaned", "done", { summary: "캐시로 스킵" }));
+        send(progressEvent("create.cleaned", 100));
+      } else {
+        send(stageEvent("create.cleaned", "running"));
+        send(progressEvent("create.cleaned", 5));
+        send(logEvent("create.cleaned", cleanFlag
+          ? "image_cleaner.py 실행 (nano-banana로 손글씨 제거)."
+          : "image_cleaner.py 실행 (--no-clean: 원본 복사만)."));
+        const cleanerResult = await runCleanerStage({
+          questionImagesDir: cache.paths.questionImagesDir,
+          statusOutPath: cache.paths.cleaningStatus,
+          clean: cleanFlag,
+          baseDir,
+          env: runtimeEnv as NodeJS.ProcessEnv,
+        });
+        if (cleanerResult.status !== "failed") {
+          send(progressEvent("create.cleaned", 100));
+          send(stageEvent("create.cleaned", "done", {
+            summary: cleanFlag ? "이미지 정리 완료" : "정리 OFF — 원본 사용",
+          }));
+        } else {
+          // cleaning 실패는 hard fail이 아님 — 원본으로 진행.
+          send(stageEvent("create.cleaned", "failed", { summary: "정리 실패, 원본으로 진행" }));
+          send(logEvent("create.cleaned", "image_cleaner.py 실패 — 원본 이미지로 진행합니다.", "warn"));
+        }
+      }
+    }
+
+    // 정리본이 있으면 extractor 입력 경로를 cleaned/로 스왑한다.
+    // figure_processor.py도 cleaned/가 존재하면 그쪽을 우선 사용하도록 처리되어 있다.
+    const effectiveQuestionImages = await swapToCleanedPaths(cache, questionImages);
+
     // ── Per-question pipeline: extractor → solver → verifier ──────────────
     const runExtractor = shouldRunStage(startStage, "extractor");
     const runSolver    = shouldRunStage(startStage, "solver");
@@ -555,7 +609,7 @@ export async function runStageOrchestrator(
 
     // All questions participate when any per-question stage is active;
     // processQuestion() handles per-question skip logic via disk-scan.
-    const pipelineQuestions = (runExtractor || runSolver || runVerifier) ? questionImages : [];
+    const pipelineQuestions = (runExtractor || runSolver || runVerifier) ? effectiveQuestionImages : [];
 
     const failedQuestionNumbers = new Set<number>();
 
@@ -815,6 +869,41 @@ async function readCacheJson(filePath: string): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await stat(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 모든 문제의 cleaned 정리본이 이미 존재하면 false (skip), 하나라도 없으면 true. */
+async function needsCleaningRun(cache: StageCache, questionNumbers: number[]): Promise<boolean> {
+  if (questionNumbers.length === 0) return false;
+  const checks = await Promise.all(
+    questionNumbers.map((n) => fileExists(cache.cleanedImagePath(n)))
+  );
+  return checks.some((exists) => !exists);
+}
+
+/**
+ * questionImages 배열의 path를 cleaned/q{N}.png 존재 시 그쪽으로 스왑한다.
+ * cleaned가 없으면 원본 경로 그대로 둔다.
+ */
+async function swapToCleanedPaths(
+  cache: StageCache,
+  imgs: { number: number; path: string }[]
+): Promise<{ number: number; path: string }[]> {
+  return Promise.all(imgs.map(async (img) => {
+    const cleanedPath = cache.cleanedImagePath(img.number);
+    if (await fileExists(cleanedPath)) {
+      return { number: img.number, path: cleanedPath };
+    }
+    return img;
+  }));
 }
 
 interface FigureStatusFile {

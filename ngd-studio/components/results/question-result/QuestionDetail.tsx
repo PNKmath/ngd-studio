@@ -82,7 +82,7 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4">처리된 그림</h3>
                <div className="rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-shadow">
                  <img
-                   src={`/api/file?path=${encodeURIComponent(`outputs/images/prob${qr.number}_final.png`)}`}
+                   src={`/api/file?path=${encodeURIComponent(`outputs/images/prob${qr.number}_final.png`)}&v=${encodeURIComponent(qr.updatedAt ?? "")}`}
                    className="w-full h-auto object-contain"
                    alt="Final Figure"
                    onError={(e) => { (e.target as HTMLImageElement).src = "https://placehold.co/400x200?text=그림+처리+중"; }}
