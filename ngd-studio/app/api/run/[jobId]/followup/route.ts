@@ -1,10 +1,9 @@
 import { NextRequest } from "next/server";
-import { runClaude, transformToSSE, type SSEEvent } from "@/lib/claude";
+import { type SSEEvent } from "@/lib/claude";
 import { readFile, writeFile, readdir } from "fs/promises";
 import path from "path";
 import { existsSync } from "fs";
-import { shouldUseCodeOrchestrator } from "@/server/stages/branchHelper";
-import { runStageOrchestrator } from "@/server/stages/orchestrator";
+import { runStageOrchestrator, type OrchestratorResult } from "@/server/stages/orchestrator";
 import { normalizeStageOverrides, type StageOverrideMap } from "@/lib/ai/settings";
 
 const DATA_DIR = path.join(process.cwd(), "data/jobs");
@@ -42,6 +41,73 @@ function parseResumeArgs(instruction: string): ResumeArgs {
   return { resumeFrom, targetQuestions };
 }
 
+/** Persist orchResult back to the job file, swallowing write errors. */
+async function persistResult(
+  jobFile: string,
+  job: Record<string, unknown>,
+  orchResult: OrchestratorResult
+): Promise<void> {
+  try {
+    job.status = orchResult.status === "done" ? "done" : "failed";
+    const followups = job.followups as Array<Record<string, unknown>> | undefined;
+    const lastFollowup = followups?.[followups.length - 1];
+    if (lastFollowup) lastFollowup.finishedAt = new Date().toISOString();
+    if (orchResult.outputFile) job.outputFile = orchResult.outputFile;
+    if (orchResult.resultSummary) job.resultSummary = orchResult.resultSummary;
+    if (orchResult.providerTelemetry?.length) {
+      job.providerTelemetry = [
+        ...((job.providerTelemetry as unknown[]) ?? []),
+        ...orchResult.providerTelemetry,
+      ];
+    }
+    await writeFile(jobFile, JSON.stringify(job, null, 2));
+  } catch {
+    // ignore persistence errors
+  }
+}
+
+/** Mark job as failed and stamp finishedAt, swallowing write errors. */
+async function persistFailure(
+  jobFile: string,
+  job: Record<string, unknown>
+): Promise<void> {
+  try {
+    job.status = "failed";
+    const followups = job.followups as Array<Record<string, unknown>> | undefined;
+    const lastFollowup = followups?.[followups.length - 1];
+    if (lastFollowup) lastFollowup.finishedAt = new Date().toISOString();
+    await writeFile(jobFile, JSON.stringify(job, null, 2));
+  } catch {
+    // ignore
+  }
+}
+
+/** Wrap an async SSE producer into a streaming Response. */
+function sseResponse(
+  producer: (send: (e: SSEEvent) => void) => Promise<void>
+): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (sseEvent: SSEEvent) => {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(sseEvent)}\n\n`)
+        );
+      };
+      await producer(send);
+      controller.close();
+    },
+    cancel() {},
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
@@ -66,248 +132,145 @@ export async function POST(
       });
     }
 
-    const job = JSON.parse(await readFile(jobFile, "utf-8"));
+    const job = JSON.parse(await readFile(jobFile, "utf-8")) as Record<string, unknown>;
 
-    // Determine routing: resume command + code orchestrator → orchestrator path
-    const isResumeCommand = /^\s*resume\b/.test(instruction.trim());
     const stageOverrides: StageOverrideMap = normalizeStageOverrides(
-      job.stageOverrides ?? {}
+      (job.stageOverrides as Record<string, unknown>) ?? {}
     );
-    const jobMode: string = job.mode ?? "create";
-    const useCodeOrchestrator =
-      isResumeCommand && shouldUseCodeOrchestrator(jobMode, stageOverrides);
+    const jobMode: string = (job.mode as string) ?? "create";
 
     // Update job status + record followup
     job.status = "running";
-    job.followups = job.followups ?? [];
-    job.followups.push({
+    job.followups = (job.followups as unknown[]) ?? [];
+    (job.followups as unknown[]).push({
       instruction,
       startedAt: new Date().toISOString(),
     });
     await writeFile(jobFile, JSON.stringify(job, null, 2));
 
-    if (useCodeOrchestrator) {
-      const { resumeFrom, targetQuestions } = parseResumeArgs(instruction);
+    const meta = (job.meta as Record<string, unknown>) ?? {};
 
-      // Build question image list.
-      // If --q was given, use only those numbers; otherwise derive from cache
-      // (orchestrator will auto-detect via resumeState).
-      // We always produce paths for all known question images from the cache dir
-      // so the orchestrator can look them up. targetQuestions is passed as
-      // resumeFrom so the orchestrator filters per-question stages itself.
-      const questionImagesDir = path.join(
-        BASE_DIR,
-        "inputs",
-        "시험지 제작",
-        "question_images"
-      );
+    // ── review mode ─────────────────────────────────────────────────────────
+    if (jobMode === "review") {
+      const hwpxPath: string | undefined =
+        (job.outputFile as string | undefined) ??
+        ((job.inputFiles as unknown[] | undefined) ?? []).find(
+          (f): f is string => typeof f === "string" && f.toLowerCase().endsWith(".hwpx")
+        );
 
-      // Collect question numbers: prefer --q list, else scan directory
-      let questionNumbers: number[] = targetQuestions ?? [];
-      if (questionNumbers.length === 0) {
-        // Try to infer from the cache dir (same pattern as sse.ts / original create flow)
-        try {
-          const files = await readdir(questionImagesDir);
-          questionNumbers = files
-            .map((f) => {
-              const m = /^q(\d{2})\.png$/.exec(f);
-              return m ? parseInt(m[1], 10) : NaN;
-            })
-            .filter((n) => !isNaN(n))
-            .sort((a, b) => a - b);
-        } catch {
-          // question_images dir may not exist yet — orchestrator will handle gracefully
-        }
-      }
-
-      // If still empty, fall back to a sensible default so orchestrator can proceed
-      if (questionNumbers.length === 0) {
-        questionNumbers = Array.from({ length: 20 }, (_, i) => i + 1);
-      }
-
-      const questionImages = questionNumbers.map((num) => {
-        const padded = String(num).padStart(2, "0");
-        return {
-          number: num,
-          path: path.join(questionImagesDir, `q${padded}.png`),
-        };
-      });
-
-      const meta = (job.meta as Record<string, unknown> | undefined) ?? {};
-      const encoder = new TextEncoder();
-
-      const stream = new ReadableStream({
-        async start(controller) {
-          const send = (sseEvent: SSEEvent) => {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify(sseEvent)}\n\n`)
-            );
-          };
-
-          send({
-            event: "log",
-            data: {
-              stage: "system",
-              message: `resume 명령 감지 → orchestrator 라우팅 (from=${resumeFrom}${targetQuestions ? `, q=[${targetQuestions.join(",")}]` : ""})`,
-              timestamp: new Date().toISOString(),
-              level: "info",
-            },
-          });
-
-          try {
-            const orchResult = await runStageOrchestrator({
-              mode: "resume",
-              resumeFrom,
-              meta,
-              questionImages,
-              stageOverrides,
-              baseDir: BASE_DIR,
-              send,
-              isAborted: () => false,
-            });
-
-            // Persist final status
-            try {
-              job.status = orchResult.status === "done" ? "done" : "failed";
-              const lastFollowup = job.followups[job.followups.length - 1];
-              if (lastFollowup) lastFollowup.finishedAt = new Date().toISOString();
-              if (orchResult.outputFile)
-                job.outputFile = orchResult.outputFile;
-              if (orchResult.resultSummary)
-                job.resultSummary = orchResult.resultSummary;
-              if (orchResult.providerTelemetry?.length) {
-                job.providerTelemetry = [
-                  ...(job.providerTelemetry ?? []),
-                  ...orchResult.providerTelemetry,
-                ];
-              }
-              await writeFile(jobFile, JSON.stringify(job, null, 2));
-            } catch {
-              // ignore persistence errors
-            }
-          } catch (err) {
-            send({
-              event: "error",
-              data: {
-                message: err instanceof Error ? err.message : "Orchestrator error",
-              },
-            });
-            try {
-              job.status = "failed";
-              const lastFollowup = job.followups[job.followups.length - 1];
-              if (lastFollowup) lastFollowup.finishedAt = new Date().toISOString();
-              await writeFile(jobFile, JSON.stringify(job, null, 2));
-            } catch {
-              // ignore
-            }
-          } finally {
-            controller.close();
-          }
-        },
-        cancel() {},
-      });
-
-      return new Response(stream, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      });
-    }
-
-    const nonEmptyInputs = (job.inputFiles ?? []).filter(
-      (f: unknown): f is string => typeof f === "string" && f.trim().length > 0
-    );
-
-    const promptLines: string[] = [
-      `이전 작업(${job.mode === "create" ? "시험지 제작" : "오검"})의 결과를 수정해줘.`,
-    ];
-    if (nonEmptyInputs.length > 0) {
-      promptLines.push(`입력 파일: ${nonEmptyInputs.join(", ")}`);
-    } else {
-      promptLines.push(
-        `작업 폴더: 현재 cwd의 \`inputs/시험지 제작/.v3cache/\` 캐시와 \`inputs/시험지 제작/question_images/\`를 사용해서 어떤 작업인지 자동 판별해.`
-      );
-    }
-    promptLines.push(``, `추가 지시:`, instruction);
-    if (isResumeCommand) {
-      promptLines.push(``, `Skill 도구로 "ngd-exam-create" 스킬을 호출해서 진행해.`);
-    }
-    const prompt = promptLines.join("\n");
-
-    // Spawn Claude CLI
-    const { process: proc, events } = runClaude(prompt, {
-      cwd: BASE_DIR,
-      maxTurns: 30,
-    });
-
-    const currentStage = { name: job.mode === "review" ? "reviewer" : "builder" };
-    const encoder = new TextEncoder();
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        const send = (sseEvent: SSEEvent) => {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(sseEvent)}\n\n`)
-          );
-        };
-
-        send({
-          event: "stage",
-          data: { name: currentStage.name, status: "running" },
-        });
+      return sseResponse(async (send) => {
         send({
           event: "log",
           data: {
             stage: "system",
-            message: `추가 지시: ${instruction}`,
+            message: `review followup → orchestrator 라우팅 (additionalInstruction 전달)`,
             timestamp: new Date().toISOString(),
             level: "info",
           },
         });
 
         try {
-          for await (const event of events) {
-            const sseEvents = transformToSSE(event, currentStage);
-            for (const sse of sseEvents) {
-              send(sse);
-            }
-          }
-
-          await new Promise<void>((resolve) => {
-            proc.on("close", () => resolve());
+          const orchResult = await runStageOrchestrator({
+            mode: "review",
+            hwpxPath,
+            additionalInstruction: instruction,
+            meta,
+            questionImages: [],
+            stageOverrides,
+            baseDir: BASE_DIR,
+            send,
+            isAborted: () => false,
           });
+          await persistResult(jobFile, job, orchResult);
         } catch (err) {
           send({
             event: "error",
             data: {
-              message: err instanceof Error ? err.message : "Unknown error",
+              message: err instanceof Error ? err.message : "Orchestrator error",
             },
           });
-        } finally {
-          try {
-            job.status = "done";
-            const lastFollowup = job.followups[job.followups.length - 1];
-            if (lastFollowup) lastFollowup.finishedAt = new Date().toISOString();
-            await writeFile(jobFile, JSON.stringify(job, null, 2));
-          } catch {
-            // ignore
-          }
-          controller.close();
+          await persistFailure(jobFile, job);
         }
-      },
-      cancel() {
-        proc.kill("SIGTERM");
-      },
+      });
+    }
+
+    // ── create / resume mode ─────────────────────────────────────────────────
+    const isResumeCommand = /^\s*resume\b/.test(instruction.trim());
+    const { resumeFrom, targetQuestions } = isResumeCommand
+      ? parseResumeArgs(instruction)
+      : { resumeFrom: "extractor", targetQuestions: undefined };
+
+    const questionImagesDir = path.join(
+      BASE_DIR,
+      "inputs",
+      "시험지 제작",
+      "question_images"
+    );
+
+    // Collect question numbers: prefer --q list, else scan directory
+    let questionNumbers: number[] = targetQuestions ?? [];
+    if (questionNumbers.length === 0) {
+      try {
+        const files = await readdir(questionImagesDir);
+        questionNumbers = files
+          .map((f) => {
+            const m = /^q(\d{2})\.png$/.exec(f);
+            return m ? parseInt(m[1], 10) : NaN;
+          })
+          .filter((n) => !isNaN(n))
+          .sort((a, b) => a - b);
+      } catch {
+        // question_images dir may not exist yet — orchestrator will handle gracefully
+      }
+    }
+
+    // If still empty, fall back to a sensible default so orchestrator can proceed
+    if (questionNumbers.length === 0) {
+      questionNumbers = Array.from({ length: 20 }, (_, i) => i + 1);
+    }
+
+    const questionImages = questionNumbers.map((num) => {
+      const padded = String(num).padStart(2, "0");
+      return {
+        number: num,
+        path: path.join(questionImagesDir, `q${padded}.png`),
+      };
     });
 
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
+    return sseResponse(async (send) => {
+      send({
+        event: "log",
+        data: {
+          stage: "system",
+          message: isResumeCommand
+            ? `resume 명령 감지 → orchestrator 라우팅 (from=${resumeFrom}${targetQuestions ? `, q=[${targetQuestions.join(",")}]` : ""})`
+            : `자유 텍스트 followup → orchestrator resume 라우팅 (from=extractor): ${instruction}`,
+          timestamp: new Date().toISOString(),
+          level: "info",
+        },
+      });
+
+      try {
+        const orchResult = await runStageOrchestrator({
+          mode: "resume",
+          resumeFrom,
+          meta,
+          questionImages,
+          stageOverrides,
+          baseDir: BASE_DIR,
+          send,
+          isAborted: () => false,
+        });
+        await persistResult(jobFile, job, orchResult);
+      } catch (err) {
+        send({
+          event: "error",
+          data: {
+            message: err instanceof Error ? err.message : "Orchestrator error",
+          },
+        });
+        await persistFailure(jobFile, job);
+      }
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Followup failed";
