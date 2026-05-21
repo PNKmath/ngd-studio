@@ -74,6 +74,12 @@ export function parseExamMetaFromFilename(fileName: string): ParsedFilenameMeta 
     parsed.range = parts[rangeIndex];
   }
 
+  // 학교급 토큰 파싱: "고"/"고등" → "고", "중"/"중등" → "중"
+  const schoolLevelTokenIndex = parts.findIndex((part) => SCHOOL_LEVEL_PATTERN.test(part));
+  if (schoolLevelTokenIndex >= 0) {
+    parsed.schoolLevel = parseSchoolLevelToken(parts[schoolLevelTokenIndex]);
+  }
+
   return Object.values(parsed).some((value) => value !== undefined) ? parsed : null;
 }
 
@@ -117,4 +123,13 @@ function isStructuralToken(part: string) {
     PUBLISHER_PATTERN.test(part) ||
     SUBJECT_MAP[part] !== undefined
   );
+}
+
+/**
+ * Parse school level token ("중"/"중등" → "중", "고"/"고등" → "고").
+ * Returns undefined for tokens that don't match SCHOOL_LEVEL_PATTERN.
+ */
+export function parseSchoolLevelToken(part: string): "중" | "고" | undefined {
+  if (!SCHOOL_LEVEL_PATTERN.test(part)) return undefined;
+  return part === "중" || part === "중등" ? "중" : "고";
 }

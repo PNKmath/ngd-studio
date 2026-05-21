@@ -125,6 +125,58 @@ describe("buildExamDataJson", () => {
     expect(written.problems).toHaveLength(3);
   });
 
+  it("schoolLevel='중' → filename_base 에 [중] 포함 + info.school_level === '중'", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    await writeFile(cache.questionJsonPath(1), JSON.stringify({ number: 1 }), "utf8");
+
+    const meta = {
+      school: "테스트중학교",
+      grade: 3,
+      subject: "수학",
+      semester: "1학기",
+      exam_type: "중간",
+      year: 2024,
+      code: "NGD",
+      region: "서울",
+      schoolLevel: "중" as const,
+    };
+
+    const result = await buildExamDataJson({ cache, meta, questionNumbers: [1] });
+
+    expect(result.info.school_level).toBe("중");
+    expect(result.info.schoolLevel).toBe("중");
+    expect(result.info.filename_base).toContain("[중]");
+    expect(result.info.filename_base).not.toContain("[고]");
+  });
+
+  it("schoolLevel 미지정 → filename_base 에 [고] 포함 (legacy 회귀 없음)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    await writeFile(cache.questionJsonPath(1), JSON.stringify({ number: 1 }), "utf8");
+
+    const meta = {
+      school: "테스트고등학교",
+      grade: 2,
+      subject: "수학 I",
+      semester: "1학기",
+      exam_type: "중간",
+      year: 2025,
+      code: "NGD",
+      region: "경기",
+      // schoolLevel 미지정 — default "고" 적용
+    };
+
+    const result = await buildExamDataJson({ cache, meta, questionNumbers: [1] });
+
+    expect(result.info.school_level).toBe("고");
+    expect(result.info.schoolLevel).toBe("고");
+    expect(result.info.filename_base).toContain("[고]");
+    expect(result.info.filename_base).not.toContain("[중]");
+  });
+
   it("includes all meta fields in the output info object", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);

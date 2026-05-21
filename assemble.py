@@ -505,7 +505,8 @@ def main(exam_json=None, output_dir=None, base_path=None):
         school = info.get("school", "")
         subject_code = info.get("subject_code", info.get("subject", ""))
         range_str = info.get("range", "").replace(" ~ ", "~")
-        filename = f"[{code}][고][{year}][{grade}-{sem_num}-{exam_code}][{region}][{school}][{subject_code}][{range_str}][{code}]{ver_suffix}.hwpx"
+        school_level = info.get("school_level", "고")  # default "고" for legacy
+        filename = f"[{code}][{school_level}][{year}][{grade}-{sem_num}-{exam_code}][{region}][{school}][{subject_code}][{range_str}][{code}]{ver_suffix}.hwpx"
 
     output_path = os.path.join(output_dir, filename)
     os.makedirs(output_dir, exist_ok=True)

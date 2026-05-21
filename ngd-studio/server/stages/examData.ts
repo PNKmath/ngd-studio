@@ -7,6 +7,7 @@ import type { StageCache } from "./cache";
  */
 export interface ExamMetaInput {
   schoolLevel?: "중" | "고";
+  school_level?: "중" | "고"; // snake_case alias (Python side reads this)
   school?: string;
   grade?: number;
   subject?: string;
@@ -77,9 +78,10 @@ function normalizeMeta(meta: ExamMetaInput): ExamMetaInput {
   const year = typeof meta.year === "number" ? meta.year : new Date().getFullYear();
   const semester = meta.semester ?? "";
   const subject = meta.subject ?? "";
+  const schoolLevel: "중" | "고" = meta.schoolLevel ?? meta.school_level ?? "고"; // default "고" for legacy
   let filenameBase = meta.filename_base;
   if (!filenameBase) {
-    const parts = [meta.code, "고", year, semester, meta.region, meta.school, subject, meta.code]
+    const parts = [meta.code, schoolLevel, year, semester, meta.region, meta.school, subject, meta.code]
       .filter((v) => v !== undefined && v !== "")
       .map((v) => `[${v}]`)
       .join("");
@@ -91,6 +93,8 @@ function normalizeMeta(meta: ExamMetaInput): ExamMetaInput {
     examType,
     year,
     filename_base: filenameBase,
+    school_level: schoolLevel, // snake_case for Python consumption
+    schoolLevel,               // camelCase preserved for TS usage
   };
 }
 
@@ -102,13 +106,13 @@ async function readQuestionWithFallback(
   cache: StageCache,
   n: number
 ): Promise<ExamDataProblem> {
-  const candidates: Array<{ label: string; path: string }> = [
-    { label: "verified", path: cache.verifierResultPath(n) },
-    { label: "solved", path: cache.solverResultPath(n) },
-    { label: "extracted", path: cache.questionJsonPath(n) },
+  const candidates = [
+    cache.verifierResultPath(n),
+    cache.solverResultPath(n),
+    cache.questionJsonPath(n),
   ];
 
-  for (const { path } of candidates) {
+  for (const path of candidates) {
     const content = await tryReadJson(path);
     if (content !== null) {
       return content;

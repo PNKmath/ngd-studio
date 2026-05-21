@@ -8,6 +8,7 @@ const SESSION_META_PATH = path.join(BASE_DIR, "inputs", "시험지 제작", "ses
 
 interface MetaResult {
   found: boolean;
+  schoolLevel?: "중" | "고"; // 신규: 학교급 복원용
   school?: string;
   grade?: number;
   subject?: string;
@@ -16,16 +17,23 @@ interface MetaResult {
   range?: string;
 }
 
+function toSchoolLevel(raw: unknown): "중" | "고" {
+  if (raw === "중" || raw === "고") return raw;
+  return "고";
+}
+
 function extractFromInfo(info: Record<string, unknown>): MetaResult {
+  // snake_case (school_level) + camelCase (schoolLevel) 양측 읽기 — legacy fallback "고"
+  const schoolLevel = toSchoolLevel(info.schoolLevel ?? info.school_level);
+  const examTypeRaw = info.exam_type ?? info.examType;
   return {
     found: true,
+    schoolLevel,
     school: typeof info.school === "string" ? info.school : "",
     grade: typeof info.grade === "number" ? info.grade : 2,
     subject: typeof info.subject === "string" ? info.subject : "",
     semester: typeof info.semester === "string" ? info.semester : "1학기",
-    examType: typeof (info.exam_type ?? info.examType) === "string"
-      ? String(info.exam_type ?? info.examType)
-      : "중간",
+    examType: typeof examTypeRaw === "string" ? examTypeRaw : "중간",
     range: typeof info.range === "string" ? info.range : "",
   };
 }
