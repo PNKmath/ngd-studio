@@ -14,9 +14,9 @@ created: 2026-05-22
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
 | 1 | [phase-01-orchestrator-review-mode.md](./phase-01-orchestrator-review-mode.md) | 8 | 8 | 100% | completed | 90ae123 |
-| 2 | [phase-02-followup-route-orchestrator.md](./phase-02-followup-route-orchestrator.md) | 7 | 7 | 100% | completed | (pending commit) |
+| 2 | [phase-02-followup-route-orchestrator.md](./phase-02-followup-route-orchestrator.md) | 7 | 7 | 100% | completed | e3b9a40 |
 | 3 | [phase-03-crop-mode-migration.md](./phase-03-crop-mode-migration.md) | 5 | 4 | 80% | completed | 4988714 |
-| 4 | [phase-04-sse-legacy-removal.md](./phase-04-sse-legacy-removal.md) | 8 | 0 | 0% | pending | - |
+| 4 | [phase-04-sse-legacy-removal.md](./phase-04-sse-legacy-removal.md) | 8 | 8 | 100% | completed | (pending commit) |
 | 5 | [phase-05-dead-code-cleanup.md](./phase-05-dead-code-cleanup.md) | 7 | 0 | 0% | pending | - |
 | 6 | [phase-06-settings-copy-and-manual-e2e.md](./phase-06-settings-copy-and-manual-e2e.md) | 8 | 0 | 0% | pending | - |
 | **Total** | | **43** | **0** | **0%** | | |

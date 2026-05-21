@@ -134,3 +134,6 @@ SIMPLIFIED: 1, CHANGES: 1 file, 5 edits — persistResult/persistFailure/sseResp
 
 #### Review (orchestrator)
 VERDICT: pass — A~J 전 항목 이상 없음. legacy 분기 완전 제거, review/create followup 모두 orchestrator 경로 통일.
+
+#### Commit
+e3b9a40 — refactor(followup-route): Phase 2 — legacy 분기 제거, 모든 followup orchestrator 통합

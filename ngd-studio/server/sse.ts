@@ -26,15 +26,9 @@ import {
 import { readRuntimeEnv } from "../lib/server/runtimeEnv";
 import { normalizeStageOverrides, normalizeStageSkip, type StageOverrideMap, type StageSkipMap } from "../lib/ai/settings";
 import type { ProviderTelemetryEntry } from "../lib/ai/retry";
-import { buildCreatePrompt, buildResumePrompt, buildCropPrompt, buildReviewPrompt } from "../lib/prompts";
-import { runBuilderStage } from "./stages/builder";
-import { runCheckerStage, type CheckerStageOutput } from "./stages/checker";
-import { fileEvent, logEvent, progressEvent, resultEvent, stageEvent } from "./stages/events";
+import { buildCropPrompt } from "../lib/prompts";
 import { createJobStore } from "./stages/jobStore";
-import { runLegacyPromptJob } from "./stages/jobRunner";
 import { runStageOrchestrator } from "./stages/orchestrator";
-import { shouldUseCodeOrchestrator } from "./stages/branchHelper";
-export { shouldUseCodeOrchestrator } from "./stages/branchHelper";
 
 // ---------------------------------------------------------------------------
 // runCropJob — inline helper for crop mode (no HWPX output, no stage model)
@@ -294,7 +288,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   let body: {
     mode: string;
     files: { pdf: string; hwpx?: string; questionImages?: number[] };
-    meta?: { schoolLevel?: "중" | "고"; school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number };
+    meta?: { schoolLevel?: "중" | "고"; school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number; additionalInstruction?: string };
     jobId: string;
     provider?: AIProviderId;
     stageOverrides?: Partial<Record<AIStageKey, AIProviderId>>;
@@ -408,21 +402,10 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     };
   });
 
-  let prompt: string;
+  let prompt: string = "";
   if (mode === "crop") {
     const cropOutDir = toAbsWsl(path.join(BASE_DIR, "inputs", "시험지 제작", "question_images"));
     prompt = buildCropPrompt(wslFiles.pdf, cropOutDir);
-  } else if (mode === "create") {
-    prompt = buildCreatePrompt({ hwpx: wslFiles.hwpx }, questionImagePaths, meta ?? {});
-  } else if (mode === "resume") {
-    prompt = buildResumePrompt(
-      { hwpx: wslFiles.hwpx },
-      meta?.resumeFrom ?? "extractor",
-      meta?.questionCount ?? 0,
-      meta ?? {}
-    );
-  } else {
-    prompt = buildReviewPrompt(wslFiles);
   }
 
   // Save initial job data
@@ -472,103 +455,11 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   let outputFile = "";
   let resultSummary = "";
   let finalStatus: "done" | "failed" | "cancelled" = "done";
-  let finalProviderMetadata = { requestedProvider, provider: resolvedProvider };
   let providerTelemetry: ProviderTelemetryEntry[] = [];
-  let checkerResult: CheckerStageOutput | undefined;
 
   try {
-    const deterministicBuilder = mode === "resume" && (meta?.resumeFrom === "builder" || meta?.resumeFrom === "confirm");
-    const deterministicChecker = mode === "resume" && meta?.resumeFrom === "checker";
-    const useCodeOrchestrator = shouldUseCodeOrchestrator(mode, stageOverrides);
-
-    if (useCodeOrchestrator) {
-      const orchResult = await runStageOrchestrator({
-        mode: mode as "create" | "resume",
-        resumeFrom: meta?.resumeFrom,
-        meta: meta ?? {},
-        questionImages: questionImagePaths,
-        stageOverrides,
-        stageSkip,
-        figureRegen: body.figureRegen,
-        imageCleaningEnabled: body.imageCleaningEnabled,
-        checkerMaxAttempts: body.checkerMaxAttempts,
-        verifierMaxAttempts: body.verifierMaxAttempts,
-        baseDir: BASE_DIR,
-        send,
-        isAborted: () => clientDisconnected,
-        externalSignal: disconnectAbort.signal,
-      });
-      outputFile = orchResult.outputFile ?? "";
-      resultSummary = orchResult.resultSummary ?? "";
-      finalStatus = orchResult.status;
-      providerTelemetry = orchResult.providerTelemetry;
-    } else if (deterministicBuilder) {
-      send(stageEvent("builder", "running"));
-      send(progressEvent("builder", 5));
-      send(logEvent("builder", "deterministic builder runner를 실행합니다."));
-
-      const builderResult = await runBuilderStage({ baseDir: BASE_DIR });
-      if (builderResult.status === "completed" && builderResult.output) {
-        const relativeOutput = path.relative(BASE_DIR, builderResult.output.hwpxPath);
-        outputFile = relativeOutput;
-        resultSummary = "deterministic builder runner 완료";
-        finalStatus = "done";
-        send(progressEvent("builder", 100));
-        send(stageEvent("builder", "done", { summary: resultSummary }));
-        send(fileEvent({ type: "hwpx", name: path.basename(relativeOutput), path: relativeOutput }));
-        send(resultEvent("success", resultSummary, relativeOutput));
-      } else {
-        send(stageEvent("builder", "failed", { summary: builderResult.error?.message }));
-        send(resultEvent("failed", builderResult.error?.message ?? "deterministic builder 실패"));
-        finalStatus = "failed";
-      }
-    } else if (deterministicChecker) {
-      send(stageEvent("checker", "running"));
-      send(progressEvent("checker", 5));
-      send(logEvent("checker", "deterministic checker runner를 실행합니다."));
-
-      const hwpxPath = resolvedFiles.hwpx
-        ? path.isAbsolute(resolvedFiles.hwpx) ? resolvedFiles.hwpx : path.join(BASE_DIR, resolvedFiles.hwpx)
-        : "";
-      const deterministicResult = await runCheckerStage({ hwpxPath });
-      checkerResult = deterministicResult.output;
-
-      if (deterministicResult.status === "completed" && deterministicResult.output) {
-        resultSummary = `deterministic checker 완료: ${deterministicResult.output.issues.length} issue(s)`;
-        finalStatus = "done";
-        send(progressEvent("checker", 100, { issueCount: deterministicResult.output.issues.length }));
-        send(stageEvent("checker", "done", { summary: resultSummary }));
-        send(resultEvent("success", resultSummary, outputFile || undefined));
-      } else {
-        const issueCount = deterministicResult.output?.issues.length ?? 0;
-        send(stageEvent("checker", "failed", { summary: deterministicResult.error?.message ?? `${issueCount} issue(s)` }));
-        send(logEvent(
-          "checker",
-          `deterministic checker가 ${issueCount}개 issue를 기록했습니다. legacy checker fallback을 실행합니다.`,
-          "warn"
-        ));
-        const legacyResult = await runLegacyPromptJob({
-          prompt,
-          requestedProvider,
-          resolvedProvider,
-          baseDir: BASE_DIR,
-          mode,
-          jobId,
-          stageKey: primaryStageKey,
-          send,
-          isResponseDestroyed: () => res.destroyed,
-          isClientDisconnected: () => clientDisconnected,
-          setActiveProviderProcess,
-          activeProcesses,
-        });
-        outputFile = legacyResult.outputFile ?? "";
-        resultSummary = legacyResult.resultSummary ?? "";
-        finalStatus = legacyResult.status;
-        finalProviderMetadata = legacyResult.providerMetadata;
-        providerTelemetry = legacyResult.providerTelemetry;
-      }
-    } else if (mode === "crop") {
-      // crop 전용 인라인 헬퍼 — runLegacyPromptJob 에 의존하지 않음
+    if (mode === "crop") {
+      // crop 전용 인라인 헬퍼 — orchestrator 에 의존하지 않음
       const cropResult = await runCropJob({
         prompt,
         requestedProvider,
@@ -582,50 +473,29 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       resultSummary = cropResult.resultSummary ?? "";
       providerTelemetry = cropResult.providerTelemetry;
     } else {
-      // skill 실행 (extractor → solver → verifier → figure 까지)
-      const legacyResult = await runLegacyPromptJob({
-        prompt,
-        requestedProvider,
-        resolvedProvider,
+      // create / resume / review — 모두 orchestrator 로 통합
+      const orchResult = await runStageOrchestrator({
+        mode: mode as "create" | "resume" | "review",
+        resumeFrom: meta?.resumeFrom,
+        meta: meta ?? {},
+        questionImages: questionImagePaths,
+        stageOverrides,
+        stageSkip,
+        figureRegen: body.figureRegen,
+        imageCleaningEnabled: body.imageCleaningEnabled,
+        checkerMaxAttempts: body.checkerMaxAttempts,
+        verifierMaxAttempts: body.verifierMaxAttempts,
+        hwpxPath: mode === "review" ? toAbsWsl(wslFiles.hwpx) : undefined,
+        additionalInstruction: mode === "review" ? meta?.additionalInstruction : undefined,
         baseDir: BASE_DIR,
-        mode,
-        jobId,
-        stageKey: primaryStageKey,
         send,
-        isResponseDestroyed: () => res.destroyed,
-        isClientDisconnected: () => clientDisconnected,
-        setActiveProviderProcess,
-        activeProcesses,
+        isAborted: () => clientDisconnected,
+        externalSignal: disconnectAbort.signal,
       });
-
-      // skill이 정상 완료 시 호스트가 deterministic builder 자동 실행 (create 모드 한정)
-      if (legacyResult.status === "done" && mode === "create") {
-        send(stageEvent("builder", "running"));
-        send(logEvent("builder", "skill 완료 후 deterministic builder runner를 자동 실행합니다."));
-
-        const builderResult = await runBuilderStage({ baseDir: BASE_DIR });
-        if (builderResult.status === "completed" && builderResult.output) {
-          const relativeOutput = path.relative(BASE_DIR, builderResult.output.hwpxPath);
-          outputFile = relativeOutput;
-          resultSummary = "skill 완료 + deterministic builder 완료";
-          finalStatus = "done";
-          send(progressEvent("builder", 100));
-          send(stageEvent("builder", "done", { summary: resultSummary }));
-          send(fileEvent({ type: "hwpx", name: path.basename(relativeOutput), path: relativeOutput }));
-          send(resultEvent("success", resultSummary, relativeOutput));
-        } else {
-          send(stageEvent("builder", "failed", { summary: builderResult.error?.message }));
-          send(resultEvent("failed", builderResult.error?.message ?? "builder failed"));
-          finalStatus = "failed";
-        }
-      } else {
-        // skill 자체 실패 또는 create 외 모드 — LLM 단계 결과 그대로 사용
-        outputFile = legacyResult.outputFile ?? "";
-        resultSummary = legacyResult.resultSummary ?? "";
-        finalStatus = legacyResult.status;
-      }
-      finalProviderMetadata = legacyResult.providerMetadata;
-      providerTelemetry = legacyResult.providerTelemetry;
+      outputFile = orchResult.outputFile ?? "";
+      resultSummary = orchResult.resultSummary ?? "";
+      finalStatus = orchResult.status;
+      providerTelemetry = orchResult.providerTelemetry;
     }
   } catch (err) {
     send({
@@ -672,10 +542,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     try {
       await jobStore.write({
         ...jobData,
-        requestedProvider: finalProviderMetadata.requestedProvider,
-        provider: finalProviderMetadata.provider,
+        requestedProvider,
+        provider: resolvedProvider,
         providerTelemetry,
-        checkerResult,
         status: finalStatus,
         finishedAt: new Date().toISOString(),
         outputFile: outputFile || undefined,

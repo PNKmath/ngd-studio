@@ -141,3 +141,6 @@ SIMPLIFIED: 1, CHANGES: 1 file, 4 edits — ProviderTelemetryEntry inline import
 
 #### Review (orchestrator)
 VERDICT: pass — runCropJob 인라인 헬퍼 + crop 분기 분리 스펙 완전 일치. 잔존 runLegacyPromptJob 호출은 phase 4에서 제거 예정 (스펙 의도 일치).
+
+#### Commit
+4988714 — refactor(sse): Phase 3 — crop 모드 runLegacyPromptJob 의존 제거

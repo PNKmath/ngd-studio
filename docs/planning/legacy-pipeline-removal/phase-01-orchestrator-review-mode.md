@@ -149,3 +149,6 @@ SIMPLIFIED: 1, CHANGES: 1 file, 3 edits — 중복 섹션 헤더 배너 제거 +
 
 #### Review (orchestrator)
 VERDICT: pass — A~J 전 항목 이상 없음. reviewRunner.ts/types.ts 미수정은 scope 축소(필요한 확장이 orchestrator.ts에서 처리됨)로 위반 아님.
+
+#### Commit
+90ae123 — feat(orchestrator): Phase 1 — review mode 통합 + auto default resolve 보장
