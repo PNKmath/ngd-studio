@@ -176,3 +176,27 @@ python3 -c "info={'year':2024,'semester':'1학기','exam_type':'중간','grade':
 
 #### 질문 / 결정 사항
 없음
+
+#### Scope Audit (orchestrator, 1회차)
+pass — 3 files in scope (assemble.py, orchestrator.test.ts, PHASE_FILE). 선택 fixture/integration 미접촉.
+
+#### Verification Re-run (orchestrator, 1회차)
+exit 0 — `env -u NODE_OPTIONS` vitest 495/495 pass + tsc pass.
+
+#### Simplify (orchestrator, 1회차)
+SIMPLIFIED: 1 — assemble.py 중복 school_level 재할당 제거. VERIFY: pass.
+
+#### Review (orchestrator, 1회차)
+VERDICT: fix_required — orchestrator.test.ts 신규 케이스에 vi.spyOn 없음, status in ["done","failed"] 느슨한 단언만 존재. examMeta.schoolLevel 전파를 실제 검증하지 않음.
+
+#### Scope Audit (orchestrator, 2회차)
+pass — fix 회차도 scope 내 편집만 유지 (orchestrator.test.ts + assemble.py 미접촉).
+
+#### Verification Re-run (orchestrator, 2회차)
+exit 0 — orchestrator.test.ts 20/20 pass + tsc pass.
+
+#### Review (orchestrator, 2회차)
+VERDICT: pass — vi.mock 기반 spy 단언으로 examMeta.schoolLevel 전파 실제 검증 확인. A~J 모두 통과.
+
+#### E2E (orchestrator)
+skip — 사용자가 phase 5 시작 시 e2e_triggers (`create-v4-full-pipeline`, `build-hwpx-cli`) 본 phase-run 에서 건너뛰기로 결정. 별도 시점에 수동 실행: `/phase-e2e middle-school-curriculum-split --phase 5`.
