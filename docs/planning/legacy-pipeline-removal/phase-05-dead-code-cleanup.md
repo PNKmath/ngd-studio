@@ -127,3 +127,6 @@ skipped — phase 성격이 삭제 위주. prompts.ts/test는 워커가 buildCro
 
 #### Review (orchestrator)
 VERDICT: pass — 5개 파일 모두 스펙 그대로 처리. 외부 import 잔류 0건 grep 확인.
+
+#### Commit
+0c4392c — refactor(cleanup): Phase 5 — dead code 정리

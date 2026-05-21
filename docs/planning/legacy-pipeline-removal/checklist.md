@@ -1,6 +1,6 @@
 ---
 task: legacy-pipeline-removal
-phase_count: 6
+phase_count: 7
 created: 2026-05-22
 ---
 
@@ -19,7 +19,8 @@ created: 2026-05-22
 | 4 | [phase-04-sse-legacy-removal.md](./phase-04-sse-legacy-removal.md) | 8 | 8 | 100% | completed | 0763faf |
 | 5 | [phase-05-dead-code-cleanup.md](./phase-05-dead-code-cleanup.md) | 7 | 7 | 100% | completed | 0c4392c |
 | 6 | [phase-06-settings-copy-and-manual-e2e.md](./phase-06-settings-copy-and-manual-e2e.md) | 8 | 1 | 13% | blocked | - (depends on Phase 7) |
-| **Total** | | **43** | **0** | **0%** | | |
+| 7 | [phase-07-orchestrator-default-provider-routing.md](./phase-07-orchestrator-default-provider-routing.md) | 7 | 0 | 0% | pending | - |
+| **Total** | | **50** | **35** | **70%** | | |
 
 ## Phase 의존성
 

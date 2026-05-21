@@ -195,3 +195,6 @@ VERDICT: pass — worker 변경 + 사용자 cleanup 후 legacy 분기 완전 제
 
 #### E2E (orchestrator)
 skip — review-full-pipeline 시나리오는 사용자 manual smoke로 동등 검증됨 (intervention_likely=true 경로). catalog 자동 실행 환경 미구비.
+
+#### Commit
+0763faf — refactor(sse): Phase 4 — sse.ts legacy 분기 일괄 제거
