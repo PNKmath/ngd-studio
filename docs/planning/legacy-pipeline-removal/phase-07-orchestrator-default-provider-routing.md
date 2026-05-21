@@ -48,28 +48,42 @@ Phase 4 commit 0763faf 이후 사용자 manual E2E 시도 중 **create 흐름에
 
 **default provider 만 선택한 사용자가 영향받음**: stageOverrides 비어있어 모든 stage 가 default 로 fallback 해야 하는데, default 전달 누락으로 hardcoded "auto" = claude-cli 적용.
 
+## 설계 원칙: silent fallback 금지
+
+회귀의 근본 원인은 `getProviderForStage(stageKey, overrides, defaultProvider = "auto")` 함수 시그니처의 **hardcoded "auto" 기본값**. 호출자가 default 전달을 빠뜨리면 silently claude-cli 로 fallback 되어 사용자 의도가 무시됨. 향후 같은 클래스 회귀 차단을 위해:
+
+- `defaultProvider` 를 **required** (optional 제거)
+- `getProviderForStage` 의 hardcoded 기본값 제거 → 모든 호출자가 명시 전달 강제
+- 누락 시 **TypeScript 컴파일 에러**로 fail-fast (runtime fallback 없음)
+- `sse.ts` 진입부에서 `normalizeProviderId(body.provider)` 가 이미 undefined → `"auto"` 정규화 → `defaultProvider` 는 반드시 유효한 `AIProviderId`. 따라서 optional 로 둘 이유 없음.
+
 ## 설계
 
-### 1. `OrchestratorInput.defaultProvider` 필드 추가
+### 1. `OrchestratorInput.defaultProvider` 필드 추가 (required)
 
 `server/stages/orchestrator.ts`:
 
 ```ts
 export interface OrchestratorInput {
   // ...existing fields
-  /** sse.ts/followup route 가 사용자 body.provider 를 전달. 모든 stage 의 fallback default. */
-  defaultProvider?: AIProviderId;
+  /**
+   * 사용자가 settings UI 에서 선택한 default provider. sse.ts/followup route 가 반드시 전달.
+   * stageOverrides 에 명시 안 된 stage 는 이 provider 로 fallback.
+   * normalizeProviderId 결과(`"auto"` 포함)를 받으므로 undefined 불가.
+   */
+  defaultProvider: AIProviderId;   // required, optional 아님
   // ...
 }
 ```
 
-### 2. `getProviderForStage` 호출 시 input.defaultProvider 전달
-
-`orchestrator.ts` 내 모든 `getProviderForStage(stageKey, stageOverrides)` 호출을 다음으로 변경:
+### 2. `getProviderForStage` 시그니처 — 기본값 제거
 
 ```ts
-getProviderForStage(stageKey, stageOverrides, input.defaultProvider ?? "auto")
+// 기존: function getProviderForStage(stageKey, overrides, defaultProvider: AIProviderId = "auto")
+// 신규: function getProviderForStage(stageKey, overrides, defaultProvider: AIProviderId)
 ```
+
+모든 호출처에서 `input.defaultProvider` 명시 전달 강제. 빠뜨리면 컴파일 에러.
 
 확인 위치 (grep 기준):
 - `runReviewModeOrchestrator` 의 `reviewerAdapter` (line ~251)
@@ -99,15 +113,18 @@ const orchResult = await runStageOrchestrator({
 
 - 시나리오 H: `defaultProvider: "codex-cli"` + stageOverrides 비어있음 → 각 stage adapter 가 codex-cli 로 resolve
 - 시나리오 I: `defaultProvider: "codex-cli"` + stageOverrides 에 `create.solver: "claude-sdk"` → solver 만 claude-sdk, 나머지 codex-cli
-- 시나리오 J: `defaultProvider` 미전달 → 기존 동작 유지 (auto = claude-cli)
+- 시나리오 J: `defaultProvider: "auto"` → 모든 stage 가 claude-cli (auto resolve 동작 명시 검증)
+
+(기존 테스트들이 `defaultProvider` 누락된 채 호출했다면 컴파일 에러로 잡힘 → 모두 `defaultProvider: "auto"` 추가)
 
 ## 체크리스트
 
-- [ ] `OrchestratorInput.defaultProvider?: AIProviderId` 필드 추가
+- [ ] `OrchestratorInput.defaultProvider: AIProviderId` 필드 추가 (**required**, optional 아님)
+- [ ] `getProviderForStage` 시그니처의 hardcoded `defaultProvider = "auto"` 기본값 제거 → 호출자 명시 전달 강제
 - [ ] orchestrator.ts 의 모든 `getProviderForStage(stageKey, stageOverrides)` 호출에 `input.defaultProvider` 전달 (grep 기준 5+ 곳)
 - [ ] `sse.ts` 의 `runStageOrchestrator({ ... })` 호출에 `defaultProvider: requestedProvider` 추가
-- [ ] `app/api/run/[jobId]/followup/route.ts` 의 `runStageOrchestrator({ ... })` 호출 2곳 (review/create followup) 에 `defaultProvider` 추가 (job 의 저장된 `requestedProvider` 사용)
-- [ ] 테스트 시나리오 H/I/J 추가 — defaultProvider 전파 + override 우선순위 + 미전달 fallback
+- [ ] `app/api/run/[jobId]/followup/route.ts` 의 `runStageOrchestrator({ ... })` 호출 2곳 (review/create followup) 에 `defaultProvider` 추가 (job 의 저장된 `requestedProvider` 사용 — 없으면 `normalizeProviderId(undefined)` = `"auto"`)
+- [ ] 테스트 시나리오 H/I/J 추가 + 기존 테스트들이 `defaultProvider` 누락 시 컴파일 에러로 잡혔다면 `defaultProvider: "auto"` 보강
 - [ ] `cd ngd-studio && npx tsc --noEmit` 통과
 - [ ] `cd ngd-studio && npx vitest run server/stages/__tests__/orchestrator.pipeline.test.ts --reporter=basic` 통과
 
@@ -115,8 +132,8 @@ const orchResult = await runStageOrchestrator({
 
 - **default provider 사용자**: 회귀 해결, 사용자 의도대로 동작 복원
 - **stage override 사용자**: 영향 없음 (명시 override 가 default 보다 우선)
-- **API 호환성**: `OrchestratorInput.defaultProvider` 는 optional → 기존 호출자 영향 없음
-- **롤백**: 안전. orchestrator 내부 인자 추가 + 호출자 1줄 추가 패턴이라 부분 revert 가능
+- **API 호환성**: `OrchestratorInput.defaultProvider` 는 **required** → 기존 호출자 모두 컴파일 에러로 잡힘 (의도된 fail-fast). 호출자 2곳(sse.ts + followup) + 테스트 mock 호출 보강 필요. silent fallback 클래스 회귀 근본 차단이 목적.
+- **롤백**: orchestrator 내부 인자 + 호출자 패턴 추가라 부분 revert 가능. 단 required 전환을 되돌리면 silent fallback 회귀 재발 가능 → 비추.
 
 ## 검증
 
