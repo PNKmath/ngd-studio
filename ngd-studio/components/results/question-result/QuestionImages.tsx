@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
-export function QuestionImages({ qNum }: { qNum: number }) {
+export function QuestionImages({ qNum, version }: { qNum: number; version?: string }) {
   const padded = String(qNum).padStart(2, "0");
-  const originalSrc = `/api/file?path=${encodeURIComponent(`inputs/시험지 제작/question_images/q${padded}.png`)}`;
-  const cleanedSrc = `/api/file?path=${encodeURIComponent(`inputs/시험지 제작/question_images/cleaned/q${padded}.png`)}`;
+  const v = encodeURIComponent(version ?? "");
+  const originalSrc = `/api/file?path=${encodeURIComponent(`inputs/시험지 제작/question_images/q${padded}.png`)}&v=${v}`;
+  const cleanedSrc = `/api/file?path=${encodeURIComponent(`inputs/시험지 제작/question_images/cleaned/q${padded}.png`)}&v=${v}`;
   const [cleanedError, setCleanedError] = useState(false);
+
+  useEffect(() => {
+    setCleanedError(false);
+  }, [qNum, version]);
 
   return (
     <div className="space-y-6">
