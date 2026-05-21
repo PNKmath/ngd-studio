@@ -426,6 +426,115 @@ describe("aggregateVerifiedProblems — merge contract (verifier = gating only)"
     expect((thrown as AggregateError).errors).toHaveLength(2);
   });
 
+  it("strips leading circled-number prefix from choices (assemble.py contract)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    // Simulates the 경북여고 cache: extractor included `① ` prefix in choices,
+    // which makes assemble.py emit duplicate "① ①" AND force the 5-row layout.
+    const extracted = {
+      number: 1,
+      type: "choice",
+      score: "3.4",
+      difficulty: "하",
+      subtopic: "정적분",
+      has_figure: false,
+      figure_info: null,
+      parts: [{ t: "Q1 본문" }],
+      choices: [
+        [{ t: "① " }, { eq: "-20" }],
+        [{ t: "② " }, { eq: "-10" }],
+        [{ t: "③ " }, { eq: "0" }],
+        [{ t: "④ " }, { eq: "10" }],
+        [{ t: "⑤ " }, { eq: "20" }],
+      ],
+      condition_box: null,
+      bogi_box: null,
+      data_table: null,
+      explanation_table: null,
+    };
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(extracted), "utf8");
+    await writeFile(cache.solverResultPath(1), JSON.stringify(makeSolved(1)), "utf8");
+
+    const result = await buildExamDataJson({
+      cache,
+      meta: { school: "경북여고", year: 2025 },
+      questionNumbers: [1],
+    });
+
+    const p = result.problems[0] as { choices: Array<Array<Record<string, unknown>>> };
+    expect(p.choices).toEqual([
+      [{ eq: "-20" }],
+      [{ eq: "-10" }],
+      [{ eq: "0" }],
+      [{ eq: "10" }],
+      [{ eq: "20" }],
+    ]);
+  });
+
+  it("preserves choices that have no circled-number prefix (no-op)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    const extracted = {
+      number: 2,
+      type: "choice",
+      score: "3.4",
+      parts: [{ t: "Q2" }],
+      choices: [[{ eq: "1 over 6" }], [{ eq: "1 over 3" }]],
+      has_figure: false,
+      figure_info: null,
+      condition_box: null,
+      bogi_box: null,
+      data_table: null,
+      explanation_table: null,
+    };
+    await writeFile(cache.extractorResultPath(2), JSON.stringify(extracted), "utf8");
+    await writeFile(cache.solverResultPath(2), JSON.stringify(makeSolved(2)), "utf8");
+
+    const result = await buildExamDataJson({
+      cache,
+      meta: { school: "학교", year: 2025 },
+      questionNumbers: [2],
+    });
+
+    const p = result.problems[0] as { choices: unknown };
+    expect(p.choices).toEqual([[{ eq: "1 over 6" }], [{ eq: "1 over 3" }]]);
+  });
+
+  it("strips circled prefix when t carries trailing text (keeps remainder)", async () => {
+    const base = await makeTempDir();
+    const cache = await makeCache(base);
+
+    const extracted = {
+      number: 3,
+      type: "choice",
+      score: "3.4",
+      parts: [{ t: "Q3" }],
+      choices: [
+        [{ t: "① 가" }],
+        [{ t: "② 나" }],
+      ],
+      has_figure: false,
+      figure_info: null,
+      condition_box: null,
+      bogi_box: null,
+      data_table: null,
+      explanation_table: null,
+    };
+    await writeFile(cache.extractorResultPath(3), JSON.stringify(extracted), "utf8");
+    await writeFile(cache.solverResultPath(3), JSON.stringify(makeSolved(3)), "utf8");
+
+    const result = await buildExamDataJson({
+      cache,
+      meta: { school: "학교", year: 2025 },
+      questionNumbers: [3],
+    });
+
+    const p = result.problems[0] as { choices: unknown };
+    expect(p.choices).toEqual([[{ t: "가" }], [{ t: "나" }]]);
+  });
+
   it("does not merge verifier fields into included problems (regression guard)", async () => {
     const base = await makeTempDir();
     const cache = await makeCache(base);

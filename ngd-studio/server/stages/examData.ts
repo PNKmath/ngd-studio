@@ -161,7 +161,42 @@ async function mergeQuestionSources(
     );
   }
 
-  return solved ? { ...extracted, ...solved } : extracted;
+  const merged = solved ? { ...extracted, ...solved } : extracted;
+  return normalizeProblem(merged);
+}
+
+/**
+ * Strip leading circled-number prefix (①②③④⑤) from choice entries.
+ *
+ * Contract: assemble.py's make_choices_xml prepends CHOICE_SYMBOLS[i] itself,
+ * so choices coming into the builder must NOT carry their own prefix. The
+ * extractor sometimes emits `[{"t": "① "}, {"eq": "-20"}]` despite the
+ * contract; if left as-is, two failures cascade:
+ *   1) is_short_choice() returns False (presence of any `t` part), forcing
+ *      eq-only choices into the 5-row layout instead of 3+2;
+ *   2) builder prepends "①" and then emits the extractor's "① " — duplicate
+ *      circled number ("① ①" before the value).
+ * Both symptoms vanish once the leading prefix is stripped here.
+ */
+const CHOICE_PREFIX_RE = /^[①②③④⑤]\s*/;
+
+function normalizeProblem(problem: ExamDataProblem): ExamDataProblem {
+  if (!problem || typeof problem !== "object") return problem;
+  const raw = (problem as { choices?: unknown }).choices;
+  if (!Array.isArray(raw)) return problem;
+  const normalized = raw.map(stripChoicePrefix);
+  return { ...problem, choices: normalized };
+}
+
+function stripChoicePrefix(choice: unknown): unknown {
+  if (!Array.isArray(choice) || choice.length === 0) return choice;
+  const first = choice[0];
+  if (!first || typeof first !== "object" || !("t" in first)) return choice;
+  const t = (first as { t: unknown }).t;
+  if (typeof t !== "string" || !CHOICE_PREFIX_RE.test(t)) return choice;
+  const stripped = t.replace(CHOICE_PREFIX_RE, "");
+  if (stripped.length === 0) return choice.slice(1);
+  return [{ ...(first as Record<string, unknown>), t: stripped }, ...choice.slice(1)];
 }
 
 async function tryReadJson(filePath: string): Promise<ExamDataProblem | null> {
