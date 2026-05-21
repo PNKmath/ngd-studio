@@ -266,7 +266,11 @@ def main(exam_json=None, output_dir=None, base_path=None):
     # === Info substitutions ===
     YEAR_SEMESTER = f"{info['year']}년 {info['semester']} {info['exam_type']}"
     SCHOOL_NAME = info["school"]
-    GRADE_SUBJECT = f"{info['grade']}학년 {info['subject']}"
+    school_level = info.get("school_level", "고")
+    if school_level == "중":
+        GRADE_SUBJECT = f"{info['grade']}학년"
+    else:
+        GRADE_SUBJECT = f"{info['grade']}학년 {info['subject']}"
     RANGE_STR = info.get("range", "")
     CREATED_DATE = datetime.now().strftime("%Y년 %m월 %d일")
     MODIFIED_DATE = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -505,7 +509,6 @@ def main(exam_json=None, output_dir=None, base_path=None):
         school = info.get("school", "")
         subject_code = info.get("subject_code", info.get("subject", ""))
         range_str = info.get("range", "").replace(" ~ ", "~")
-        school_level = info.get("school_level", "고")  # default "고" for legacy
         filename = f"[{code}][{school_level}][{year}][{grade}-{sem_num}-{exam_code}][{region}][{school}][{subject_code}][{range_str}][{code}]{ver_suffix}.hwpx"
 
     output_path = os.path.join(output_dir, filename)

@@ -9,12 +9,58 @@ import type { SSEEvent } from "@/lib/claude";
 import type { AIProviderAdapter, ProviderRunOptions } from "@/lib/ai/types";
 
 // ──────────────────────────────────────────────
+// Module-level mocks — solver & verifier return deterministic outputs.
+// These mocks allow vi.spyOn-style call capture: when examMeta is passed,
+// we can assert that examMeta.schoolLevel propagates correctly.
+// Extractor is NOT mocked here because the full-cache tests pre-populate
+// extractor results; only when solver/verifier caches are absent does the
+// orchestrator call these stage runners.
+// ──────────────────────────────────────────────
+
+const MOCK_SOLVER_RESULT = {
+  status: "completed" as const,
+  output: { answer: "①", explanation_parts: [{ t: "정답 설명" }] },
+  provider: { requestedProvider: "claude-sdk" as const, provider: "claude-sdk" as const, modelStageKey: "create.solver", label: "Mock" },
+  startedAt: new Date().toISOString(),
+  completedAt: new Date().toISOString(),
+};
+
+const MOCK_VERIFIER_RESULT = {
+  status: "completed" as const,
+  output: { status: "pass" as const, issues: [], feedback: undefined },
+  provider: { requestedProvider: "claude-sdk" as const, provider: "claude-sdk" as const, modelStageKey: "create.verifier", label: "Mock" },
+  startedAt: new Date().toISOString(),
+  completedAt: new Date().toISOString(),
+};
+
+vi.mock("../solver", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../solver")>();
+  return {
+    ...real,
+    runSolverStage: vi.fn(async (_input: Parameters<typeof real.runSolverStage>[0]) => {
+      return MOCK_SOLVER_RESULT;
+    }),
+  };
+});
+
+vi.mock("../verifier", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../verifier")>();
+  return {
+    ...real,
+    runVerifierStage: vi.fn(async (_input: Parameters<typeof real.runVerifierStage>[0]) => {
+      return MOCK_VERIFIER_RESULT;
+    }),
+  };
+});
+
+// ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
 
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  vi.clearAllMocks();
   await Promise.all(
     tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
   );
@@ -455,6 +501,94 @@ describe("runStageOrchestrator", () => {
     expect(verifierCallCount).toBe(2);
     expect(finalStatus).toBe("pass");
   });
+
+  it("schoolLevel='중': runSolverStage and runVerifierStage receive examMeta.schoolLevel='중'", async () => {
+    // Verify that OrchestratorInput.meta.schoolLevel="중" is propagated to
+    // runSolverStage and runVerifierStage via the examMeta argument.
+    // We pre-populate extractor cache only (solver/verifier caches absent) so
+    // both stage runners are actually called, then spy on their call arguments.
+    const baseDir = await makeTempDir();
+    const cache = await makeCache(baseDir);
+    const { send } = makeSseCollector();
+
+    // Pre-populate only extractor cache — solver and verifier will be invoked.
+    await mkdir(cache.paths.cacheDir, { recursive: true });
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(VALID_EXTRACTOR_OUTPUT), "utf8");
+    // No solver or verifier cache → stage runners must be called.
+
+    // vi.mock at file top hoists mocks for ../solver and ../verifier.
+    // Import the already-mocked functions to access their call records.
+    const { runSolverStage } = await import("../solver");
+    const { runVerifierStage } = await import("../verifier");
+
+    const result = await runStageOrchestrator({
+      mode: "create",
+      meta: { school: "○○중학교", grade: 3, subject: "수학", schoolLevel: "중" },
+      questionImages: [{ number: 1, path: path.join(baseDir, "q01.png") }],
+      stageOverrides: {
+        "create.extractor": "claude-sdk",
+        "create.solver": "claude-sdk",
+        "create.verifier": "claude-sdk",
+      },
+      baseDir,
+      send,
+      isAborted: () => false,
+      cache,
+    });
+
+    // Orchestrator should terminate cleanly.
+    expect(["done", "failed"]).toContain(result.status);
+
+    // runSolverStage must have been called with examMeta.schoolLevel === "중".
+    const solverMock = runSolverStage as ReturnType<typeof vi.fn>;
+    expect(solverMock).toHaveBeenCalled();
+    const solverCallArg = solverMock.mock.calls[0]?.[0] as { examMeta?: { schoolLevel?: string } };
+    expect(solverCallArg?.examMeta?.schoolLevel).toBe("중");
+
+    // runVerifierStage must also have been called with examMeta.schoolLevel === "중".
+    const verifierMock = runVerifierStage as ReturnType<typeof vi.fn>;
+    expect(verifierMock).toHaveBeenCalled();
+    const verifierCallArg = verifierMock.mock.calls[0]?.[0] as { examMeta?: { schoolLevel?: string } };
+    expect(verifierCallArg?.examMeta?.schoolLevel).toBe("중");
+  }, 15_000);
+
+  it("schoolLevel unset (legacy): runSolverStage receives examMeta with schoolLevel undefined", async () => {
+    // Legacy path: meta has no schoolLevel field.
+    // runSolverStage should be called with examMeta.schoolLevel === undefined.
+    const baseDir = await makeTempDir();
+    const cache = await makeCache(baseDir);
+    const { send } = makeSseCollector();
+
+    // Pre-populate only extractor cache so solver/verifier runners are invoked.
+    await mkdir(cache.paths.cacheDir, { recursive: true });
+    await writeFile(cache.extractorResultPath(1), JSON.stringify(VALID_EXTRACTOR_OUTPUT), "utf8");
+
+    const { runSolverStage } = await import("../solver");
+
+    const result = await runStageOrchestrator({
+      mode: "create",
+      meta: { school: "○○고등학교", grade: 2, subject: "수학 I" },
+      questionImages: [{ number: 1, path: path.join(baseDir, "q01.png") }],
+      stageOverrides: {
+        "create.extractor": "claude-sdk",
+        "create.solver": "claude-sdk",
+        "create.verifier": "claude-sdk",
+      },
+      baseDir,
+      send,
+      isAborted: () => false,
+      cache,
+    });
+
+    // Should complete without error — schoolLevel absent defaults gracefully.
+    expect(["done", "failed"]).toContain(result.status);
+
+    // runSolverStage must have been called, and examMeta.schoolLevel should be undefined.
+    const solverMock = runSolverStage as ReturnType<typeof vi.fn>;
+    expect(solverMock).toHaveBeenCalled();
+    const solverCallArg = solverMock.mock.calls[0]?.[0] as { examMeta?: { schoolLevel?: string } };
+    expect(solverCallArg?.examMeta?.schoolLevel).toBeUndefined();
+  }, 15_000);
 
   it("partial extractor failure: continues when some questions succeed", async () => {
     // Simulate 3 questions where Q2 fails.
