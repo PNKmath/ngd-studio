@@ -12,6 +12,7 @@ import {
 } from "./modelHarness";
 import type { ModelStageResult, ModelStageRunner } from "./model";
 import { buildVerifierPrompt } from "./prompts/verifierPrompt";
+import type { ExamMeta } from "./prompts/extractorPrompt";
 
 export type VerifierIssueCategory =
   | "math_accuracy"
@@ -33,6 +34,7 @@ export interface VerifierStageInput {
   extracted: unknown;
   solved?: unknown;
   guidelineContext?: string;
+  examMeta?: ExamMeta;
   cache: StageCache;
   provider?: AIProviderAdapter;
   signal?: AbortSignal;
@@ -57,6 +59,7 @@ export async function runVerifierStage(input: VerifierStageInput): Promise<Model
     extracted: input.extracted,
     solved: input.solved,
     guidelineContext: input.guidelineContext,
+    examMeta: input.examMeta,
   });
   const prompt = system + "\n\n" + user;
   const providerResult = provider.run(prompt, { stageKey: "create.verifier", signal: input.signal });
@@ -145,9 +148,7 @@ export function validateVerifierOutput(value: unknown): ModelOutputValidation<Ve
     if (!issue || typeof issue !== "object") {
       return { ok: false, message: "verifier issue must be an object" };
     }
-    const category = (issue as { category?: unknown }).category;
-    const description = (issue as { description?: unknown }).description;
-    const location = (issue as { location?: unknown }).location;
+    const { category, description, location } = issue as { category?: unknown; description?: unknown; location?: unknown };
 
     if (typeof category !== "string" || !VALID_ISSUE_CATEGORIES.has(category)) {
       return { ok: false, message: `verifier issue category is invalid: ${String(category)}` };

@@ -354,6 +354,7 @@ export async function runStageOrchestrator(
         const r = await runSolverStage({
           questionNumber: n,
           extracted: extractedOutput,
+          examMeta: input.meta,
           cache,
           provider: getProviderForStage("create.solver", stageOverrides),
           signal,
@@ -429,6 +430,7 @@ export async function runStageOrchestrator(
               questionNumber: n,
               extracted: extractedOutput,
               guidelineContext: feedback ? `Verifier feedback: ${feedback}` : undefined,
+              examMeta: input.meta,
               cache,
               provider: solverProvider,
               signal,
@@ -460,6 +462,7 @@ export async function runStageOrchestrator(
               questionNumber: n,
               extracted: extractedOutput,
               solved: currentSolvedOutput,
+              examMeta: input.meta,
               cache,
               provider: verifierProvider,
               signal,

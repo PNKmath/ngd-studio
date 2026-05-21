@@ -5,10 +5,13 @@
  * Source: .claude/agents/ngd-exam-solver.md
  */
 
+import type { ExamMeta } from "./extractorPrompt";
+
 export interface SolverPromptInput {
   extracted: unknown;
   guidelineContext?: string;
   feedback?: string;
+  examMeta?: ExamMeta;
 }
 
 const SOLVER_SYSTEM = `너는 NGD 시험지 해설 생성 전문 에이전트다. 문제 데이터를 받아 풀이를 생성한다.
@@ -54,6 +57,16 @@ answer는 solver가 직접 풀어서 도출한 값이다.
 JSON만 반환하고 마크다운 코드 블록 없이 출력하라.
 `;
 
+function buildSolverSystemPrompt(schoolLevel?: "중" | "고"): string {
+  if (schoolLevel === "중") {
+    return SOLVER_SYSTEM + "\n이 문제는 중학교 수준입니다. 중학교 수준에 맞는 풀이 (예: 인수분해, 일차/이차방정식 등 사용; 미적분·삼각함수 사용 자제) 로 작성하세요.";
+  }
+  if (schoolLevel === "고") {
+    return SOLVER_SYSTEM + "\n이 문제는 고등학교 수준입니다.";
+  }
+  return SOLVER_SYSTEM;
+}
+
 export function buildSolverPrompt(input: SolverPromptInput): { system: string; user: string } {
   const parts: string[] = [];
 
@@ -76,7 +89,7 @@ export function buildSolverPrompt(input: SolverPromptInput): { system: string; u
   );
 
   return {
-    system: SOLVER_SYSTEM,
+    system: buildSolverSystemPrompt(input.examMeta?.schoolLevel),
     user: parts.join("\n\n"),
   };
 }

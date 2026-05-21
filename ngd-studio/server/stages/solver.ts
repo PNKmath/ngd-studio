@@ -12,6 +12,7 @@ import {
 } from "./modelHarness";
 import type { ModelStageResult, ModelStageRunner } from "./model";
 import { buildSolverPrompt } from "./prompts/solverPrompt";
+import type { ExamMeta } from "./prompts/extractorPrompt";
 import { normalizeParts } from "@/lib/parts/normalize";
 
 export type SolverExplanationPart =
@@ -24,6 +25,7 @@ export interface SolverStageInput {
   extracted: unknown;
   guidelineContext?: string;
   feedback?: string;
+  examMeta?: ExamMeta;
   cache: StageCache;
   provider?: AIProviderAdapter;
   validateEquation?: (content: string) => string | undefined;
@@ -48,6 +50,7 @@ export async function runSolverStage(input: SolverStageInput): Promise<ModelStag
     extracted: input.extracted,
     guidelineContext: input.guidelineContext,
     feedback: input.feedback,
+    examMeta: input.examMeta,
   });
   const prompt = system + "\n\n" + user;
   const providerResult = provider.run(prompt, { stageKey: "create.solver", signal: input.signal });
@@ -131,30 +134,28 @@ export function validateSolverOutput(
     if (!part || typeof part !== "object") {
       return { ok: false, message: "solver explanation_parts element must be an object" };
     }
-    if ("t" in (part as object)) {
-      const t = (part as { t?: unknown }).t;
-      if (typeof t !== "string") {
+    const p = part as { t?: unknown; eq?: unknown; br?: unknown };
+    if ("t" in part) {
+      if (typeof p.t !== "string") {
         return { ok: false, message: "solver explanation_parts {t} must be a string" };
       }
-      explanation_parts.push({ t });
-    } else if ("eq" in (part as object)) {
-      const eq = (part as { eq?: unknown }).eq;
-      if (typeof eq !== "string") {
+      explanation_parts.push({ t: p.t });
+    } else if ("eq" in part) {
+      if (typeof p.eq !== "string") {
         return { ok: false, message: "solver explanation_parts {eq} must be a string" };
       }
-      const equationIssue = validateEquation?.(eq);
+      const equationIssue = validateEquation?.(p.eq);
       if (equationIssue) {
         return { ok: false, message: equationIssue, details: { partKey: "eq" } };
       }
-      explanation_parts.push({ eq });
-    } else if ("br" in (part as object)) {
-      const br = (part as { br?: unknown }).br;
-      if (br !== true) {
+      explanation_parts.push({ eq: p.eq });
+    } else if ("br" in part) {
+      if (p.br !== true) {
         return { ok: false, message: "solver explanation_parts {br} must be true" };
       }
       explanation_parts.push({ br: true });
     } else {
-      const keys = Object.keys(part as object);
+      const keys = Object.keys(part);
       return { ok: false, message: `solver explanation_parts element has unknown key(s): ${keys.join(", ")}` };
     }
   }

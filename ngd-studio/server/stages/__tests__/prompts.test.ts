@@ -120,3 +120,47 @@ describe("buildVerifierPrompt", () => {
     expect(result.user).not.toContain("교과 컨텍스트:");
   });
 });
+
+describe("schoolLevel branching", () => {
+  const sampleExtracted = { number: 1, type: "choice" };
+  const sampleSolved = { number: 1, answer: "①", explanation_parts: [] };
+
+  it("(a) extractor schoolLevel='중' — system contains unit_classification_middle.json and not unit_classification.json", () => {
+    const result = buildExtractorPrompt({
+      questionNumber: 1,
+      examMeta: { schoolLevel: "중" },
+    });
+    expect(result.system).toContain("unit_classification_middle.json");
+    expect(result.system).not.toContain("unit_classification.json");
+  });
+
+  it("(b) extractor schoolLevel='고' / 미지정 — system contains unit_classification.json and not middle", () => {
+    const resultHigh = buildExtractorPrompt({
+      questionNumber: 1,
+      examMeta: { schoolLevel: "고" },
+    });
+    expect(resultHigh.system).toContain("unit_classification.json");
+    expect(resultHigh.system).not.toContain("unit_classification_middle.json");
+
+    const resultDefault = buildExtractorPrompt({ questionNumber: 1 });
+    expect(resultDefault.system).toContain("unit_classification.json");
+    expect(resultDefault.system).not.toContain("unit_classification_middle.json");
+  });
+
+  it("(c) solver schoolLevel='중' — system contains 중학교 수준 안내", () => {
+    const result = buildSolverPrompt({
+      extracted: sampleExtracted,
+      examMeta: { schoolLevel: "중" },
+    });
+    expect(result.system).toContain("중학교");
+  });
+
+  it("(d) verifier schoolLevel='중' — system contains 중학교 검증 안내", () => {
+    const result = buildVerifierPrompt({
+      extracted: sampleExtracted,
+      solved: sampleSolved,
+      examMeta: { schoolLevel: "중" },
+    });
+    expect(result.system).toContain("중학교");
+  });
+});

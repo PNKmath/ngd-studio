@@ -5,10 +5,13 @@
  * Source: .claude/agents/ngd-exam-verifier.md
  */
 
+import type { ExamMeta } from "./extractorPrompt";
+
 export interface VerifierPromptInput {
   extracted: unknown;
   solved: unknown;
   guidelineContext?: string;
+  examMeta?: ExamMeta;
 }
 
 const VERIFIER_SYSTEM = `너는 NGD V3 시험지 해설 검증 전문 에이전트다. solver가 생성한 해설을 독립적으로 검증하여 품질을 보장한다.
@@ -84,6 +87,16 @@ const VERIFIER_SYSTEM = `너는 NGD V3 시험지 해설 검증 전문 에이전�
 JSON만 반환하고 마크다운 코드 블록 없이 출력하라.
 `;
 
+function buildVerifierSystemPrompt(schoolLevel?: "중" | "고"): string {
+  if (schoolLevel === "중") {
+    return VERIFIER_SYSTEM + "\n이 문제는 중학교 수준입니다. 중학교 풀이는 중학교 범위 안에서만 검증하세요 (미적분·삼각함수 등 고교 개념 사용 시 fail).";
+  }
+  if (schoolLevel === "고") {
+    return VERIFIER_SYSTEM + "\n이 문제는 고등학교 수준입니다.";
+  }
+  return VERIFIER_SYSTEM;
+}
+
 export function buildVerifierPrompt(input: VerifierPromptInput): { system: string; user: string } {
   const parts: string[] = [];
 
@@ -101,7 +114,7 @@ export function buildVerifierPrompt(input: VerifierPromptInput): { system: strin
   );
 
   return {
-    system: VERIFIER_SYSTEM,
+    system: buildVerifierSystemPrompt(input.examMeta?.schoolLevel),
     user: parts.join("\n\n"),
   };
 }
