@@ -641,21 +641,21 @@ export async function runStageOrchestrator(
 
     // ── Stage 4: Figure ────────────────────────
     if (!checkAborted() && shouldRunStage(startStage, "figure")) {
-      const regenerate = input.figureRegen !== false;
+      const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
+      let regenerate = input.figureRegen !== false;
+      if (regenerate && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
+        send(logEvent(
+          "figure",
+          "GEMINI_API_KEY 미설정 — Gemini 재생성 건너뛰고 crop+워터마크 폴백으로 진행합니다.",
+          "warn",
+        ));
+        regenerate = false;
+      }
       send(stageEvent("figure", "running"));
       send(progressEvent("figure", 5));
       send(logEvent("figure", regenerate
         ? "figure_processor.py를 실행합니다 (Gemini 재생성)."
         : "figure_processor.py를 실행합니다 (crop만, Gemini 호출 없음)."));
-
-      const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
-      if (regenerate && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
-        send(logEvent(
-          "figure",
-          "GEMINI_API_KEY 미설정 — /settings에서 키를 추가하거나 figureRegen을 끄세요 (crop+워터마크만 적용됨).",
-          "warn",
-        ));
-      }
 
       const figureResult = await runFigureStage({
         examDataPath: cache.paths.examData,

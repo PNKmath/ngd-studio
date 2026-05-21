@@ -510,6 +510,65 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
       expect(entry.retry).toBe(false);
     }
   }, 30_000);
+
+  it("figure: auto-downgrades to --no-regen when no Gemini/Google API key is set", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "");
+    vi.stubEnv("GOOGLE_API_KEY", "");
+    vi.stubEnv("NGD_STUDIO_DISABLE_RUNTIME_ENV", "1");
+
+    try {
+      const { events, send } = makeSseCollector();
+      const questionNums = [1, 2, 3];
+      const questionImages = questionNums.map((n) => ({
+        number: n,
+        path: path.join(FIXTURES_DIR, `q0${n}.png`),
+      }));
+
+      await prepopulateSolverCache(cache, questionNums);
+
+      const { runStageOrchestrator } = await import("../orchestrator");
+      const { runStageCommand } = await import("../commands");
+      const spy = vi.mocked(runStageCommand);
+      spy.mockClear();
+
+      const result = await runStageOrchestrator({
+        mode: "resume",
+        resumeFrom: "solver",
+        meta: { school: "테스트고", grade: 2, subject: "수학" },
+        questionImages,
+        stageOverrides: {
+          "create.solver": "deepseek-v4",
+          "create.verifier": "deepseek-v4",
+        },
+        figureRegen: true,
+        baseDir,
+        send,
+        isAborted: () => false,
+        cache,
+      });
+
+      expect(result.status).toBe("done");
+
+      const figureCall = spy.mock.calls.find((call) =>
+        (call[0].args ?? []).some(
+          (a) => typeof a === "string" && a.endsWith("figure_processor.py")
+        )
+      );
+      expect(figureCall).toBeDefined();
+      expect(figureCall![0].args).toContain("--no-regen");
+
+      const warnLog = events.find((e) => {
+        if (e.event !== "log") return false;
+        const d = e.data as Record<string, unknown>;
+        return d.level === "warn"
+          && typeof d.message === "string"
+          && d.message.includes("crop+워터마크 폴백");
+      });
+      expect(warnLog).toBeDefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }, 30_000);
 });
 
 // ────────────────────────────────────────────────────────────────────────────
