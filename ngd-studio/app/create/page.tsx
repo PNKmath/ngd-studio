@@ -714,6 +714,24 @@ export default function CreateV4Page() {
             </label>
             <div className="flex items-center gap-3">
               <label
+                className="flex items-center gap-1.5 cursor-pointer"
+                title="체크 해제 → HWPX 검수 단계 자체를 건너뜁니다. 체크 → 완성된 HWPX 를 자동 점검하고 자주 나는 사소한 오류(빈 줄 누락·수식 기호 오타 등)를 자동으로 고친 뒤 다시 점검합니다."
+              >
+                <input
+                  type="checkbox"
+                  checked={aiSettings.checkerMaxAttempts > 0}
+                  onChange={(e) => setAiSettings(writeAISettings({
+                    ...aiSettings,
+                    checkerMaxAttempts: e.target.checked ? 2 : 0,
+                  }))}
+                  className="accent-primary w-3.5 h-3.5"
+                />
+                <span className={cn(
+                  "text-[11px] font-bold tracking-tight transition-colors",
+                  aiSettings.checkerMaxAttempts === 0 ? "text-muted-foreground/40" : "text-muted-foreground",
+                )}>자동검수</span>
+              </label>
+              <label
                 className="flex items-center gap-1.5"
                 title="AI가 푼 풀이를 또 다른 AI가 다시 검토합니다. 틀린 곳이 있으면 풀이를 다시 시도하며, 횟수가 많을수록 정확도는 올라가지만 시간·비용이 늘어납니다. 0 = 검증 없이 첫 풀이 그대로 사용."
               >
@@ -736,24 +754,6 @@ export default function CreateV4Page() {
                     aiSettings.verifierMaxAttempts === 0 && "opacity-40",
                   )}
                 />
-              </label>
-              <label
-                className="flex items-center gap-1.5 cursor-pointer"
-                title="체크 해제 → HWPX 검수 단계 자체를 건너뜁니다. 체크 → 완성된 HWPX 를 자동 점검하고 자주 나는 사소한 오류(빈 줄 누락·수식 기호 오타 등)를 자동으로 고친 뒤 다시 점검합니다."
-              >
-                <input
-                  type="checkbox"
-                  checked={aiSettings.checkerMaxAttempts > 0}
-                  onChange={(e) => setAiSettings(writeAISettings({
-                    ...aiSettings,
-                    checkerMaxAttempts: e.target.checked ? 2 : 0,
-                  }))}
-                  className="h-3 w-3 rounded border-input"
-                />
-                <span className={cn(
-                  "text-[11px] font-bold tracking-tight transition-colors",
-                  aiSettings.checkerMaxAttempts === 0 ? "text-muted-foreground/40" : "text-muted-foreground",
-                )}>자동수정</span>
               </label>
             </div>
           </div>
