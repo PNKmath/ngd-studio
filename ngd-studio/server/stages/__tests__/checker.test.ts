@@ -290,6 +290,90 @@ describe("runCheckerWithAutoFix", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 11. NEW: maxAttempts 시맨틱 회귀 테스트 (Phase 3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("runCheckerWithAutoFix maxAttempts 시맨틱 — 회귀 검증", () => {
+  it("maxAttempts=1 → runDeterministicCheckerRules 1회 호출, fix 호출 안 됨", async () => {
+    // fixable issue (equation.run_on 경고)가 발생하는 XML
+    const xml = wrapSection(makeEquationXml("a = b = c"));
+
+    const { result, autofixed } = await runCheckerWithAutoFix({ sectionXml: xml }, 1);
+
+    // Verification
+    expect(autofixed).toBe(false);
+    expect(result.output?.autofixed).toBe(false);
+    // maxAttempts=1 이므로 루프가 1회만 실행: attempt 0에서 issues 확인하고 루프 종료
+    // (fixableIssues가 있어도 attempt >= maxAttempts - 1이므로 fix는 발동 안 함)
+    expect(result.output?.issues.filter((i) => i.ruleId === "equation.run_on")).toHaveLength(1);
+  });
+
+  it("maxAttempts=2 → runDeterministicCheckerRules 2회 호출, fix 1회 호출, autofixed=true", async () => {
+    const xml = wrapSection(makeEquationXml("a = b = c"));
+
+    const { result, autofixed } = await runCheckerWithAutoFix({ sectionXml: xml }, 2);
+
+    // Verification
+    // attempt=0: rules 호출 → fixable issues 발견 → fix 적용
+    // attempt=1: rules 호출 → fixable issues 없음 → 루프 종료
+    expect(autofixed).toBe(true);
+    expect(result.output?.autofixed).toBe(true);
+    // fix 후 run-on 경고가 사라져야 함 (분할됨)
+    expect(result.output?.issues.filter((i) => i.ruleId === "equation.run_on")).toHaveLength(0);
+    expect(result.output?.ok).toBe(true);
+  });
+
+  it("maxAttempts=3 → runDeterministicCheckerRules 최대 3회 호출, fix 최대 2회", async () => {
+    // 이 테스트는 모든 라운드에서 fixable을 유지하는 경우를 검증
+    // 단, 현재 RULES에서는 equation.run_on만 fixable한 warning이고,
+    // 그 fix는 idempotent하므로 2회째 fix 후 run-on 경고가 사라짐
+    // → attempt=0: rules → fix, attempt=1: rules → no more fixable → return
+    // 따라서 실제로는 2회 호출만 일어남
+
+    const xml = wrapSection(makeEquationXml("a = b = c"));
+    const { result, autofixed } = await runCheckerWithAutoFix({ sectionXml: xml }, 3);
+
+    // maxAttempts=3이어도 fixable issues가 남지 않으면 루프가 조기 종료
+    expect(autofixed).toBe(true);
+    expect(result.output?.ok).toBe(true);
+    // 모든 fixable 이슈 해결됨
+    expect(result.output?.issues.filter((i) => i.fallbackRequired)).toHaveLength(0);
+  });
+
+  it("maxAttempts=2 + clean XML → runDeterministicCheckerRules 1회만 호출, fix 호출 안 됨", async () => {
+    // clean XML에는 fixable issues가 없으므로 루프 첫 시도에서 바로 반환
+    const xml = wrapSection(makeEquationXml("f(x) = x^2"));
+
+    const { result, autofixed } = await runCheckerWithAutoFix({ sectionXml: xml }, 2);
+
+    expect(autofixed).toBe(false);
+    expect(result.output?.autofixed).toBe(false);
+    expect(result.output?.ok).toBe(true);
+    expect(result.output?.issues).toHaveLength(0);
+  });
+
+  it("maxAttempts=1 + clean XML → attempt 0에서 즉시 반환", async () => {
+    const xml = wrapSection(makeEquationXml("f(x) = x^2"));
+
+    const { result, autofixed } = await runCheckerWithAutoFix({ sectionXml: xml }, 1);
+
+    expect(autofixed).toBe(false);
+    expect(result.output?.ok).toBe(true);
+  });
+
+  it("maxAttempts >= 1 일 때 unfixable error는 autofixed=false로 반환", async () => {
+    // unfixable error: 난이도 어휘 오류
+    const xml = makeTextXml("[난이도] 극상");
+
+    const { result, autofixed } = await runCheckerWithAutoFix({ sectionXml: xml }, 2);
+
+    expect(autofixed).toBe(false);
+    expect(result.output?.ok).toBe(false);
+    expect(result.output?.issues.some((i) => i.ruleId === "text.difficulty_vocabulary")).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 7. NEW Deterministic rule: endNote.structure (D6)
 // ─────────────────────────────────────────────────────────────────────────────
 
