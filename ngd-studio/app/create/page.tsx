@@ -165,6 +165,16 @@ export default function CreateV4Page() {
   const isDone = status === "done" || status === "failed";
   const hasJob = isRunning || isDone || isPaused;
 
+  // figure 단계가 완료(done/failed)되면 extractionReviewActive를 초기화한다.
+  // figure 완료 후 "그림 결과 확인" 버튼이 보이도록 하기 위함.
+  // (extractionReviewActive=true이면 해당 버튼이 숨겨지고 "해설 생성 시작" 버튼이 잘못 노출됨)
+  useEffect(() => {
+    const figureStage = stages.find((s) => s.name === "figure");
+    if (figureStage?.status === "done" || figureStage?.status === "failed") {
+      store.setExtractionReviewActive(false);
+    }
+  }, [stages, store]);
+
   const resumeOrRetry = useCallback(async () => {
     const base = v3Meta ?? {};
     const jobMeta = { ...base, resumeFrom: "auto" };
@@ -880,10 +890,14 @@ export default function CreateV4Page() {
         }}
         onRetryFigure={(qNum) => {
           if (!jobId) return;
+          // figure 재시도 시 extractionReviewActive 초기화 — 그렇지 않으면
+          // "그림 결과 확인" 버튼이 사라지고 "해설 생성 시작" 버튼이 잘못 노출됨.
+          store.setExtractionReviewActive(false);
           sendResumeAction(jobId, `resume --q=${qNum} --from=figure`, store);
         }}
         onRetryAll={async () => {
           if (!jobId || status === "running") return;
+          store.setExtractionReviewActive(false);
           setFigureGlobalLoading("figure");
           await sendResumeAction(jobId, "resume --from=figure", store);
           setFigureGlobalLoading(null);

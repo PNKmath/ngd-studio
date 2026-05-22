@@ -129,10 +129,14 @@ def trim_and_watermark(img_path: str, output_path: str) -> None:
     cropped.convert("RGB").save(output_path)
 
 
-def generate_with_gemini(client, ref_path: str, desc: str, ar: str) -> bytes | None:
+def generate_with_gemini(
+    client, ref_path: str, desc: str, ar: str
+) -> tuple[bytes | None, str | None]:
+    """Returns (image_bytes, error_message). error_message is None on success."""
     prompt = PROMPT_TEMPLATE.format(desc=f"{desc} " if desc else "")
     ref_image = Image.open(ref_path)
 
+    last_error: str | None = None
     for attempt in range(3):
         try:
             response = client.models.generate_content(
@@ -145,14 +149,16 @@ def generate_with_gemini(client, ref_path: str, desc: str, ar: str) -> bytes | N
             )
             for part in response.candidates[0].content.parts:
                 if part.inline_data is not None:
-                    return part.inline_data.data
+                    return part.inline_data.data, None
+            last_error = "no image in response"
             print(f"    attempt {attempt + 1}: 이미지 없음, 재시도...")
         except Exception as e:
+            last_error = f"{type(e).__name__}: {e}"
             print(f"    attempt {attempt + 1}: {e}")
             if attempt < 2:
                 time.sleep(3)
 
-    return None
+    return None, last_error
 
 
 def process_figure(
@@ -205,44 +211,37 @@ def process_figure(
     ar = aspect_ratio_str(cw, ch)
     final_path = output_dir / f"prob{n}_final.png"
 
-    if no_regen:
-        print(f"  [Q{n}] crop만 적용 (--no-regen, crop={box})")
-        trim_and_watermark(str(ref_path), str(final_path))
-        print(f"  [Q{n}] 완료 → {final_path}")
-        uncertain = _is_boundary_uncertain(box, iw, ih, None)
-        q_status: dict = {
+    def _make_q_status(uncertain: bool) -> dict:
+        s: dict = {
             "status": "boundary_uncertain" if uncertain else "ok",
             "image": str(final_path),
             "boundary_uncertain": uncertain,
         }
         if uncertain:
-            q_status["crop_attempts"] = 1
-            q_status["needs_agent_review"] = True
-        return q_status
+            s["crop_attempts"] = 1
+            s["needs_agent_review"] = True
+        return s
+
+    if no_regen:
+        print(f"  [Q{n}] crop만 적용 (--no-regen, crop={box})")
+        trim_and_watermark(str(ref_path), str(final_path))
+        print(f"  [Q{n}] 완료 → {final_path}")
+        return _make_q_status(_is_boundary_uncertain(box, iw, ih, None))
 
     print(f"  [Q{n}] Gemini 생성 중... (crop={box}, aspect={ar})")
 
-    gen_data = generate_with_gemini(client, str(ref_path), desc, ar)
+    gen_data, gen_error = generate_with_gemini(client, str(ref_path), desc, ar)
     if gen_data is None:
-        print(f"  [Q{n}] 생성 실패")
-        return {"status": "failed", "error": "gemini generation failed after 3 attempts"}
+        err_msg = f"gemini generation failed after 3 attempts: {gen_error}" if gen_error else "gemini generation failed after 3 attempts"
+        print(f"  [Q{n}] 생성 실패: {gen_error}")
+        return {"status": "failed", "error": err_msg}
 
     gen_path = cache_dir / f"prob{n}_generated.png"
     gen_path.write_bytes(gen_data)
 
     trim_and_watermark(str(gen_path), str(final_path))
     print(f"  [Q{n}] 완료 → {final_path}")
-
-    uncertain = _is_boundary_uncertain(box, iw, ih, gen_data)
-    q_status = {
-        "status": "boundary_uncertain" if uncertain else "ok",
-        "image": str(final_path),
-        "boundary_uncertain": uncertain,
-    }
-    if uncertain:
-        q_status["crop_attempts"] = 1
-        q_status["needs_agent_review"] = True
-    return q_status
+    return _make_q_status(_is_boundary_uncertain(box, iw, ih, gen_data))
 
 
 def main() -> None:
@@ -339,7 +338,7 @@ def main() -> None:
             client, prob, cache_dir, question_images_dir, output_dir, args.no_regen
         )
         questions_status[str(n)] = q_result
-        if q_result["status"] == "ok" or q_result["status"] == "boundary_uncertain":
+        if q_result["status"] in ("ok", "boundary_uncertain"):
             prob["figure_info"]["final_image"] = q_result["image"]
 
     # Derive top-level status

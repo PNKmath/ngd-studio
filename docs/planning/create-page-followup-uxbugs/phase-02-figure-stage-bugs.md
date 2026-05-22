@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: figure_processor 실패 + cleaned 이미지 폴백 + figure 후 stage routing 버그
-status: pending
+status: completed
 depends_on: []
 scope:
   - ngd-studio/components/results/question-result/QuestionImages.tsx
@@ -133,12 +133,12 @@ worker 가 실제 코드 Read 후 결정.
 `QuestionPanelHeader` 의 "그림 결과 확인" 버튼이 figure 실패 시에도 클릭 가능해야 함 (현재 `isDone` 조건만 보면 figure 실패도 done 처리될 가능성 — 확인 필요).
 
 ## 체크리스트
-- [ ] ⓐ 진단 — workspaces 최근 job 의 figure_processor stacktrace 확보 + figure_status.json / build_status.json 상태 기록. 결과를 `## 실행 결과` 1회차에 기록
-- [ ] ⓑ ③ cleaned 폴백 — `QuestionImages.tsx` 분기 점검 + raw 가 cleaned 자리에 들어가는 경로 차단 → "이미지 처리 전" placeholder 노출
-- [ ] ⓒ ⑧ figure_processor.py 실패 픽스 — 진단 결과의 root cause 픽스 (외부 의존이면 needs_user 보고)
-- [ ] ⓓ ⑨ stage routing — 직전 두 픽스(296cd58, 86117c0) 와 root cause 비교. 3회차 동일 root cause 면 audit 매트릭스 작성 후 종료, 다른 경로면 직접 픽스
-- [ ] ⓔ memory `feedback-systematic-audit` 적용 판단 명시 (`## 실행 결과` 의 `추가 발견사항` 에 분기 결과 한 줄)
-- [ ] ⓕ ⑩ figure 모달 실패 상태 표시 + "그림 결과 확인" 버튼 figure 실패 시에도 진입 가능
+- [x] ⓐ 진단 — workspaces 최근 job 의 figure_processor stacktrace 확보 + figure_status.json / build_status.json 상태 기록. 결과를 `## 실행 결과` 1회차에 기록
+- [x] ⓑ ③ cleaned 폴백 — `QuestionImages.tsx` 분기 점검 + raw 가 cleaned 자리에 들어가는 경로 차단 → "이미지 처리 전" placeholder 노출
+- [x] ⓒ ⑧ figure_processor.py 실패 픽스 — 진단 결과의 root cause 픽스 (외부 의존이면 needs_user 보고)
+- [x] ⓓ ⑨ stage routing — 직전 두 픽스(296cd58, 86117c0) 와 root cause 비교. 3회차 동일 root cause 면 audit 매트릭스 작성 후 종료, 다른 경로면 직접 픽스
+- [x] ⓔ memory `feedback-systematic-audit` 적용 판단 명시 (`## 실행 결과` 의 `추가 발견사항` 에 분기 결과 한 줄)
+- [x] ⓕ ⑩ figure 모달 실패 상태 표시 + "그림 결과 확인" 버튼 figure 실패 시에도 진입 가능
 
 ## 영향 범위
 
@@ -164,4 +164,44 @@ npx vitest run --reporter=basic
 ```
 
 ## 실행 결과
-{worker가 완료 시 작성 — 1회차에 진단 결과 + 픽스 분기 결정 기록}
+
+### 1회차 (2026-05-22 23:50 KST) — completed
+**상태**: completed
+**소요 시간**: 약 25분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+진단 결과: figure_status.json에 `"error": "gemini generation failed after 3 attempts"` 기록 — Gemini API 429 RESOURCE_EXHAUSTED (월 지출 한도 초과). ⓒ는 외부 의존 실패이므로 에러 메시지 캡처 개선으로 대응. ⓑ cleaning_status.json `cleaned: false` 시 파일은 존재하지만 원본 복사본이므로 QuestionImages.tsx에서 상태 fetch + 분기 추가. ⓓ 직전 두 픽스(followup meta 누락, defaultProvider routing)와 다른 새로운 root cause 확인 — `extractionReviewActive`가 extractor 이후 리셋 없이 유지되어 figure stage 이후 "그림 결과 확인" 버튼이 숨겨지는 문제. page.tsx에서 figure stage done/failed 시 자동 리셋 + retry 콜백 앞에서 즉시 리셋.
+
+#### 변경 파일
+- `figure_processor.py` (수정, +8/-5줄) — `generate_with_gemini` 반환 타입을 `(bytes|None, str|None)` 튜플로 변경, 실제 예외 메시지를 figure_status.json error 필드에 포함
+- `ngd-studio/components/results/question-result/QuestionImages.tsx` (수정, +23/-5줄) — cleaning_status.json fetch + `isActuallyCleaned` 상태 추가, `cleaned=false` 시 "이미지 처리 전 (원본과 동일)" placeholder 표시
+- `ngd-studio/components/results/question-result/FigureReviewModal.tsx` (수정, +30/-12줄) — `failedProblems` useMemo 추가, 헤더에 "실패 N개" 배지, 실패 문제에 빨강 테두리+에러 메시지+재생성 CTA, `allLoaded` 계산에서 failed 문제 제외
+- `ngd-studio/app/create/page.tsx` (수정, +12/-0줄) — figure stage done/failed 시 extractionReviewActive 리셋 useEffect 추가, onRetryFigure/onRetryAll 콜백 앞에 즉시 리셋 추가
+
+#### 검증 결과
+- [x] TypeScript 타입 검사: `npx tsc --noEmit` → 오류 없음 (exit 0)
+- [x] Vitest: 706 pass / 1 pre-existing fail (openai-sdk quota) — 신규 실패 없음
+- [x] figure_processor.py 구문: `python3 -m py_compile figure_processor.py` → 통과
+- [ ] 수동 smoke: 사용자 환경에서 figure 단계 실제 실행 필요 (Gemini API 한도 초과 상태로 자동 검증 불가)
+
+#### 추가 발견사항
+- **ⓔ feedback-systematic-audit 분기 판단**: 296cd58(followup meta 누락)·86117c0(defaultProvider routing) 모두 orchestrator/followup route 레이어의 데이터 누락 문제. 본 케이스 ⑨의 root cause는 `extractionReviewActive` 프론트엔드 상태가 figure followup 시 리셋되지 않는 문제 — 전혀 다른 레이어/경로. audit 매트릭스 전환 불필요, 직접 픽스 적용.
+- **ⓒ Gemini 429 RESOURCE_EXHAUSTED**: API key는 정상 설정되어 있으나 프로젝트 월 지출 한도 초과. https://ai.studio/spend 에서 한도 상향 필요. 코드 픽스 범위 외 — 에러 메시지 visibility 개선으로 대응.
+- **figure 실패 후 builder 계속 실행**: orchestrator.ts line 945-948에서 figure 실패 시 `return failed(...)` 없이 builder로 진행 — 그림 없이 HWPX를 조립하는 동작. 사용자 경험에 따라 figure 실패 시 중단이 나을 수도 있으나 현재 스펙 외 사항. 추가 발견으로만 기록.
+
+#### 질문 / 결정 사항
+- Gemini 월 한도 초과 해소 필요. https://ai.studio/spend 에서 프로젝트 지출 한도 상향 요청.
+- figure 실패 시 builder 자동 실행 계속 여부 (현재 동작) — 의도된 동작이라면 OK, 아니면 별도 phase에서 다룰 것.
+
+#### Scope Audit (orchestrator)
+pass — 변경 4건 모두 scope 내 (figure_processor.py, page.tsx, FigureReviewModal.tsx, QuestionImages.tsx). docs/* 는 orchestrator/PHASE_FILE exempt. orchestrator.ts/followup route는 미수정.
+
+#### Verification Re-run (orchestrator)
+exit 0 — `cd ngd-studio && npx tsc --noEmit` clean, vitest 706/707 pass (1 fail = openaiSdkLive.test.ts, 검증 섹션 주석 명시 pre-existing OpenAI quota fail). worker 보고와 일치. partial 사유(Gemini 한도)는 사용자 확정 — 외부 의존이라 코드 픽스 범위 외.
+
+#### Simplify (orchestrator)
+2 files, 3 edits — VERIFY pass. figure_processor.py `_make_q_status` 헬퍼로 중복 q_status 블록 통합 + status `in` 연산자 단순화. FigureReviewModal no-op onError 핸들러 제거.
+
+#### Review (orchestrator)
+VERDICT: pass — 0 issues. 6개 항목 전부 구현, A~J 전부 OK, 대체 smoke test 3종(tsc/vitest/py_compile) 기록, ⓔ audit 분기 판단(296cd58/86117c0 와 다른 레이어 — frontend extractionReviewActive 상태) 합리적.

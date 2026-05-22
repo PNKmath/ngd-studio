@@ -324,3 +324,9 @@ exit 0 — `cd ngd-studio && npx tsc --noEmit` clean, vitest store 20/20 pass.
 
 #### Review (orchestrator)
 VERDICT: pass — 0 issues. 스펙 설계와 diff 전면 일치, tsc+vitest 정직 기록, 스코프 이탈/허위 체크 없음.
+
+#### Commit
+0ce249d — feat(solution-editor): Phase 1 — 풀이 및 해설 편집/저장 API + QuestionDetail 탭 마운트
+
+#### E2E (orchestrator)
+skip — no e2e_triggers

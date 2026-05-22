@@ -58,9 +58,14 @@ export function FigureReviewModal({
     onRetryFigure(qNum);
   };
 
+  const failedProblems = useMemo(
+    () => figureProblems.filter((q) => q.figure?.status === "failed"),
+    [figureProblems]
+  );
+
   const allLoaded =
     figureProblems.length === 0 ||
-    figureProblems.every((q) => loadedSet.has(q.number));
+    figureProblems.every((q) => loadedSet.has(q.number) || q.figure?.status === "failed");
 
   // ESC 닫기 (QuestionDetailModal 패턴 그대로)
   useEffect(() => {
@@ -95,6 +100,11 @@ export function FigureReviewModal({
             >
               Figure
             </Badge>
+            {failedProblems.length > 0 && (
+              <span className="text-[10px] font-bold text-destructive">
+                실패 {failedProblems.length}개
+              </span>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -140,11 +150,15 @@ export function FigureReviewModal({
                     `outputs/images/prob${q.number}_final.png`
                   )}&_r=${retry}`;
                   const loaded = loadedSet.has(q.number);
+                  const isFailed = q.figure?.status === "failed";
                   return (
-                    <div key={q.number} className="space-y-1">
+                    <div
+                      key={q.number}
+                      className={`space-y-1 rounded-lg p-2 ${isFailed ? "border border-destructive/30 bg-destructive/5" : ""}`}
+                    >
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-muted-foreground">
-                          {q.number}번 {loaded ? "✓" : "생성 중..."}
+                        <span className={`text-[10px] ${isFailed ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                          {q.number}번 {isFailed ? "✗ 생성 실패" : loaded ? "✓" : "생성 중..."}
                         </span>
                         <button
                           onClick={() => handleRetry(q.number)}
@@ -154,20 +168,26 @@ export function FigureReviewModal({
                           재생성
                         </button>
                       </div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={src}
-                        alt={`문제 ${q.number} 그림`}
-                        className={`w-full rounded border bg-white transition-opacity ${
-                          loaded ? "opacity-100" : "opacity-20"
-                        }`}
-                        onLoad={() =>
-                          setLoadedSet((prev) => new Set([...prev, q.number]))
-                        }
-                        onError={() => {
-                          /* 폴링이 자동 재시도 */
-                        }}
-                      />
+                      {isFailed ? (
+                        <div className="rounded border border-destructive/20 bg-destructive/5 p-3 text-[10px] text-destructive/70 text-center min-h-[60px] flex items-center justify-center">
+                          {q.figure?.error
+                            ? <span className="font-mono break-all">{q.figure.error}</span>
+                            : <span>figure_processor.py 실패</span>
+                          }
+                        </div>
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={src}
+                          alt={`문제 ${q.number} 그림`}
+                          className={`w-full rounded border bg-white transition-opacity ${
+                            loaded ? "opacity-100" : "opacity-20"
+                          }`}
+                          onLoad={() =>
+                            setLoadedSet((prev) => new Set([...prev, q.number]))
+                          }
+                        />
+                      )}
                     </div>
                   );
                 })}
