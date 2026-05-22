@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,6 +11,7 @@ import { renderConditionBox, renderDataTable, renderParts } from "./renderers";
 import type { Part } from "./types";
 import { QuestionImages } from "./QuestionImages";
 import { ExtractionEditor } from "./ExtractionEditor";
+import { SolutionEditor } from "./SolutionEditor";
 import { ActionButtons } from "./ActionButtons";
 import { statusOf } from "./QuestionList";
 
@@ -41,6 +41,7 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
   const updateQuestionResult = useJobStore((s) => s.updateQuestionResult);
   const [editing, setEditing] = useState(false);
   const [savedExt, setSavedExt] = useState<Record<string, unknown> | null>(null);
+  const [savedSol, setSavedSol] = useState<Record<string, unknown> | null>(null);
 
   const ext = qr.extracted as Record<string, unknown> | undefined;
   const sol = qr.solved as Record<string, unknown> | undefined;
@@ -221,22 +222,14 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                       <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em]">AI GENERATED SOLUTION</h4>
                       <Badge variant="outline" className="bg-muted/10 text-muted-foreground border-border/60 text-[10px] px-2 font-bold uppercase">Solved</Badge>
                     </div>
-                    <Card className="p-8 border-border/60 bg-card shadow-sm leading-relaxed text-[15px] text-foreground/90">
-                       <div className="prose prose-sm max-w-none prose-slate">
-                          {sol.explanation_parts
-                            ? renderParts(sol.explanation_parts as Part[])
-                            : <span className="text-muted-foreground italic">해설 데이터가 없습니다.</span>
-                          }
-                       </div>
-                    </Card>
-
-                    <div className="p-5 rounded-xl border border-border/80 bg-muted/5 flex items-center justify-between shadow-sm">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">FINAL ANSWER</span>
-                        <span className="text-sm font-bold text-foreground/80">최종 정답</span>
-                      </div>
-                      <span className="text-2xl font-black text-foreground tracking-tighter">{String(ext?.answer || sol.answer || "미지정")}</span>
-                    </div>
+                    <SolutionEditor
+                      qNum={qr.number}
+                      initial={savedSol ?? sol}
+                      onSaved={(updated) => {
+                        updateQuestionResult(qr.number, "solved", updated);
+                        setSavedSol(updated);
+                      }}
+                    />
                   </div>
                 ) : (
                   <EmptyTab message="아직 해설이 생성되지 않았습니다. 추출 완료 후 진행하세요." />
@@ -248,14 +241,14 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                   <div className="space-y-8 max-w-3xl animate-in slide-in-from-bottom-2 duration-500 fill-mode-both">
                     <div className="flex items-center justify-between">
                       <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em]">VERIFICATION REPORT</h4>
-                      <Badge variant="outline" className={cn("font-bold text-[10px] px-2.5 py-0.5 shadow-none border-border/60 bg-muted/10", (ver as Record<string, unknown>).status === "pass" ? "text-emerald-600/90" : "text-red-600/90")}>
-                        {String((ver as Record<string, unknown>).status ?? "UNKNOWN").toUpperCase()}
+                      <Badge variant="outline" className={cn("font-bold text-[10px] px-2.5 py-0.5 shadow-none border-border/60 bg-muted/10", ver.status === "pass" ? "text-emerald-600/90" : "text-red-600/90")}>
+                        {String(ver.status ?? "UNKNOWN").toUpperCase()}
                       </Badge>
                     </div>
 
-                    {Array.isArray((ver as Record<string, unknown>).issues) && ((ver as Record<string, unknown>).issues as unknown[]).length > 0 ? (
+                    {Array.isArray(ver.issues) && (ver.issues as unknown[]).length > 0 ? (
                       <div className="space-y-4">
-                        {((ver as Record<string, unknown>).issues as Record<string, unknown>[]).map((issue, i) => (
+                        {(ver.issues as Record<string, unknown>[]).map((issue, i) => (
                           <div key={i} className="p-5 rounded-xl border border-red-100 bg-red-50/20 flex gap-5 shadow-sm">
                             <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0 border border-red-200/50">
                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>

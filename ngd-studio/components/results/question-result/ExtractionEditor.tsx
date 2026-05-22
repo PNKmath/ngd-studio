@@ -1,15 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useJobStore } from "@/lib/store";
-import { sendResumeAction } from "./resume";
 
 /**
  * 추출 결과 편집 폼.
  * Step 3.5(추출 편집)에서 사용자가 parts/choices/answer 등을 직접 수정한다.
  * 저장은 PUT /api/extracted-json?q=N — 백엔드의 q{N}_extracted.json을 덮어쓴다.
- * 저장 완료 후 "풀이부터 재실행" 버튼이 활성화된다.
+ * 기본 read-only 모드. "추출 결과 편집" 버튼 클릭 시 편집 모드 진입.
  */
 export function ExtractionEditor({
   qNum,
@@ -20,6 +18,7 @@ export function ExtractionEditor({
   initial: Record<string, unknown>;
   onSaved: (updated: Record<string, unknown>) => void;
 }) {
+  const [editMode, setEditMode] = useState(false);
   const [data, setData] = useState<Record<string, unknown>>(initial);
   const [partsText, setPartsText] = useState(JSON.stringify(initial.parts ?? [], null, 0));
   const [choicesText, setChoicesText] = useState(JSON.stringify(initial.choices ?? null, null, 0));
@@ -30,21 +29,32 @@ export function ExtractionEditor({
   );
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [rerunning, setRerunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const jobId = useJobStore((s) => s.jobId);
-  const jobStatus = useJobStore((s) => s.status);
+  const isValid = useMemo(() => {
+    try {
+      JSON.parse(partsText);
+      if (choicesText.trim()) JSON.parse(choicesText);
+      if (conditionBoxText.trim()) JSON.parse(conditionBoxText);
+      if (dataTableText.trim()) JSON.parse(dataTableText);
+      if (cropText.trim()) JSON.parse(cropText);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [partsText, choicesText, conditionBoxText, dataTableText, cropText]);
 
-  const markDirty = () => setDirty(true);
-
-  const handleRerunFromSolver = useCallback(async () => {
-    if (!jobId || rerunning || jobStatus === "running") return;
-    setRerunning(true);
-    const instruction = `resume --q=${qNum} --from=solver`;
-    await sendResumeAction(jobId, instruction, useJobStore.getState());
-    setRerunning(false);
-  }, [jobId, rerunning, jobStatus, qNum]);
+  const handleCancel = useCallback(() => {
+    setData(initial);
+    setPartsText(JSON.stringify(initial.parts ?? [], null, 0));
+    setChoicesText(JSON.stringify(initial.choices ?? null, null, 0));
+    setConditionBoxText(JSON.stringify(initial.condition_box ?? null, null, 0));
+    setDataTableText(JSON.stringify(initial.data_table ?? null, null, 0));
+    setCropText(JSON.stringify(((initial.figure_info as Record<string, unknown>)?.crop_ratio ?? null), null, 0));
+    setDirty(false);
+    setError(null);
+    setEditMode(false);
+  }, [initial]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -93,6 +103,7 @@ export function ExtractionEditor({
       }
       onSaved(next);
       setDirty(false);
+      setEditMode(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장 실패");
     } finally {
@@ -100,16 +111,49 @@ export function ExtractionEditor({
     }
   };
 
+  // Read-only 모드
+  if (!editMode) {
+    return (
+      <div className="pt-2 space-y-2 text-xs">
+        <div className="flex items-center justify-between">
+          <h5 className="font-medium text-blue-600">추출 결과</h5>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditMode(true)}
+            className="h-7 text-xs"
+          >
+            추출 결과 편집
+          </Button>
+        </div>
+        <pre className="text-[10px] p-3 bg-muted/30 rounded border overflow-x-auto whitespace-pre-wrap break-all">
+          {JSON.stringify(initial, null, 2)}
+        </pre>
+      </div>
+    );
+  }
+
+  // 편집 모드
   return (
     <div className="pt-2 space-y-2 text-xs">
-      <h5 className="font-medium text-blue-600">추출 결과 편집</h5>
+      <div className="flex items-center justify-between">
+        <h5 className="font-medium text-blue-600">추출 결과 편집</h5>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleCancel}
+          className="h-7 text-xs"
+        >
+          편집 취소
+        </Button>
+      </div>
 
       <div className="grid grid-cols-2 gap-2">
         <label className="block">
           <span className="text-muted-foreground">유형</span>
           <select
             value={String(data.type ?? "")}
-            onChange={(e) => { setData({ ...data, type: e.target.value }); markDirty(); }}
+            onChange={(e) => { setData({ ...data, type: e.target.value }); setDirty(true); }}
             className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
           >
             <option value="choice">choice</option>
@@ -120,7 +164,7 @@ export function ExtractionEditor({
           <span className="text-muted-foreground">난이도</span>
           <select
             value={String(data.difficulty ?? "중")}
-            onChange={(e) => { setData({ ...data, difficulty: e.target.value }); markDirty(); }}
+            onChange={(e) => { setData({ ...data, difficulty: e.target.value }); setDirty(true); }}
             className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
           >
             <option value="하">하</option>
@@ -137,7 +181,7 @@ export function ExtractionEditor({
           <input
             type="text"
             value={String(data.score ?? "")}
-            onChange={(e) => { setData({ ...data, score: e.target.value }); markDirty(); }}
+            onChange={(e) => { setData({ ...data, score: e.target.value }); setDirty(true); }}
             className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
           />
         </label>
@@ -146,7 +190,7 @@ export function ExtractionEditor({
           <input
             type="text"
             value={String(data.subtopic ?? "")}
-            onChange={(e) => { setData({ ...data, subtopic: e.target.value }); markDirty(); }}
+            onChange={(e) => { setData({ ...data, subtopic: e.target.value }); setDirty(true); }}
             className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
           />
         </label>
@@ -157,7 +201,7 @@ export function ExtractionEditor({
         <input
           type="text"
           value={String(data.answer ?? "")}
-          onChange={(e) => { setData({ ...data, answer: e.target.value }); markDirty(); }}
+          onChange={(e) => { setData({ ...data, answer: e.target.value }); setDirty(true); }}
           className="w-full border rounded px-1 py-0.5 mt-0.5 bg-background"
           placeholder="예: ② 또는 -3"
         />
@@ -167,7 +211,7 @@ export function ExtractionEditor({
         <span className="text-muted-foreground">본문 parts (JSON 배열)</span>
         <textarea
           value={partsText}
-          onChange={(e) => { setPartsText(e.target.value); markDirty(); }}
+          onChange={(e) => { setPartsText(e.target.value); setDirty(true); }}
           rows={4}
           className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
           spellCheck={false}
@@ -178,7 +222,7 @@ export function ExtractionEditor({
         <span className="text-muted-foreground">선지 choices (JSON 배열, 서답형은 null)</span>
         <textarea
           value={choicesText}
-          onChange={(e) => { setChoicesText(e.target.value); markDirty(); }}
+          onChange={(e) => { setChoicesText(e.target.value); setDirty(true); }}
           rows={3}
           className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
           spellCheck={false}
@@ -189,7 +233,7 @@ export function ExtractionEditor({
         <span className="text-muted-foreground">보기/조건 condition_box (JSON 또는 null)</span>
         <textarea
           value={conditionBoxText}
-          onChange={(e) => { setConditionBoxText(e.target.value); markDirty(); }}
+          onChange={(e) => { setConditionBoxText(e.target.value); setDirty(true); }}
           rows={3}
           className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
           spellCheck={false}
@@ -201,7 +245,7 @@ export function ExtractionEditor({
         <span className="text-muted-foreground">표 data_table (JSON 또는 null)</span>
         <textarea
           value={dataTableText}
-          onChange={(e) => { setDataTableText(e.target.value); markDirty(); }}
+          onChange={(e) => { setDataTableText(e.target.value); setDirty(true); }}
           rows={3}
           className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
           spellCheck={false}
@@ -215,11 +259,15 @@ export function ExtractionEditor({
           <input
             type="text"
             value={cropText}
-            onChange={(e) => { setCropText(e.target.value); markDirty(); }}
+            onChange={(e) => { setCropText(e.target.value); setDirty(true); }}
             className="w-full border rounded px-1 py-0.5 mt-0.5 font-mono text-[10px] bg-background"
             placeholder="[0.55, 0.1, 0.95, 0.7]"
           />
         </label>
+      )}
+
+      {!isValid && dirty && (
+        <p className="text-xs text-destructive">JSON 형식 오류 — 저장 불가</p>
       )}
 
       {error && <div className="text-red-600 text-[10px]">{error}</div>}
@@ -228,20 +276,10 @@ export function ExtractionEditor({
         <Button
           size="sm"
           onClick={handleSave}
-          disabled={saving}
+          disabled={!dirty || !isValid || saving}
           className="h-7 text-xs"
         >
           {saving ? "저장 중..." : "이 문제 저장"}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleRerunFromSolver}
-          disabled={saving || dirty || rerunning || jobStatus === "running" || !jobId}
-          title={dirty ? "먼저 저장하세요" : "이 추출로 풀이부터 다시"}
-          className="h-7 text-xs"
-        >
-          {rerunning ? "재실행 중..." : "풀이부터 재실행"}
         </Button>
       </div>
     </div>

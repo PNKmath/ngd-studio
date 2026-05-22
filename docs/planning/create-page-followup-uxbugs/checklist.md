@@ -13,9 +13,9 @@ created: 2026-05-22
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-ux-bundle.md](./phase-01-ux-bundle.md) | 7 | 0 | 0% | pending | - |
+| 1 | [phase-01-ux-bundle.md](./phase-01-ux-bundle.md) | 7 | 6 | 86% | needs_user | - |
 | 2 | [phase-02-figure-stage-bugs.md](./phase-02-figure-stage-bugs.md) | 6 | 0 | 0% | pending | - |
-| **Total** | | **13** | **0** | **0%** | | |
+| **Total** | | **13** | **6** | **46%** | | |
 
 ## Phase 의존성
 

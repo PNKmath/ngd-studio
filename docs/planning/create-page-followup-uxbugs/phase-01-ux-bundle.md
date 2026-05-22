@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: UX 묶음 (crop 모달 폭 + PDF 열기 정리 + 편집 패턴 + 풀이탭 편집)
-status: pending
+status: completed
 depends_on: []
 scope:
   - ngd-studio/components/upload/CropperModal.tsx
@@ -9,6 +9,8 @@ scope:
   - ngd-studio/components/results/question-result/ExtractionEditor.tsx
   - ngd-studio/components/results/question-result/SolutionEditor.tsx
   - ngd-studio/components/results/question-result/QuestionDetailModal.tsx
+  - ngd-studio/components/results/question-result/QuestionDetail.tsx
+  - ngd-studio/app/api/solver-json/route.ts
 intervention_likely: false
 intervention_reason: ""
 executor: sonnet
@@ -223,13 +225,13 @@ export function SolutionEditor({
 - QuestionDetailModal 의 풀이 탭 host 위치 에 SolutionEditor 마운트. 기존 read-only 렌더링과 교체.
 
 ## 체크리스트
-- [ ] `ngd-studio/components/upload/CropperModal.tsx` 의 `max-w-[1600px]` → `max-w-[1000px]` (h-95vh 유지)
-- [ ] `ngd-studio/app/create/page.tsx:647` 부근의 "PDF 열기" Button 블록 + onClick 핸들러 제거 (NoActiveSessionPlaceholder 와 상단 글로벌 actions 둘은 유지)
-- [ ] `ngd-studio/app/create/page.tsx:135` 의 "좌측 상단" → "우측 상단" 텍스트 교체
-- [ ] `ExtractionEditor.tsx` 에 `editMode` state 추가 + read-only 분기 + "추출 결과 편집"/"편집 취소" 버튼. 저장 성공 시 `setEditMode(false)`
-- [ ] `ExtractionEditor.tsx` 저장 버튼 활성화 조건 `!dirty || !isValid || saving` (isValid = 5개 JSON 텍스트 모두 파싱 가능). 실시간 에러 인라인 표시
-- [ ] `ExtractionEditor.tsx` 의 "풀이부터 재실행" Button(`:244`) + `handleRerunFromSolver`(`:41`) + `rerunning` state(`:33`) + `sendResumeAction` import 제거
-- [ ] `SolutionEditor.tsx` 신규 (ExtractionEditor 패턴) + `QuestionDetailModal` 의 풀이 탭 host 에 마운트. 풀이/해설 저장 API 경로는 worker 가 grep 으로 확정 (없으면 needs_user 보고)
+- [x] `ngd-studio/components/upload/CropperModal.tsx` 의 `max-w-[1600px]` → `max-w-[1000px]` (h-95vh 유지)
+- [x] `ngd-studio/app/create/page.tsx:647` 부근의 "PDF 열기" Button 블록 + onClick 핸들러 제거 (NoActiveSessionPlaceholder 와 상단 글로벌 actions 둘은 유지)
+- [x] `ngd-studio/app/create/page.tsx:135` 의 "좌측 상단" → "우측 상단" 텍스트 교체
+- [x] `ExtractionEditor.tsx` 에 `editMode` state 추가 + read-only 분기 + "추출 결과 편집"/"편집 취소" 버튼. 저장 성공 시 `setEditMode(false)`
+- [x] `ExtractionEditor.tsx` 저장 버튼 활성화 조건 `!dirty || !isValid || saving` (isValid = 5개 JSON 텍스트 모두 파싱 가능). 실시간 에러 인라인 표시
+- [x] `ExtractionEditor.tsx` 의 "풀이부터 재실행" Button(`:244`) + `handleRerunFromSolver`(`:41`) + `rerunning` state(`:33`) + `sendResumeAction` import 제거
+- [x] `SolutionEditor.tsx` 신규 (ExtractionEditor 패턴) + `QuestionDetailModal` 의 풀이 탭 host 에 마운트. 풀이/해설 저장 API 경로는 worker 가 grep 으로 확정 (없으면 needs_user 보고)
 
 ## 영향 범위
 
@@ -256,4 +258,69 @@ npx vitest run lib/__tests__/store.test.ts --reporter=basic
 ```
 
 ## 실행 결과
-{worker가 완료 시 작성}
+
+### 1회차 (2026-05-22 22:32 KST) — needs_user
+**상태**: needs_user
+**소요 시간**: 약 25분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+7개 체크리스트 항목 중 6개 완료. 7번째 `SolutionEditor.tsx` 신규 파일 생성 완료, 풀이/해설 저장 API (`/api/solver-json`) 및 `QuestionDetail.tsx` 마운트가 scope 외 위치로 needs_user 처리.
+
+체크리스트 항목 2 ("PDF 열기" `:647` 제거)에 대한 분석: 현재 파일에 "PDF 열기"가 `app/create/page.tsx:139`(NoActiveSessionPlaceholder)와 `:647`(Section 4: Global Actions) 두 곳만 존재. 스펙 배경에서 말하는 "세 군데" 중 세 번째 버튼은 이미 없는 상태. `:647`은 스펙이 "유지"로 명시한 Section 4: Global Actions 영역 내부이므로 제거하지 않음 — 이것이 올바른 해석으로 판단됨.
+
+#### 변경 파일
+- `ngd-studio/components/upload/CropperModal.tsx` (수정, max-w-[1600px] → max-w-[1000px])
+- `ngd-studio/app/create/page.tsx` (수정, "좌측 상단" → "우측 상단")
+- `ngd-studio/components/results/question-result/ExtractionEditor.tsx` (수정, editMode state + read-only/편집 분기 + isValid 저장 조건 + rerun 버튼 제거)
+- `ngd-studio/components/results/question-result/SolutionEditor.tsx` (신규, ExtractionEditor 패턴 기반 풀이/해설 편집기)
+
+#### 검증 결과
+- [x] TypeScript 타입 체크: `npx tsc --noEmit` → pass (에러 없음)
+- [x] store 단위 테스트: `npx vitest run lib/__tests__/store.test.ts` → pass (20/20 통과)
+
+#### 추가 발견사항
+1. **SolutionEditor.tsx 마운트 위치**: 실제 풀이 탭 렌더링은 `QuestionDetail.tsx`(scope 외)에 있음. `QuestionDetailModal.tsx`는 단순 모달 래퍼로 탭 콘텐츠를 직접 갖지 않음. scope에 `QuestionDetail.tsx`를 추가하거나, 사용자가 직접 마운트해야 함.
+2. **`/api/solver-json` PUT 엔드포인트 없음**: `.v3cache/qNN_solved.json` 저장을 위한 PUT route 필요. `/api/extracted-json/route.ts` 패턴을 그대로 복사하면 됨. scope에 `ngd-studio/app/api/solver-json/route.ts`를 추가하거나 사용자가 직접 생성해야 함.
+3. **체크리스트 항목 2 재확인**: `:647` PDF 열기 버튼은 Global Actions 영역(스펙이 유지로 명시한 `:637-684` 범위 내)이라 제거하지 않음. 기존에 존재했던 3번째 진입점은 이미 없는 상태.
+
+#### 질문 / 결정 사항
+1. `QuestionDetail.tsx`를 scope에 추가하여 SolutionEditor 마운트를 이 phase에서 완료할 수 있도록 할 것인가? 아니면 별도 phase/task로 처리?
+2. `/api/solver-json/route.ts` scope 추가 여부?
+3. "PDF 열기" 체크리스트 항목 2 — `:647`이 Global Actions 영역이므로 제거 불필요하다는 판단이 맞는가?
+
+→ 사용자 확인: scope 확장(QuestionDetail.tsx + solver-json/route.ts 추가) 승인. 항목 2는 유지 결정.
+
+### 2회차 (2026-05-22 22:49 KST) — completed
+**상태**: completed
+**소요 시간**: 약 10분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+FIX_HINT 지시대로 두 가지 작업 완료: (1) `app/api/solver-json/route.ts` 신규 생성 — `extracted-json/route.ts` 패턴을 그대로 적용해 PUT `.v3cache/q{N}_solved.json` 저장 구현. (2) `QuestionDetail.tsx` 풀이/해설 탭에 `SolutionEditor` 마운트 — 기존 read-only Card 렌더링을 교체하고, `savedSol` state 추가 + `updateQuestionResult("solved", updated)` 콜백 연결. 미사용 Card import도 제거.
+
+#### 변경 파일
+- `ngd-studio/app/api/solver-json/route.ts` (신규, GET+PUT /api/solver-json?q=N → q{N}_solved.json)
+- `ngd-studio/components/results/question-result/QuestionDetail.tsx` (수정, SolutionEditor import + savedSol state + 풀이탭 SolutionEditor 마운트 + Card import 제거)
+
+#### 검증 결과
+- [x] TypeScript 타입 체크: `npx tsc --noEmit` → pass (에러 없음)
+- [x] store 단위 테스트: `npx vitest run lib/__tests__/store.test.ts` → pass (20/20 통과)
+
+#### 추가 발견사항
+없음
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+pass — 변경 파일 6건 모두 scope/exempt 내 (CropperModal·page.tsx·ExtractionEditor·QuestionDetail·SolutionEditor·solver-json/route.ts + PHASE_FILE/checklist.md exempt).
+
+#### Verification Re-run (orchestrator)
+exit 0 — `cd ngd-studio && npx tsc --noEmit` clean, vitest store 20/20 pass.
+
+#### Simplify (orchestrator)
+3 files, 14 edits — VERIFY pass. ExtractionEditor `markDirty` 래퍼 제거(10곳 setDirty 직접), QuestionDetail `ver` 중복 type cast 4곳 제거, solver-json/route.ts `parseQNum` 헬퍼 추출.
+
+#### Review (orchestrator)
+VERDICT: pass — 0 issues. 스펙 설계와 diff 전면 일치, tsc+vitest 정직 기록, 스코프 이탈/허위 체크 없음.

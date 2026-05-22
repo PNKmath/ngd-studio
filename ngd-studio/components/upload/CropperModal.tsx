@@ -31,7 +31,7 @@ export const CropperModal = forwardRef<CropperWorkspaceRef, CropperModalProps>(
         onClick={onClose}
       >
         <div
-          className="bg-background border border-border shadow-2xl w-[96vw] max-w-[1600px] h-[95vh] flex flex-col overflow-hidden rounded-2xl"
+          className="bg-background border border-border shadow-2xl w-[96vw] max-w-[1000px] h-[95vh] flex flex-col overflow-hidden rounded-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="shrink-0 px-6 py-4 border-b flex items-center justify-between bg-muted/5">

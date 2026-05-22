@@ -132,7 +132,7 @@ function NoActiveSessionPlaceholder({ onOpenCropper }: { onOpenCropper: () => vo
       <div className="space-y-1">
         <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">No Active Session</p>
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          PDF를 업로드해 새 작업을 시작하거나<br />좌측 상단에서 이전 작업을 재개하세요.
+          PDF를 업로드해 새 작업을 시작하거나<br />우측 상단에서 이전 작업을 재개하세요.
         </p>
       </div>
       <Button onClick={onOpenCropper} className="mt-2">
