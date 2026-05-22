@@ -1,14 +1,16 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface DownloadButtonProps {
   jobId: string;
   fileName?: string;
   disabled?: boolean;
+  className?: string;
 }
 
-export function DownloadButton({ jobId, fileName, disabled }: DownloadButtonProps) {
+export function DownloadButton({ jobId, fileName, disabled, className }: DownloadButtonProps) {
   const handleDownload = async () => {
     const res = await fetch(`/api/download/${jobId}`);
     if (!res.ok) return;
@@ -33,7 +35,13 @@ export function DownloadButton({ jobId, fileName, disabled }: DownloadButtonProp
   };
 
   return (
-    <Button onClick={handleDownload} disabled={disabled} variant="default" size="sm">
+    <Button
+      onClick={handleDownload}
+      disabled={disabled}
+      variant="default"
+      size="sm"
+      className={cn("hover:bg-primary/85", className)}
+    >
       <svg
         className="w-4 h-4 mr-1.5"
         fill="none"
