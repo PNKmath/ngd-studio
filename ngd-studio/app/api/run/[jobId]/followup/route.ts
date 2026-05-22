@@ -26,6 +26,26 @@ function asResumeStage(s: string): ResumeStage | null {
   return (RESUME_STAGES as readonly string[]).includes(s) ? (s as ResumeStage) : null;
 }
 
+/**
+ * Per-question 액션버튼은 "해당 stage 만 재실행" 의미이므로
+ * orchestrator 가 그 이후 stage 까지 자동 진행되지 않도록 stopAfterStage 를 매핑한다.
+ * 글로벌 resume (--q= 없음) 은 null 을 반환해 기존 full-pipeline 동작 유지.
+ */
+type StopAfter = "cleaning" | "extractor" | "solver" | "verifier" | "figure" | "builder" | "checker";
+function stopAfterFor(stage: ResumeStage): StopAfter {
+  switch (stage) {
+    case "cleaned": return "cleaning";
+    case "image_replace": return "extractor";
+    case "extractor": return "extractor";
+    case "review_extract": return "verifier";
+    case "solver": return "solver";
+    case "verifier": return "verifier";
+    case "figure": return "figure";
+    case "confirm": return "builder";
+    case "builder": return "checker";
+  }
+}
+
 const DATA_DIR = path.join(process.cwd(), "data/jobs");
 const BASE_DIR = path.resolve(process.cwd(), "..");
 
@@ -291,12 +311,17 @@ export async function POST(
             }
           }
         }
+        const stageForStop = isResumeCommand ? asResumeStage(resumeFrom) : null;
+        const stopAfterStage = stageForStop && targetQuestions && targetQuestions.length > 0
+          ? stopAfterFor(stageForStop)
+          : undefined;
         const orchResult = await runStageOrchestrator({
           mode: "resume",
           resumeFrom,
           meta,
           questionImages,
           stageOverrides,
+          stopAfterStage,
           defaultProvider: normalizeProviderId(job.requestedProvider as AIProviderId | undefined),
           baseDir: BASE_DIR,
           send,

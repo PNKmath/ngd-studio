@@ -18,7 +18,7 @@ import { runCheckerWithAutoFix } from "./checker";
 import { runFigureStage } from "./figureRunner";
 import { runCleanerStage } from "./cleanerRunner";
 import { readRuntimeEnv } from "../../lib/server/runtimeEnv";
-import { determineStartStage, shouldRunStage } from "./resumeState";
+import { determineStartStage, shouldRunStage, type WorkflowStage } from "./resumeState";
 import { applyVerifierRetry } from "./stagePlan";
 import {
   stageEvent,
@@ -63,6 +63,12 @@ export interface OrchestratorInput {
   hwpxPath?: string;
   /** review mode 전용: 자유 텍스트 추가 지시 (followup 등). reviewer prompt 에 append. */
   additionalInstruction?: string;
+  /**
+   * 마지막으로 실행할 단계. 지정 시 그 이후 stage 는 모두 스킵.
+   * followup 의 per-question 액션버튼은 "해당 stage 만 재실행" 의미이므로 이 값을 세팅한다.
+   * "cleaning" 은 extractor 직전의 cleaning 블록까지만 실행하고 멈추는 가상 단계.
+   */
+  stopAfterStage?: "cleaning" | "extractor" | "solver" | "verifier" | "figure" | "builder" | "checker";
   baseDir: string;
   send: (event: SSEEvent) => void;
   isAborted: () => boolean;
@@ -386,6 +392,16 @@ export async function runStageOrchestrator(
     questionNumbers
   );
 
+  // stopAfterStage 가 지정되면 그 이후 stage 는 실행하지 않는다.
+  // "cleaning" 은 extractor 직전의 cleaning 단계까지만, 그 외는 WorkflowStage 와 동일.
+  type StopStage = "cleaning" | WorkflowStage;
+  const STOP_ORDER: StopStage[] = ["cleaning", "extractor", "solver", "verifier", "figure", "builder", "checker"];
+  function stillUnder(target: StopStage): boolean {
+    const cap = input.stopAfterStage;
+    if (!cap) return true;
+    return STOP_ORDER.indexOf(target) <= STOP_ORDER.indexOf(cap);
+  }
+
   let outputFile: string | undefined;
   let resultSummary: string | undefined;
 
@@ -462,6 +478,7 @@ export async function runStageOrchestrator(
     // or user explicitly started from solver/verifier (extractor results must exist).
     const skipExtractor =
       !shouldRunStage(startStage, "extractor") ||
+      !stillUnder("extractor") ||
       state.extracted ||
       startStage === "solver" ||
       startStage === "verifier";
@@ -469,6 +486,7 @@ export async function runStageOrchestrator(
     // Skip solver if: stage not needed OR disk cache already has solver result.
     const skipSolver =
       !shouldRunStage(startStage, "solver") ||
+      !stillUnder("solver") ||
       state.solved;
 
     // verifier 재시도 최대 횟수 (기본 3, 범위 0~5). 0이면 verifier 단계 스킵.
@@ -478,6 +496,7 @@ export async function runStageOrchestrator(
     // OR user explicitly set stageSkip["create.verifier"] = true OR verifierMaxAttempts === 0.
     const skipVerifier =
       !shouldRunStage(startStage, "verifier") ||
+      !stillUnder("verifier") ||
       state.verified ||
       input.stageSkip?.["create.verifier"] === true ||
       verifierMaxAttempts === 0;
@@ -748,7 +767,7 @@ export async function runStageOrchestrator(
     // ── Stage 0: Image cleaning (nano-banana) ─────────────────────────────
     // extractor 진입 전에 손글씨/필기 흔적을 제거해 추출 정확도와 figure ref 품질을 함께 끌어올린다.
     // 토글 OFF면 원본을 cleaned/로 복사만(spawn은 함). resume에서 cleaned가 이미 있으면 skip.
-    const runCleaner = shouldRunStage(startStage, "extractor");
+    const runCleaner = shouldRunStage(startStage, "extractor") && stillUnder("cleaning");
     if (runCleaner && !checkAborted()) {
       const cleaningEnabled = input.imageCleaningEnabled !== false;
       const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
@@ -797,9 +816,9 @@ export async function runStageOrchestrator(
     const effectiveQuestionImages = await swapToCleanedPaths(cache, questionImages);
 
     // ── Per-question pipeline: extractor → solver → verifier ──────────────
-    const runExtractor = shouldRunStage(startStage, "extractor");
-    const runSolver    = shouldRunStage(startStage, "solver");
-    const runVerifier  = shouldRunStage(startStage, "verifier");
+    const runExtractor = shouldRunStage(startStage, "extractor") && stillUnder("extractor");
+    const runSolver    = shouldRunStage(startStage, "solver")    && stillUnder("solver");
+    const runVerifier  = shouldRunStage(startStage, "verifier")  && stillUnder("verifier");
 
     // All questions participate when any per-question stage is active;
     // processQuestion() handles per-question skip logic via disk-scan.
@@ -867,7 +886,9 @@ export async function runStageOrchestrator(
     }
 
     // ── Build exam_data.json ───────────────────
-    if (!checkAborted()) {
+    // stopAfterStage 가 figure 이전이면 다운스트림이 안 도니까 rebuild 스킵.
+    // (스코프 좁힌 per-question rerun 에서 exam_data.json 을 truncated 상태로 덮는 부작용 회피)
+    if (!checkAborted() && stillUnder("figure")) {
       await persistTelemetry(input, providerTelemetry, "running");
       const successfulQuestionNumbers = questionNumbers.filter((n) => !failedQuestionNumbers.has(n));
       if (successfulQuestionNumbers.length === 0) {
@@ -888,7 +909,7 @@ export async function runStageOrchestrator(
     }
 
     // ── Stage 4: Figure ────────────────────────
-    if (!checkAborted() && shouldRunStage(startStage, "figure")) {
+    if (!checkAborted() && shouldRunStage(startStage, "figure") && stillUnder("figure")) {
       const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
       let regenerate = input.figureRegen !== false;
       if (regenerate && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
@@ -929,7 +950,7 @@ export async function runStageOrchestrator(
     }
 
     // ── Stage 5: Builder ───────────────────────
-    if (!checkAborted() && shouldRunStage(startStage, "builder")) {
+    if (!checkAborted() && shouldRunStage(startStage, "builder") && stillUnder("builder")) {
       send(stageEvent("builder", "running"));
       send(progressEvent("builder", 5));
       send(logEvent("builder", "deterministic builder runner를 실행합니다."));
@@ -982,7 +1003,7 @@ export async function runStageOrchestrator(
     }
 
     // ── Stage 6: Checker (with auto-fix) ──────────
-    if (!checkAborted() && shouldRunStage(startStage, "checker")) {
+    if (!checkAborted() && shouldRunStage(startStage, "checker") && stillUnder("checker")) {
       send(stageEvent("checker", "running"));
       send(progressEvent("checker", 5));
       send(logEvent("checker", "deterministic checker runner를 실행합니다."));
