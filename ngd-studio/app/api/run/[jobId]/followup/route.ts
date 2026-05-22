@@ -178,6 +178,8 @@ export async function POST(
       (job.stageOverrides as Record<string, unknown>) ?? {}
     );
     const jobMode: string = (job.mode as string) ?? "create";
+    const checkerMaxAttempts = typeof job.checkerMaxAttempts === 'number' ? job.checkerMaxAttempts : 2;
+    const verifierMaxAttempts = typeof job.verifierMaxAttempts === 'number' ? job.verifierMaxAttempts : 3;
 
     // Update job status + record followup
     job.status = "running";
@@ -217,6 +219,8 @@ export async function POST(
             meta,
             questionImages: [],
             stageOverrides,
+            checkerMaxAttempts,
+            verifierMaxAttempts,
             defaultProvider: normalizeProviderId(job.requestedProvider as AIProviderId | undefined),
             baseDir: BASE_DIR,
             send,
@@ -322,6 +326,8 @@ export async function POST(
           questionImages,
           stageOverrides,
           stopAfterStage,
+          checkerMaxAttempts,
+          verifierMaxAttempts,
           defaultProvider: normalizeProviderId(job.requestedProvider as AIProviderId | undefined),
           baseDir: BASE_DIR,
           send,
