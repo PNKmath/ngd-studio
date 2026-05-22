@@ -5,6 +5,7 @@ import path from "path";
 import { existsSync } from "fs";
 import { runStageOrchestrator, type OrchestratorResult } from "@/server/stages/orchestrator";
 import { normalizeStageOverrides, type StageOverrideMap } from "@/lib/ai/settings";
+import { normalizeProviderId, type AIProviderId } from "@/lib/ai";
 import { createStageCache } from "@/server/stages/cache";
 import { cleanupFromStage } from "@/server/stages/cleanup";
 import type { ResumeStage } from "@/server/stages/resumeCommand";
@@ -196,6 +197,7 @@ export async function POST(
             meta,
             questionImages: [],
             stageOverrides,
+            defaultProvider: normalizeProviderId(job.requestedProvider as AIProviderId | undefined),
             baseDir: BASE_DIR,
             send,
             isAborted: () => false,
@@ -295,6 +297,7 @@ export async function POST(
           meta,
           questionImages,
           stageOverrides,
+          defaultProvider: normalizeProviderId(job.requestedProvider as AIProviderId | undefined),
           baseDir: BASE_DIR,
           send,
           isAborted: () => false,

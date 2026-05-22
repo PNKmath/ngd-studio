@@ -487,6 +487,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         verifierMaxAttempts: body.verifierMaxAttempts,
         hwpxPath: mode === "review" ? toAbsWsl(wslFiles.hwpx) : undefined,
         additionalInstruction: mode === "review" ? meta?.additionalInstruction : undefined,
+        defaultProvider: requestedProvider,
         baseDir: BASE_DIR,
         send,
         isAborted: () => clientDisconnected,

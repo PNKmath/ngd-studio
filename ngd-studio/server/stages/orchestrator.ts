@@ -43,6 +43,12 @@ export interface OrchestratorInput {
   meta: ExamMetaInput;
   questionImages: { number: number; path: string }[];
   stageOverrides: StageOverrideMap;
+  /**
+   * 사용자가 settings UI에서 선택한 default provider. sse.ts/followup route가 반드시 전달.
+   * stageOverrides에 명시 안 된 stage는 이 provider로 fallback.
+   * normalizeProviderId 결과("auto" 포함)를 받으므로 undefined 불가.
+   */
+  defaultProvider: AIProviderId;
   /** stage별 스킵 플래그. 현재는 create.verifier만 의미 있음. */
   stageSkip?: StageSkipMap;
   /** Gemini로 그림을 재생성할지. false면 crop+워터마크만 (figure_processor.py --no-regen). default true. */
@@ -155,7 +161,7 @@ const VERIFIER_CONCURRENCY = 6;
 function getProviderForStage(
   stageKey: keyof StageOverrideMap,
   overrides: StageOverrideMap,
-  defaultProvider: AIProviderId = "auto"
+  defaultProvider: AIProviderId
 ) {
   const id: StageProviderId = overrides[stageKey] ?? defaultProvider;
   return getProviderAdapter(id);
@@ -248,7 +254,7 @@ async function runReviewModeOrchestrator(
   }
 
   // Build reviewer adapter
-  const reviewerAdapter = getProviderForStage("review.reviewer", stageOverrides);
+  const reviewerAdapter = getProviderForStage("review.reviewer", stageOverrides, input.defaultProvider);
 
   const reviewStartedAt = Date.now();
 
@@ -498,7 +504,7 @@ export async function runStageOrchestrator(
           imagePath: img.path,
           examMeta: input.meta,
           cache,
-          provider: getProviderForStage("create.extractor", stageOverrides),
+          provider: getProviderForStage("create.extractor", stageOverrides, input.defaultProvider),
           signal,
         });
         onLeave("extractor", n, r.status === "completed" ? "completed" : "failed");
@@ -558,7 +564,7 @@ export async function runStageOrchestrator(
           extracted: extractedOutput,
           examMeta: input.meta,
           cache,
-          provider: getProviderForStage("create.solver", stageOverrides),
+          provider: getProviderForStage("create.solver", stageOverrides, input.defaultProvider),
           signal,
         });
         onLeave("solver", n, r.status === "completed" ? "completed" : "failed");
@@ -620,8 +626,8 @@ export async function runStageOrchestrator(
     if (!skipVerifier) {
       if (isAborted()) throw new Error("aborted");
 
-      const verifierProvider = getProviderForStage("create.verifier", stageOverrides);
-      const solverProvider   = getProviderForStage("create.solver",   stageOverrides);
+      const verifierProvider = getProviderForStage("create.verifier", stageOverrides, input.defaultProvider);
+      const solverProvider   = getProviderForStage("create.solver",   stageOverrides, input.defaultProvider);
 
       onEnter("verifier", n);
 

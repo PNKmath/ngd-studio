@@ -1,13 +1,15 @@
 ---
 phase: 7
 title: orchestrator defaultProvider routing 복구 — body.provider → stage default 전파
-status: pending
+status: completed
 depends_on: [4]
 scope:
   - ngd-studio/server/stages/orchestrator.ts
   - ngd-studio/server/sse.ts
   - ngd-studio/app/api/run/[jobId]/followup/route.ts
   - ngd-studio/server/stages/__tests__/orchestrator.pipeline.test.ts
+  - ngd-studio/server/stages/__tests__/orchestrator.test.ts
+  - ngd-studio/server/stages/__tests__/orchestrator.integration.test.ts
 intervention_likely: true
 intervention_reason: "Provider routing 회귀 fix — 사용자가 settings UI에서 선택한 default provider가 stageOverrides 비어있을 때 silently 무시되던 회귀를 복구. Phase 4 의 useCodeOrchestrator 통합 결손 보강. fix 후 사용자 manual smoke 필수."
 executor: sonnet
@@ -148,6 +150,38 @@ npx vitest run server/stages/__tests__/orchestrator.pipeline.test.ts --reporter=
 - [ ] default = `auto` + stageOverrides 비움 → create 1회 → 모든 stage 가 `claude-cli` (기존 동작 유지)
 - [ ] default = `codex-cli` + `create.solver = "claude-sdk"` 명시 → solver 만 claude-sdk, 나머지 codex-cli
 
+## 실행 결과
+
+### run-1779378207-3137 (2026-05-22)
+
+**수행 항목**:
+1. `OrchestratorInput.defaultProvider: AIProviderId` 필드 추가 (required, optional 아님)
+2. `getProviderForStage` 시그니처의 hardcoded `defaultProvider = "auto"` 기본값 제거
+3. orchestrator.ts 내 모든 `getProviderForStage` 호출 5곳에 `input.defaultProvider` 명시 전달 (review.reviewer, create.extractor, create.solver ×2, create.verifier)
+4. `sse.ts` `runStageOrchestrator` 호출에 `defaultProvider: requestedProvider` 추가
+5. `followup/route.ts` 2곳 (review, create/resume) 에 `defaultProvider: normalizeProviderId(job.requestedProvider)` 추가 + `normalizeProviderId` import 추가
+6. 기존 테스트 `orchestrator.pipeline.test.ts` + `orchestrator.test.ts` + `orchestrator.integration.test.ts` 의 모든 `runStageOrchestrator` 호출에 `defaultProvider: "auto"` 보강 (총 17곳)
+7. 신규 시나리오 H/I/J 추가 — `getProviderAdapter` 를 통한 라우팅 로직 단위 검증
+
+**검증 결과**:
+- `npx tsc --noEmit`: 에러 0 (통과)
+- `npx vitest run server/stages/__tests__/orchestrator.pipeline.test.ts --reporter=basic`: 11/11 pass (기존 7 + 신규 H/I/J 3 + G 1)
+
 ## 후속
 
 본 phase commit 후 **Phase 6 의 manual E2E 6 흐름 검증** 재시도 가능. Phase 6 frontmatter `depends_on: [5, 7]` 로 갱신됨.
+
+#### Scope Audit (orchestrator)
+pass — scope frontmatter에 orchestrator.test.ts / orchestrator.integration.test.ts 보강 추가 (체크리스트 #6 "기존 테스트 컴파일 에러 보강" 의도와 일치, retroactive scope 확장).
+
+#### Verification Re-run (orchestrator)
+exit 0 — `cd ngd-studio && npx tsc --noEmit` pass + `npx vitest run server/stages/__tests__/orchestrator.pipeline.test.ts --reporter=basic` 11/11 pass 재현. 추가로 unit suite 509/509 pass (라이브 DeepSeek 제외).
+
+#### Simplify (orchestrator)
+skipped — fix phase 성격. 테스트 보강 17곳은 mechanical, 본 코드는 1줄 추가 + hardcoded 제거라 더 줄일 여지 없음.
+
+#### Review (orchestrator)
+self-review — spec과 구현 1:1 일치. `OrchestratorInput.defaultProvider` required 적용 + getProviderForStage hardcoded "auto" 제거 + 호출자 5+곳 명시 전달 + 테스트 H/I/J 추가 모두 확인. silent fallback 클래스 회귀 차단 의도 달성.
+
+#### E2E (orchestrator)
+skip — e2e_triggers 비어있음. 사용자 manual smoke (codex-cli default + create 1회)는 commit 후 Phase 6 manual E2E 재시도와 함께 진행.

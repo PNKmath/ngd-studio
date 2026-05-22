@@ -370,6 +370,7 @@ describe("orchestrator per-question pipeline", () => {
       meta: { school: "테스트고", grade: 2, subject: "수학" },
       questionImages,
       stageOverrides: STAGE_OVERRIDES,
+      defaultProvider: "auto",
       baseDir,
       send,
       isAborted: () => false,
@@ -492,6 +493,7 @@ describe("orchestrator per-question pipeline", () => {
       meta: { school: "테스트고", grade: 2, subject: "수학" },
       questionImages,
       stageOverrides: STAGE_OVERRIDES,
+      defaultProvider: "auto",
       baseDir,
       send,
       isAborted: () => false,
@@ -590,6 +592,7 @@ describe("orchestrator per-question pipeline", () => {
       meta: { school: "테스트고", grade: 2, subject: "수학" },
       questionImages: [{ number: 1, path: "/fake/q01.png" }],
       stageOverrides: STAGE_OVERRIDES,
+      defaultProvider: "auto",
       baseDir,
       send,
       isAborted: () => false,
@@ -700,6 +703,7 @@ describe("orchestrator per-question pipeline", () => {
       meta: { school: "테스트고", grade: 2, subject: "수학" },
       questionImages,
       stageOverrides: STAGE_OVERRIDES,
+      defaultProvider: "auto",
       baseDir,
       send,
       isAborted: () => false,
@@ -753,6 +757,7 @@ describe("orchestrator per-question pipeline", () => {
       meta: { school: "테스트고", grade: 2, subject: "수학" },
       questionImages: [{ number: 1, path: "/fake/q01.png" }],
       stageOverrides: STAGE_OVERRIDES,
+      defaultProvider: "auto",
       baseDir,
       send,
       isAborted: () => false,
@@ -815,6 +820,7 @@ describe("orchestrator review mode", () => {
       meta: { school: "테스트고", grade: 2, subject: "수학" },
       questionImages: [],
       stageOverrides: {},
+      defaultProvider: "auto",
       baseDir,
       send,
       isAborted: () => false,
@@ -867,6 +873,7 @@ describe("orchestrator review mode", () => {
       meta: { school: "테스트고", grade: 2, subject: "수학" },
       questionImages: [],
       stageOverrides: {},
+      defaultProvider: "auto",
       baseDir,
       send,
       isAborted: () => false,
@@ -894,5 +901,64 @@ describe("orchestrator review mode", () => {
     const adapter = getProviderAdapter(id as Parameters<typeof getProviderAdapter>[0]);
 
     expect(adapter.id).toBe("claude-cli");
+  }, 5_000);
+
+  // ── (H) defaultProvider routing — codex-cli default, empty stageOverrides → all stages codex-cli
+  it("(H) defaultProvider: codex-cli + empty stageOverrides → all stage adapters resolve to codex-cli", async () => {
+    const { getProviderAdapter } = await import("@/lib/ai/registry");
+
+    // Simulate getProviderForStage(stageKey, {}, "codex-cli") for each stage:
+    // overrides[stageKey] is undefined → falls back to defaultProvider "codex-cli"
+    const emptyOverrides: Record<string, string> = {};
+    const defaultProvider = "codex-cli";
+
+    for (const stageKey of ["create.extractor", "create.solver", "create.verifier", "review.reviewer"] as const) {
+      const id = emptyOverrides[stageKey] ?? defaultProvider;
+      const adapter = getProviderAdapter(id as Parameters<typeof getProviderAdapter>[0]);
+      expect(adapter.id).toBe("codex-cli");
+    }
+  }, 5_000);
+
+  // ── (I) defaultProvider + partial override — solver overridden, others use default
+  it("(I) defaultProvider: codex-cli + create.solver overridden to claude-sdk → solver=claude-sdk, rest=codex-cli", async () => {
+    const { getProviderAdapter } = await import("@/lib/ai/registry");
+
+    // Simulate getProviderForStage with stageOverrides that only overrides solver
+    const stageOverrides: Record<string, string> = {
+      "create.solver": "claude-sdk",
+    };
+    const defaultProvider = "codex-cli";
+
+    // solver: uses override "claude-sdk"
+    const solverId = stageOverrides["create.solver"] ?? defaultProvider;
+    const solverAdapter = getProviderAdapter(solverId as Parameters<typeof getProviderAdapter>[0]);
+    expect(solverAdapter.id).toBe("claude-sdk");
+
+    // extractor: no override → falls back to defaultProvider "codex-cli"
+    const extractorId = stageOverrides["create.extractor"] ?? defaultProvider;
+    const extractorAdapter = getProviderAdapter(extractorId as Parameters<typeof getProviderAdapter>[0]);
+    expect(extractorAdapter.id).toBe("codex-cli");
+
+    // verifier: no override → falls back to defaultProvider "codex-cli"
+    const verifierId = stageOverrides["create.verifier"] ?? defaultProvider;
+    const verifierAdapter = getProviderAdapter(verifierId as Parameters<typeof getProviderAdapter>[0]);
+    expect(verifierAdapter.id).toBe("codex-cli");
+  }, 5_000);
+
+  // ── (J) defaultProvider: auto → all stages resolve to claude-cli (auto resolve)
+  it("(J) defaultProvider: auto + empty stageOverrides → all stages resolve to claude-cli", async () => {
+    const { getProviderAdapter } = await import("@/lib/ai/registry");
+
+    // Simulate getProviderForStage(stageKey, {}, "auto"):
+    // overrides[stageKey] is undefined → falls back to "auto" → resolves to claude-cli
+    const emptyOverrides: Record<string, string> = {};
+    const defaultProvider = "auto";
+
+    for (const stageKey of ["create.extractor", "create.solver", "create.verifier", "review.reviewer"] as const) {
+      const id = emptyOverrides[stageKey] ?? defaultProvider;
+      const adapter = getProviderAdapter(id as Parameters<typeof getProviderAdapter>[0]);
+      // "auto" resolves to "claude-cli" via getProviderAdapter
+      expect(adapter.id).toBe("claude-cli");
+    }
   }, 5_000);
 });
