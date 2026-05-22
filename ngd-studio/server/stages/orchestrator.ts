@@ -977,6 +977,7 @@ export async function runStageOrchestrator(
         send(progressEvent("builder", 100));
         send(stageEvent("builder", "done", { summary: resultSummary }));
         send(fileEvent({ type: "hwpx", name: path.basename(relativeOutput), path: relativeOutput }));
+        send(logEvent("builder", `HWPX 조립 완료 → ${relativeOutput}`, "info"));
       } else {
         send(stageEvent("builder", "failed", { summary: builderResult.error?.message }));
         send(logEvent("builder", "deterministic builder 실패. LLM fallback 없이 작업을 중단합니다.", "error"));
@@ -1015,7 +1016,8 @@ export async function runStageOrchestrator(
     }
 
     // ── Stage 6: Checker (with auto-fix) ──────────
-    if (!checkAborted() && shouldRunStage(startStage, "checker") && stillUnder("checker")) {
+    const checkerAttempts = input.checkerMaxAttempts ?? 2;
+    if (!checkAborted() && shouldRunStage(startStage, "checker") && stillUnder("checker") && checkerAttempts > 0) {
       send(stageEvent("checker", "running"));
       send(progressEvent("checker", 5));
       send(logEvent("checker", "deterministic checker runner를 실행합니다."));
@@ -1025,10 +1027,9 @@ export async function runStageOrchestrator(
         : undefined;
 
       const checkerStartedAt = Date.now();
-      const maxAttempts = input.checkerMaxAttempts ?? 2;
       const { result: checkerResult, autofixed } = await runCheckerWithAutoFix(
         { hwpxPath, schoolLevel: input.meta.schoolLevel },
-        maxAttempts
+        checkerAttempts
       );
 
       if (autofixed) {
@@ -1054,14 +1055,19 @@ export async function runStageOrchestrator(
         resultSummary = `checker 완료: ${issueCount} issue(s)${autofixed ? " (auto-fixed)" : ""}`;
         send(progressEvent("checker", 100, { issueCount }));
         send(stageEvent("checker", "done", { summary: resultSummary }));
+        send(logEvent("checker", `검수 완료: ${issueCount}건 issue${autofixed ? " (auto-fixed)" : ""}`, "info"));
       } else {
         const issueCount = checkerResult.output?.issues.length ?? 0;
+        const errorMsg = checkerResult.error?.message ?? `${issueCount} issue(s)`;
         send(stageEvent("checker", "failed", {
-          summary: checkerResult.error?.message ?? `${issueCount} issue(s)`,
+          summary: errorMsg,
         }));
+        send(logEvent("checker", `검수 실패: ${errorMsg}`, "error"));
       }
 
       if (checkAborted()) return cancelled(providerTelemetry);
+    } else if (checkerAttempts === 0 && shouldRunStage(startStage, "checker") && stillUnder("checker")) {
+      send(logEvent("system", "checker 단계 건너뜀 (자동수정 = 0).", "info"));
     }
 
     // ── Done ───────────────────────────────────
