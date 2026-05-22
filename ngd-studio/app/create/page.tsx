@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { CropperWorkspace, type CropperWorkspaceRef } from "@/components/cropper/CropperWorkspace";
+import { type CropperWorkspaceRef } from "@/components/cropper/CropperWorkspace";
+import { CropperModal } from "@/components/upload/CropperModal";
 import { HIGH_SCHOOL_SUBJECTS, MIDDLE_SCHOOL_SUBJECT, type MetaValue, type SchoolLevel } from "@/components/upload/MetaForm";
 import { parseExamMetaFromFilename } from "@/lib/pdf/filenameMeta";
 import { useJobRunner } from "@/lib/useJobRunner";
@@ -118,6 +119,27 @@ async function preloadQuestionResultsFromCache(
       store.updateQuestionResult(num, "figure", state.figure as unknown as Record<string, unknown>);
     }
   }
+}
+
+function NoActiveSessionPlaceholder({ onOpenCropper }: { onOpenCropper: () => void }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4">
+      <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center rotate-3 border-2 border-dashed border-muted-foreground/30">
+        <svg className="w-6 h-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+      <div className="space-y-1">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">No Active Session</p>
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          PDF를 업로드해 새 작업을 시작하거나<br />좌측 상단에서 이전 작업을 재개하세요.
+        </p>
+      </div>
+      <Button onClick={onOpenCropper} className="mt-2">
+        PDF 열기
+      </Button>
+    </div>
+  );
 }
 
 export default function CreateV4Page() {
@@ -243,6 +265,7 @@ export default function CreateV4Page() {
   const [questionModalOpen, setQuestionModalOpen] = useState(false);
   const [figureModalOpen, setFigureModalOpen] = useState(false);
   const [figureGlobalLoading, setFigureGlobalLoading] = useState<string | null>(null);
+  const [cropperOpen, setCropperOpen] = useState(false);
 
   const isMetaComplete =
     meta.school.trim().length > 0 &&
@@ -608,11 +631,16 @@ export default function CreateV4Page() {
           <div className="flex items-center gap-2">
             {!hasJob ? (
               <>
-                <Button 
-                  onClick={() => cropperRef.current?.openFilePicker()} 
-                  disabled={submitting} 
+                <Button
+                  onClick={() => {
+                    setQuestionModalOpen(false);
+                    setFigureModalOpen(false);
+                    setCropperOpen(true);
+                    queueMicrotask(() => cropperRef.current?.openFilePicker());
+                  }}
+                  disabled={submitting}
                   variant="outline"
-                  size="sm" 
+                  size="sm"
                   className="h-9 flex-1 text-xs font-bold border-primary text-primary hover:bg-primary/5 transition-all shadow-sm active:scale-95 gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -801,12 +829,11 @@ export default function CreateV4Page() {
           {/* Main Content */}
           <div className="flex-1 flex flex-col overflow-hidden relative">
             {!hasJob ? (
-              <CropperWorkspace
-                ref={cropperRef}
-                onExtract={handleExtract}
-                autoSplitOnUpload={autoSplitEnabled}
-                onPdfSelected={handlePdfSelected}
-              />
+              <NoActiveSessionPlaceholder onOpenCropper={() => {
+                setQuestionModalOpen(false);
+                setFigureModalOpen(false);
+                setCropperOpen(true);
+              }} />
             ) : (
               <div className="flex flex-col h-full">
                 <div className="shrink-0 border-b px-6 py-3 bg-background/50">
@@ -861,6 +888,16 @@ export default function CreateV4Page() {
           await sendResumeAction(jobId, "resume --from=figure", store);
           setFigureGlobalLoading(null);
         }}
+      />
+
+      {/* Cropper Modal — !hasJob 상태에서 PDF 업로드/크롭 작업 */}
+      <CropperModal
+        ref={cropperRef}
+        open={cropperOpen && !hasJob}
+        onClose={() => setCropperOpen(false)}
+        onExtract={handleExtract}
+        autoSplitOnUpload={autoSplitEnabled}
+        onPdfSelected={handlePdfSelected}
       />
 
       {/* Bottom Panel — build 결과 / followup chat 같은 이벤트성 UI 전용 */}

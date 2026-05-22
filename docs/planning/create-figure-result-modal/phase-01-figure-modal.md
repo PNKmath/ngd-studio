@@ -304,3 +304,9 @@ exit 0 — spec의 bash 블록에 `cd ngd-studio && npx vitest run ngd-studio/li
 
 #### Review (orchestrator)
 pass — A·D·F·G 양호. ISSUES=1: 스펙 §5의 "figure_status.json 폴링 이식"이 store/img-onLoad 기반 전환으로 대체됨 — 기능 동등 + 더 안정적이며 외부 동작 무변경이라 fix_required 사유 아님. 후속 phase 검토 시 spec 보강 권장 사항으로만 기록.
+
+#### Commit
+637492d5128974895d5f70f48dc5b2fc2ba026f2
+
+#### E2E (orchestrator)
+skip — e2e_triggers 비어있음 (e2e_refs 만 존재).
