@@ -14,8 +14,8 @@ created: 2026-05-22
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
 | 1 | [phase-01-figure-modal.md](./phase-01-figure-modal.md) | 8 | 8 | 100% | completed | 637492d |
-| 2 | [phase-02-cropper-modal.md](./phase-02-cropper-modal.md) | 7 | 0 | 0% | pending | - |
-| **Total** | | **15** | **8** | **53%** | | |
+| 2 | [phase-02-cropper-modal.md](./phase-02-cropper-modal.md) | 7 | 7 | 100% | completed | e5cbb47 |
+| **Total** | | **15** | **15** | **100%** | | |
 
 ## Phase 의존성
 

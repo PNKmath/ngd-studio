@@ -254,3 +254,9 @@ exit 0 (tsc --noEmit). vitest 전체 run은 OpenAI quota 관련 pre-existing fai
 
 #### Review (orchestrator)
 pass — ISSUES=0. A·B·C·D·E·G·H 전 항목 일치. CropperWorkspace.tsx no-touch는 외곽 `h-full flex flex-col overflow-hidden` 이미 적절한 정당한 판단.
+
+#### Commit
+e5cbb47afe59ce6c4b2cd11224977582e8ca8883
+
+#### E2E (orchestrator)
+skip (사용자 결정) — e2e_triggers `create-v4-full-pipeline` 은 PDF 업로드 + AI extractor/solver/builder 풀 파이프라인이라 agent 자동 수행 부적합 (OpenAI quota + 수동 PDF 입력 필요). Phase 2 변경은 frontend UI 이동(CropperWorkspace 풀스크린 → 모달)만, 서버/API 변경 0 → 수동 smoke 권장: PDF 열기 → crop 모달 오픈 → 추출 시작 → 잡 정상 진행.
