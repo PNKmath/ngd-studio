@@ -134,39 +134,46 @@ export function FigureReviewModal({
                 <h4 className="text-xs font-medium text-muted-foreground">
                   그림 생성 결과 ({loadedSet.size}/{figureProblems.length})
                 </h4>
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={onRetryAll}
                   disabled={!jobId || globalLoading !== null}
-                  className="text-[10px] text-orange-500 hover:underline disabled:opacity-50"
+                  className="h-7 text-xs"
                 >
                   전체 재생성
-                </button>
+                </Button>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 {figureProblems.map((q) => {
                   const retry = retryCount[q.number] ?? 0;
-                  const src = `/api/file?path=${encodeURIComponent(
+                  const finalSrc = `/api/file?path=${encodeURIComponent(
                     `outputs/images/prob${q.number}_final.png`
+                  )}&_r=${retry}`;
+                  const refSrc = `/api/file?path=${encodeURIComponent(
+                    `inputs/시험지 제작/.v3cache/prob${q.number}_ref.jpg`
                   )}&_r=${retry}`;
                   const loaded = loadedSet.has(q.number);
                   const isFailed = q.figure?.status === "failed";
                   return (
                     <div
                       key={q.number}
-                      className={`space-y-1 rounded-lg p-2 ${isFailed ? "border border-destructive/30 bg-destructive/5" : ""}`}
+                      className={`space-y-2 rounded-lg p-3 ${isFailed ? "border border-destructive/30 bg-destructive/5" : "border border-border/40"}`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`text-[10px] ${isFailed ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                        <span className={`text-sm font-bold ${isFailed ? "text-destructive" : "text-foreground"}`}>
                           {q.number}번 {isFailed ? "✗ 생성 실패" : loaded ? "✓" : "생성 중..."}
                         </span>
-                        <button
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => handleRetry(q.number)}
                           disabled={!jobId || globalLoading !== null}
-                          className="text-[10px] text-orange-500 hover:underline disabled:opacity-50"
+                          className="h-7 text-xs"
                         >
                           재생성
-                        </button>
+                        </Button>
                       </div>
                       {isFailed ? (
                         <div className="rounded border border-destructive/20 bg-destructive/5 p-3 text-[10px] text-destructive/70 text-center min-h-[60px] flex items-center justify-center">
@@ -176,17 +183,31 @@ export function FigureReviewModal({
                           }
                         </div>
                       ) : (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={src}
-                          alt={`문제 ${q.number} 그림`}
-                          className={`w-full rounded border bg-white transition-opacity ${
-                            loaded ? "opacity-100" : "opacity-20"
-                          }`}
-                          onLoad={() =>
-                            setLoadedSet((prev) => new Set([...prev, q.number]))
-                          }
-                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-muted-foreground text-center">크롭 원본</p>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={refSrc}
+                              alt={`문제 ${q.number} 크롭 원본`}
+                              className="w-full rounded border bg-white"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[10px] text-muted-foreground text-center">생성된 그림</p>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={finalSrc}
+                              alt={`문제 ${q.number} 생성 그림`}
+                              className={`w-full rounded border bg-white transition-opacity ${
+                                loaded ? "opacity-100" : "opacity-20"
+                              }`}
+                              onLoad={() =>
+                                setLoadedSet((prev) => new Set([...prev, q.number]))
+                              }
+                            />
+                          </div>
+                        </div>
                       )}
                     </div>
                   );

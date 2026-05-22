@@ -331,10 +331,9 @@ export default function CreateV4Page() {
   }, [existingImages, meta, startJob, setV3Meta]);
 
   const handleConfirmFigure = useCallback(async () => {
-    if (!v3Meta) return;
-    const jobMeta = { ...v3Meta, resumeFrom: "confirm" };
-    await startJob("resume", { pdf: "" }, jobMeta);
-  }, [v3Meta, startJob]);
+    if (!jobId) return;
+    await sendResumeAction(jobId, "resume --from=builder", store);
+  }, [jobId, store]);
 
   // build 상태 패널 표시 여부
   const showBuildStatus = (isRunning || isDone) &&
