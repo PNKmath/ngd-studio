@@ -738,28 +738,22 @@ export default function CreateV4Page() {
                 />
               </label>
               <label
-                className="flex items-center gap-1.5"
-                title="완성된 HWPX 시험지를 자동 점검하고, 자주 나는 사소한 오류(빈 줄 누락·수식 기호 오타 등)를 자동으로 고친 뒤 다시 점검합니다. 0 = 점검만 하고 수정은 사용자가 직접."
+                className="flex items-center gap-1.5 cursor-pointer"
+                title="체크 해제 → HWPX 검수 단계 자체를 건너뜁니다. 체크 → 완성된 HWPX 를 자동 점검하고 자주 나는 사소한 오류(빈 줄 누락·수식 기호 오타 등)를 자동으로 고친 뒤 다시 점검합니다."
               >
+                <input
+                  type="checkbox"
+                  checked={aiSettings.checkerMaxAttempts > 0}
+                  onChange={(e) => setAiSettings(writeAISettings({
+                    ...aiSettings,
+                    checkerMaxAttempts: e.target.checked ? 2 : 0,
+                  }))}
+                  className="h-3 w-3 rounded border-input"
+                />
                 <span className={cn(
                   "text-[11px] font-bold tracking-tight transition-colors",
                   aiSettings.checkerMaxAttempts === 0 ? "text-muted-foreground/40" : "text-muted-foreground",
                 )}>자동수정</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={5}
-                  step={1}
-                  value={aiSettings.checkerMaxAttempts}
-                  onChange={(e) => setAiSettings(writeAISettings({
-                    ...aiSettings,
-                    checkerMaxAttempts: Number(e.target.value),
-                  }))}
-                  className={cn(
-                    "w-10 px-1.5 py-0.5 rounded-md border bg-background text-xs text-center",
-                    aiSettings.checkerMaxAttempts === 0 && "opacity-40",
-                  )}
-                />
               </label>
             </div>
           </div>
