@@ -503,8 +503,8 @@ def main(exam_json=None, output_dir=None, base_path=None):
         code = info.get("code", "00000")
         year = info.get("year", "?")
         grade = info.get("grade", "?")
-        sem_num = "1" if "1학기" in info.get("semester", "") else "2"
-        exam_code = "a" if "중간" in info.get("exam_type", "") else "b"
+        sem_num = "1" if "1학기" in info["semester"] else "2"
+        exam_code = "a" if "중간" in info["exam_type"] else "b"
         region = info.get("region", "")
         school = info.get("school", "")
         subject_code = info.get("subject_code", info.get("subject", ""))

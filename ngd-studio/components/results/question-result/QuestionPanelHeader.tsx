@@ -7,7 +7,7 @@ import { sendResumeAction } from "./resume";
 import { useSortedEntries } from "./hooks";
 import { FigureResultSection } from "./FigureResultSection";
 
-/** 상단 컨트롤 bar: 추출 편집 진행 / 추출 결과 검증 / Figure confirm / HWPX 재조립 버튼들. */
+/** 상단 컨트롤 bar: 추출 편집 진행 / 추출 결과 검증 / Figure confirm + HWPX 조립 버튼. */
 export function QuestionPanelHeader() {
   const entries = useSortedEntries();
   const jobId = useJobStore((s) => s.jobId);
@@ -90,23 +90,6 @@ export function QuestionPanelHeader() {
             }}
             onRetryAll={() => handleGlobalAction("figure")}
           />
-          <div className="flex flex-wrap gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={globalLoading !== null}
-              onClick={() => handleGlobalAction("builder")}
-              className="h-7 text-xs"
-            >
-              {globalLoading === "builder" && (
-                <svg className="w-3 h-3 animate-spin mr-1" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-              )}
-              HWPX 재조립
-            </Button>
-          </div>
         </div>
       )}
     </div>

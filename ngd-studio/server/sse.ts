@@ -417,6 +417,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     stageOverrides,
     status: "running",
     inputFiles: [resolvedFiles.pdf, resolvedFiles.hwpx].filter(Boolean),
+    meta: meta ?? {},
     stages: [],
     logs: [],
     startedAt: new Date().toISOString(),
