@@ -943,9 +943,21 @@ export async function runStageOrchestrator(
         send(progressEvent("figure", 100));
         send(stageEvent("figure", "done", { summary: "figure 처리 완료" }));
       } else {
-        send(stageEvent("figure", "failed", { summary: "figure_processor.py 실패" }));
-        send(logEvent("figure", "figure_processor.py 실패", "error"));
+        const errorSummary = await summarizeFigureErrors(cache.paths.figureStatus);
+        const quotaHint = "Gemini API 월 지출 한도 초과 — https://ai.studio/spend 에서 한도 상향 후 figure 단계만 재시도하세요.";
+        const failSummary = errorSummary?.quotaExceeded
+          ? "Gemini 지출 한도 초과"
+          : "figure_processor.py 실패";
+        if (errorSummary?.quotaExceeded) {
+          send(logEvent("figure", `${quotaHint} (원인 샘플: ${errorSummary.sample})`, "error"));
+        } else if (errorSummary?.sample) {
+          send(logEvent("figure", `figure_processor.py 실패: ${errorSummary.sample}`, "error"));
+        } else {
+          send(logEvent("figure", "figure_processor.py 실패", "error"));
+        }
+        send(stageEvent("figure", "failed", { summary: failSummary }));
         if (checkAborted()) return cancelled(providerTelemetry);
+        return failed(providerTelemetry, failSummary);
       }
     }
 
@@ -1129,6 +1141,20 @@ interface FigureStatusFile {
  * figure_status.json을 읽어 문제별 figure 결과를 SSE `question` 이벤트로 흘려준다.
  * Navigator의 그림 dot이 완료/실패/경계불확실을 정확히 반영하도록 한다.
  */
+async function summarizeFigureErrors(
+  statusPath: string,
+): Promise<{ quotaExceeded: boolean; sample: string } | null> {
+  const parsed = (await readCacheJson(statusPath)) as FigureStatusFile | null;
+  if (!parsed?.questions) return null;
+  const errors: string[] = [];
+  for (const q of Object.values(parsed.questions)) {
+    if (q?.error) errors.push(q.error);
+  }
+  if (errors.length === 0) return null;
+  const quotaPattern = /(429|RESOURCE_EXHAUSTED|quota|exceeded.*spend|free.*tier.*limit)/i;
+  return { quotaExceeded: errors.some((e) => quotaPattern.test(e)), sample: errors[0] };
+}
+
 async function emitFigureQuestionEvents(
   statusPath: string,
   send: (event: SSEEvent) => void,

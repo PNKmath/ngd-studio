@@ -158,6 +158,8 @@ export default function CreateV4Page() {
   const setV3Meta = useJobStore((s) => s.setV3Meta);
   const questionResults = useJobStore((s) => s.questionResults);
   const entries = Object.values(questionResults).sort((a, b) => a.number - b.number);
+  const extractionReviewActive = useJobStore((s) => s.extractionReviewActive);
+  const setExtractionReviewActive = useJobStore((s) => s.setExtractionReviewActive);
   const store = useJobStore();
   const isRunning = status === "running";
   const isPaused = status === "paused";
@@ -169,11 +171,12 @@ export default function CreateV4Page() {
   // figure 완료 후 "그림 결과 확인" 버튼이 보이도록 하기 위함.
   // (extractionReviewActive=true이면 해당 버튼이 숨겨지고 "해설 생성 시작" 버튼이 잘못 노출됨)
   useEffect(() => {
+    if (!extractionReviewActive) return;
     const figureStage = stages.find((s) => s.name === "figure");
     if (figureStage?.status === "done" || figureStage?.status === "failed") {
-      store.setExtractionReviewActive(false);
+      setExtractionReviewActive(false);
     }
-  }, [stages, store]);
+  }, [stages, extractionReviewActive, setExtractionReviewActive]);
 
   const resumeOrRetry = useCallback(async () => {
     const base = v3Meta ?? {};
