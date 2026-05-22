@@ -16,11 +16,11 @@ created: 2026-05-23
 | 1 | [phase-01-orchestrator-skip-logs.md](./phase-01-orchestrator-skip-logs.md) | 4 | 4 | 100% | completed | 4a9bcb0 (e2e: skip) |
 | 2 | [phase-02-ui-checkbox-tooltip.md](./phase-02-ui-checkbox-tooltip.md) | 3 | 3 | 100% | completed | 8b1c20b (e2e: manual_pending) |
 | 3 | [phase-03-regression-tests.md](./phase-03-regression-tests.md) | 3 | 3 | 100% | completed | 05571fb (e2e: skip) |
-| 4 | [phase-04-checker-guard-leak.md](./phase-04-checker-guard-leak.md) | 4 | 4 | 100% | completed | - |
-| 5 | [phase-05-skip-log-message.md](./phase-05-skip-log-message.md) | 2 | 0 | 0% | pending | - |
+| 4 | [phase-04-checker-guard-leak.md](./phase-04-checker-guard-leak.md) | 4 | 4 | 100% | completed | 1264b7c+2c1730d (e2e: manual_pending) |
+| 5 | [phase-05-skip-log-message.md](./phase-05-skip-log-message.md) | 2 | 2 | 100% | completed | 8d5809c (e2e: skip) |
 | 6 | [phase-06-ui-label-layout.md](./phase-06-ui-label-layout.md) | 5 | 5 | 100% | completed | 0c722dc (e2e: manual_pending) |
-| 7 | [phase-07-remove-log-pdf-button.md](./phase-07-remove-log-pdf-button.md) | 2 | 0 | 0% | pending | - |
-| **Total** | | **23** | **19** | **83%** | | |
+| 7 | [phase-07-remove-log-pdf-button.md](./phase-07-remove-log-pdf-button.md) | 2 | 2 | 100% | completed | 24cfcd7 (e2e: manual_pending) |
+| **Total** | | **23** | **23** | **100%** | | |
 
 ## Phase 의존성
 
