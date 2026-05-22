@@ -1067,7 +1067,7 @@ export async function runStageOrchestrator(
 
       if (checkAborted()) return cancelled(providerTelemetry);
     } else if (checkerAttempts === 0 && shouldRunStage(startStage, "checker") && stillUnder("checker")) {
-      send(logEvent("system", "checker 단계 건너뜀 (자동수정 = 0).", "info"));
+      send(logEvent("system", "checker 단계 건너뜀", "info"));
     }
 
     // ── Done ───────────────────────────────────
