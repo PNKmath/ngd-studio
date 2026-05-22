@@ -121,7 +121,7 @@ async function preloadQuestionResultsFromCache(
   }
 }
 
-function NoActiveSessionPlaceholder({ onOpenCropper }: { onOpenCropper: () => void }) {
+function NoActiveSessionPlaceholder() {
   return (
     <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4">
       <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center rotate-3 border-2 border-dashed border-muted-foreground/30">
@@ -135,9 +135,6 @@ function NoActiveSessionPlaceholder({ onOpenCropper }: { onOpenCropper: () => vo
           PDF를 업로드해 새 작업을 시작하거나<br />우측 상단에서 이전 작업을 재개하세요.
         </p>
       </div>
-      <Button onClick={onOpenCropper} className="mt-2">
-        PDF 열기
-      </Button>
     </div>
   );
 }
@@ -835,11 +832,7 @@ export default function CreateV4Page() {
           {/* Main Content */}
           <div className="flex-1 flex flex-col overflow-hidden relative">
             {!hasJob ? (
-              <NoActiveSessionPlaceholder onOpenCropper={() => {
-                setQuestionModalOpen(false);
-                setFigureModalOpen(false);
-                setCropperOpen(true);
-              }} />
+              <NoActiveSessionPlaceholder />
             ) : (
               <div className="flex flex-col h-full">
                 <div className="shrink-0 border-b px-6 py-3 bg-background/50">
