@@ -167,3 +167,9 @@ SIMPLIFIED 0 / VERIFY pass — 추가 정리 패턴 없음
 
 #### Review (orchestrator)
 VERDICT pass / 0 issues — checkbox 전환이 스펙과 100% 일치
+
+#### Commit
+8b1c20b21d5e03bef689f1f872ed7aadd8050a86
+
+#### E2E (orchestrator)
+manual_pending — `create-v4-full-pipeline` (delegate_to: run, 전체 파이프라인) 자동 dispatch 대신 사용자 수동 smoke 로 대체. 수동 체크리스트: checkbox 토글 → localStorage `aiSettings.checkerMaxAttempts` 값 0/2 전환 / 툴팁 hover 텍스트 노출 / 체크 해제 + 새 잡 진행 시 checker stage 미발화 (Phase 1 결합 확인). 재발화 필요 시 `/phase-e2e checker-stage-ux-semantics --phase 2`.

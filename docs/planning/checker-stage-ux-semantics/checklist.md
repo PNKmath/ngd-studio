@@ -13,10 +13,10 @@ created: 2026-05-23
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-orchestrator-skip-logs.md](./phase-01-orchestrator-skip-logs.md) | 4 | 0 | 0% | pending | - |
-| 2 | [phase-02-ui-checkbox-tooltip.md](./phase-02-ui-checkbox-tooltip.md) | 3 | 0 | 0% | pending | - |
-| 3 | [phase-03-regression-tests.md](./phase-03-regression-tests.md) | 3 | 0 | 0% | pending | - |
-| **Total** | | **10** | **0** | **0%** | | |
+| 1 | [phase-01-orchestrator-skip-logs.md](./phase-01-orchestrator-skip-logs.md) | 4 | 4 | 100% | completed | 4a9bcb0 (e2e: skip) |
+| 2 | [phase-02-ui-checkbox-tooltip.md](./phase-02-ui-checkbox-tooltip.md) | 3 | 3 | 100% | completed | 8b1c20b (e2e: manual_pending) |
+| 3 | [phase-03-regression-tests.md](./phase-03-regression-tests.md) | 3 | 3 | 100% | completed | 05571fb (e2e: skip) |
+| **Total** | | **10** | **10** | **100%** | | |
 
 ## Phase 의존성
 
