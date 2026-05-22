@@ -8,6 +8,10 @@
 → 시나리오: [scenarios/review/review-full-pipeline.md](../scenarios/review/review-full-pipeline.md)
 → entry-points 영향: [review-page](../entry-points.md#review-page), [api-run](../entry-points.md#api-run), [api-jobs](../entry-points.md#api-jobs), [api-upload](../entry-points.md#api-upload) 외
 
+### <a id="review-full-pipeline-2026-05-22"></a> 2026-05-22 — task: legacy-pipeline-removal
+- involved_globs 에 `ngd-studio/server/sse.ts` 추가 (14 → 15)
+- 사유: review 모드 SSE 요청의 라우팅/생애주기 진입점이 sse.ts. legacy pipeline 제거 작업으로 review 분기가 orchestrator 로 이관되면 sse.ts 변경이 review 흐름에 직접 영향. catalog 갭 보강.
+
 ### <a id="review-full-pipeline-2026-05-20"></a> 2026-05-20 — task: bootstrap
 - 신규 추가 (도메인 bootstrap — phase-e2e-init --refresh --domain review)
 - type: full, priority: P0, trigger: last_touch, delegate_to: run

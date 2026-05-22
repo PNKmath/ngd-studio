@@ -6,7 +6,7 @@
 ## 도메인별 최근 변경
 
 - create: [최근](create.md) — 2026-05-20 bootstrap (시나리오 2건)
-- review: [최근](review.md) — 2026-05-20 bootstrap (시나리오 1건)
+- review: [최근](review.md) — 2026-05-22 legacy-pipeline-removal (involved_globs 확장), 2026-05-20 bootstrap
 - history: 이력 없음 (미작성 — _pending)
 - pdf-cropper: 이력 없음 (미작성 — _pending)
 - settings: 이력 없음 (미작성 — _pending)

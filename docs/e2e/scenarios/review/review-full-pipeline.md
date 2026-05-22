@@ -18,6 +18,7 @@ involved_globs:
   - ngd-studio/app/review/**
   - ngd-studio/server/review/**
   - ngd-studio/server/stages/reviewRunner.ts
+  - ngd-studio/server/sse.ts
   - .claude/agents/ngd-exam-reviewer.md
   - .claude/skills/ngd-exam-review/**
   - ngd-studio/lib/useJobRunner.ts
@@ -30,9 +31,9 @@ involved_globs:
   - ngd-studio/app/api/upload/**
   - ngd-studio/app/api/file/**
 last_change:
-  date: 2026-05-20
-  task: bootstrap
-  ref: changelog/review.md#review-full-pipeline-2026-05-20
+  date: 2026-05-22
+  task: legacy-pipeline-removal
+  ref: changelog/review.md#review-full-pipeline-2026-05-22
 ---
 
 # review-full-pipeline: PDF + 작업 HWPX → reviewRunner → 수정 HWPX + 오검 리포트
