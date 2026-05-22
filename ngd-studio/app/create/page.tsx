@@ -7,10 +7,12 @@ import { HIGH_SCHOOL_SUBJECTS, MIDDLE_SCHOOL_SUBJECT, type MetaValue, type Schoo
 import { parseExamMetaFromFilename } from "@/lib/pdf/filenameMeta";
 import { useJobRunner } from "@/lib/useJobRunner";
 import { useJobStore } from "@/lib/store";
+import { sendResumeAction } from "@/components/results/question-result/resume";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PipelineView } from "@/components/pipeline/PipelineView";
 import { QuestionList, QuestionDetailModal, QuestionPanelHeader } from "@/components/results/QuestionResultPanel";
+import { FigureReviewModal } from "@/components/results/question-result/FigureReviewModal";
 import { LogStream } from "@/components/log/LogStream";
 import { DownloadButton } from "@/components/shared/DownloadButton";
 import { FollowupChat } from "@/components/shared/FollowupChat";
@@ -23,7 +25,6 @@ import {
 } from "@/lib/ai/settings";
 import type { AIProviderId, AIStageKey } from "@/lib/ai";
 
-type FigureStatus = { pending: boolean; done: boolean; success: number[]; failed: number[]; images: string[] };
 type QuestionFigureCacheState = {
   status: "ok" | "failed" | "boundary_uncertain";
   image?: string;
@@ -133,6 +134,9 @@ export default function CreateV4Page() {
   const result = useJobStore((s) => s.result);
   const v3Meta = useJobStore((s) => s.v3Meta);
   const setV3Meta = useJobStore((s) => s.setV3Meta);
+  const questionResults = useJobStore((s) => s.questionResults);
+  const entries = Object.values(questionResults).sort((a, b) => a.number - b.number);
+  const store = useJobStore();
   const isRunning = status === "running";
   const isPaused = status === "paused";
   const isFailed = status === "failed";
@@ -229,10 +233,6 @@ export default function CreateV4Page() {
   // 이전 작업 재개 상태
   const [existingImages, setExistingImages] = useState<ExistingImages | null>(null);
 
-  // figure 상태 + 폴링
-  const [figureStatus, setFigureStatus] = useState<FigureStatus | null>(null);
-  const figureIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // build 상태 + 폴링
   const [buildStatus, setBuildStatus] = useState<BuildStatus | null>(null);
   const buildIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -241,6 +241,8 @@ export default function CreateV4Page() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [recoveryHint, setRecoveryHint] = useState<string | null>(null);
   const [questionModalOpen, setQuestionModalOpen] = useState(false);
+  const [figureModalOpen, setFigureModalOpen] = useState(false);
+  const [figureGlobalLoading, setFigureGlobalLoading] = useState<string | null>(null);
 
   const isMetaComplete =
     meta.school.trim().length > 0 &&
@@ -291,44 +293,6 @@ export default function CreateV4Page() {
 
     await startJob("resume", { pdf: "" }, jobMeta);
   }, [existingImages, meta, startJob, setV3Meta]);
-
-  // figure 확인 패널 표시 여부
-  const showFigureConfirm = isDone
-    && (mode === "resume" || mode === "create")
-    && v3Meta?.resumeFrom === "figure";
-
-  // figure_status.json 폴링
-  useEffect(() => {
-    if (!showFigureConfirm) {
-      if (figureIntervalRef.current) {
-        clearInterval(figureIntervalRef.current);
-        figureIntervalRef.current = null;
-      }
-      queueMicrotask(() => setFigureStatus(null));
-      return;
-    }
-
-    const poll = async () => {
-      try {
-        const r = await fetch("/api/figure-status");
-        const data: FigureStatus = await r.json();
-        setFigureStatus(data);
-        if (data.done && figureIntervalRef.current) {
-          clearInterval(figureIntervalRef.current);
-          figureIntervalRef.current = null;
-        }
-      } catch { /* ignore */ }
-    };
-
-    poll();
-    figureIntervalRef.current = setInterval(poll, 2000);
-    return () => {
-      if (figureIntervalRef.current) {
-        clearInterval(figureIntervalRef.current);
-        figureIntervalRef.current = null;
-      }
-    };
-  }, [showFigureConfirm]);
 
   const handleConfirmFigure = useCallback(async () => {
     if (!v3Meta) return;
@@ -670,13 +634,13 @@ export default function CreateV4Page() {
                 )}
                 {(isPaused || isFailed) && (
                   <>
-                    <Button onClick={resumeOrRetry} size="sm" className="flex-1 h-9 text-xs font-bold bg-primary shadow-lg shadow-primary/20">작업 재개</Button>
+                    <Button onClick={resumeOrRetry} size="sm" className="flex-1 h-9 text-xs font-bold bg-primary shadow-lg shadow-primary/20 hover:bg-primary/85">작업 재개</Button>
                     <Button onClick={reset} variant="outline" size="sm" className="flex-1 h-9 text-xs font-bold border-muted-foreground/30">초기화</Button>
                   </>
                 )}
                 {status === "done" && !isFailed && (
                   <>
-                    <DownloadButton jobId={jobId ?? ""} disabled={result?.status !== "success"} />
+                    <DownloadButton jobId={jobId ?? ""} disabled={result?.status !== "success"} className="flex-1 h-9 text-xs font-bold shadow-lg shadow-primary/20" />
                     <Button onClick={reset} variant="outline" size="sm" className="flex-1 h-9 text-xs font-bold">새 작업</Button>
                   </>
                 )}
@@ -845,8 +809,13 @@ export default function CreateV4Page() {
               />
             ) : (
               <div className="flex flex-col h-full">
-                <div className="shrink-0 border-b px-6 py-3 bg-background/50 max-h-[50vh] overflow-y-auto">
-                  <QuestionPanelHeader />
+                <div className="shrink-0 border-b px-6 py-3 bg-background/50">
+                  <QuestionPanelHeader
+                    onOpenFigureModal={() => {
+                      setQuestionModalOpen(false);
+                      setFigureModalOpen(true);
+                    }}
+                  />
                 </div>
                 <div className="shrink-0 px-4 py-2 border-b bg-muted/20 flex items-center justify-between">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Activity Log</span>
@@ -869,53 +838,38 @@ export default function CreateV4Page() {
         onClose={() => setQuestionModalOpen(false)}
       />
 
-      {/* Bottom Panel — figure 확인 / build 결과 / followup chat 같은 이벤트성 UI 전용 */}
-      {hasJob && (showFigureConfirm || (showBuildStatus && buildStatus && !buildStatus.pending) || (isDone && !showFigureConfirm)) && (
+      {/* Figure Review Modal — 그림 결과 확인 / 재생성 / HWPX 조립 진입점 */}
+      <FigureReviewModal
+        open={figureModalOpen && hasJob}
+        onClose={() => setFigureModalOpen(false)}
+        entries={entries}
+        jobId={jobId}
+        globalLoading={figureGlobalLoading}
+        onConfirm={async () => {
+          setFigureGlobalLoading("confirm");
+          await handleConfirmFigure();
+          setFigureGlobalLoading(null);
+          setFigureModalOpen(false);
+        }}
+        onRetryFigure={(qNum) => {
+          if (!jobId) return;
+          sendResumeAction(jobId, `resume --q=${qNum} --from=figure`, store);
+        }}
+        onRetryAll={async () => {
+          if (!jobId || status === "running") return;
+          setFigureGlobalLoading("figure");
+          await sendResumeAction(jobId, "resume --from=figure", store);
+          setFigureGlobalLoading(null);
+        }}
+      />
+
+      {/* Bottom Panel — build 결과 / followup chat 같은 이벤트성 UI 전용 */}
+      {hasJob && ((showBuildStatus && buildStatus && !buildStatus.pending) || isDone) && (
         <div className="shrink-0 mt-3 border rounded-xl bg-card shadow-sm overflow-hidden flex flex-col max-h-[220px]">
           <div className="px-4 py-2 border-b bg-muted/20 flex items-center justify-between">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Pipeline Action</span>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Figure confirm panel */}
-            {showFigureConfirm && (
-              <Card className="p-4 space-y-4 border-amber-500/30 bg-amber-500/5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    그림 처리 결과 확인
-                  </h3>
-                  {figureStatus?.done && (
-                    <span className="text-xs font-medium text-green-600">
-                      완료 {figureStatus.success.length}개
-                      {figureStatus.failed.length > 0 && ` / 실패 ${figureStatus.failed.length}개`}
-                    </span>
-                  )}
-                </div>
-
-                {!figureStatus || figureStatus.pending ? (
-                  <div className="flex items-center gap-2 py-4 justify-center">
-                    <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-xs text-muted-foreground">그림 처리 중...</p>
-                  </div>
-                ) : figureStatus.done ? (
-                  <div className="space-y-4">
-                    {figureStatus.images.length > 0 && (
-                      <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-10 gap-2 max-h-[160px] overflow-y-auto p-1">
-                        {figureStatus.images.map((imgPath) => (
-                          <div key={imgPath} className="group relative aspect-square">
-                            <img src={`/api/file?path=${imgPath}`} className="w-full h-full rounded border object-contain bg-white hover:border-amber-500 transition-colors" alt="crop" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <Button onClick={handleConfirmFigure} className="w-full bg-amber-600 hover:bg-amber-700 text-white">
-                      그림 확인 완료 — HWPX 조립 시작
-                    </Button>
-                  </div>
-                ) : null}
-              </Card>
-            )}
-
             {/* Build status panel */}
             {showBuildStatus && buildStatus && !buildStatus.pending && (
               <Card className={cn(
@@ -936,7 +890,7 @@ export default function CreateV4Page() {
               </Card>
             )}
 
-            {isDone && !showFigureConfirm && <FollowupChat disabled={isRunning} />}
+            {isDone && <FollowupChat disabled={isRunning} />}
           </div>
         </div>
       )}

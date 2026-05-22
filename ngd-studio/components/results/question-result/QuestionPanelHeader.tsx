@@ -1,14 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useJobStore } from "@/lib/store";
 import { sendResumeAction } from "./resume";
 import { useSortedEntries } from "./hooks";
-import { FigureResultSection } from "./FigureResultSection";
 
-/** 상단 컨트롤 bar: 추출 편집 진행 / 추출 결과 검증 / Figure confirm + HWPX 조립 버튼. */
-export function QuestionPanelHeader() {
+/** 상단 컨트롤 bar: 추출 편집 진행 / 추출 결과 검증 / Figure 확인 버튼 진입점. */
+export function QuestionPanelHeader({
+  onOpenFigureModal,
+}: {
+  onOpenFigureModal?: () => void;
+}) {
   const entries = useSortedEntries();
   const jobId = useJobStore((s) => s.jobId);
   const status = useJobStore((s) => s.status);
@@ -16,6 +20,18 @@ export function QuestionPanelHeader() {
   const setReviewActive = useJobStore((s) => s.setExtractionReviewActive);
   const store = useJobStore();
   const [globalLoading, setGlobalLoading] = useState<string | null>(null);
+
+  // figure 문제 진행률 (버튼 라벨용)
+  const figureProblems = useMemo(
+    () => entries.filter((q) => (q.extracted as Record<string, unknown> | undefined)?.has_figure),
+    [entries]
+  );
+  const loadedFigureCount = useMemo(
+    () => figureProblems.filter((q) => q.figure?.status === "ok").length,
+    [figureProblems]
+  );
+  const figureProblemCount = figureProblems.length;
+  const allFiguresLoaded = figureProblemCount === 0 || loadedFigureCount >= figureProblemCount;
 
   if (entries.length === 0) return null;
   const doneCount = entries.filter((q) => q.verified || q.solved).length;
@@ -77,19 +93,20 @@ export function QuestionPanelHeader() {
         </div>
       )}
 
-      {!reviewActive && isDone && (
+      {!reviewActive && isDone && figureProblemCount > 0 && (
         <div className="space-y-2 pb-2 border-b">
-          <FigureResultSection
-            entries={entries}
-            jobId={jobId}
-            globalLoading={globalLoading}
-            onConfirm={() => handleGlobalAction("confirm")}
-            onRetryFigure={(qNum) => {
-              if (!jobId) return;
-              sendResumeAction(jobId, `resume --q=${qNum} --from=figure`, store);
-            }}
-            onRetryAll={() => handleGlobalAction("figure")}
-          />
+          <Button
+            variant={allFiguresLoaded ? "outline" : "default"}
+            size="sm"
+            disabled={globalLoading !== null}
+            onClick={onOpenFigureModal}
+            className={cn(
+              "h-8 text-xs w-full",
+              !allFiguresLoaded && "bg-amber-600 hover:bg-amber-700 text-white animate-pulse"
+            )}
+          >
+            그림 결과 확인 ({loadedFigureCount}/{figureProblemCount}{allFiguresLoaded ? " ✓" : ""})
+          </Button>
         </div>
       )}
     </div>
