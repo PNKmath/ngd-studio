@@ -415,6 +415,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     requestedProvider,
     provider: resolvedProvider,
     stageOverrides,
+    checkerMaxAttempts: body.checkerMaxAttempts ?? 2,
+    verifierMaxAttempts: body.verifierMaxAttempts ?? 3,
     status: "running",
     inputFiles: [resolvedFiles.pdf, resolvedFiles.hwpx].filter(Boolean),
     meta: meta ?? {},
