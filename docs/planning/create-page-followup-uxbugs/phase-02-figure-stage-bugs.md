@@ -205,3 +205,9 @@ exit 0 — `cd ngd-studio && npx tsc --noEmit` clean, vitest 706/707 pass (1 fai
 
 #### Review (orchestrator)
 VERDICT: pass — 0 issues. 6개 항목 전부 구현, A~J 전부 OK, 대체 smoke test 3종(tsc/vitest/py_compile) 기록, ⓔ audit 분기 판단(296cd58/86117c0 와 다른 레이어 — frontend extractionReviewActive 상태) 합리적.
+
+#### Commit
+557af46 — fix(figure-ux): Phase 2 — figure 실패 표시 + cleaned 폴백 + stage routing extractionReviewActive 리셋
+
+#### E2E (orchestrator)
+skip — `create-v4-full-pipeline` (type: full) 은 figure 단계 실행이 필수인데 Gemini 월 한도 초과(외부 의존)로 fail 보장. 사용자 결정: Gemini 한도 해소 후 `/phase-e2e create-page-followup-uxbugs --phase 2` 로 수동 재실행. env-class 미발화는 skill 가이드("env verdict 시 phase 추가가 잘못된 처방")와 일치.
