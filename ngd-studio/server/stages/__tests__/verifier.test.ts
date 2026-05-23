@@ -207,13 +207,15 @@ describe("validateVerifierOutput", () => {
   });
 
   it("passes without number field", () => {
-    const { number: _, ...rest } = VALID_PASS_OUTPUT;
+    const rest: Partial<typeof VALID_PASS_OUTPUT> = { ...VALID_PASS_OUTPUT };
+    delete rest.number;
     const result = validateVerifierOutput(rest);
     expect(result.ok).toBe(true);
   });
 
   it("fails when status is missing", () => {
-    const { status: _, ...rest } = VALID_PASS_OUTPUT;
+    const rest: Partial<typeof VALID_PASS_OUTPUT> = { ...VALID_PASS_OUTPUT };
+    delete rest.status;
     const result = validateVerifierOutput(rest);
     expect(result.ok).toBe(false);
     expect((result as { ok: false; message: string }).message).toContain("status");

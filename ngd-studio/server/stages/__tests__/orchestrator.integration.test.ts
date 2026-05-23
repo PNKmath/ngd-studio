@@ -29,7 +29,7 @@ import { readdirSync as readdirSyncNode } from "fs";
 import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
-import type { AIProviderAdapter, ProviderRunOptions } from "@/lib/ai/types";
+import type { AIProviderAdapter } from "@/lib/ai/types";
 import type { SSEEvent } from "@/lib/claude";
 import { FileBackedStageCache } from "../cache";
 
@@ -93,7 +93,7 @@ function makeMockProvider(
     id,
     label: `Mock(${id})`,
     supportsTools: true as const,
-    run(_prompt: string, _options?: ProviderRunOptions) {
+    run() {
       async function* events() {
         yield {
           type: "assistant" as const,
@@ -172,7 +172,8 @@ vi.mock("../verifier", async (importOriginal) => {
 // Also handles builder stage: writes a fake HWPX file and returns the expected stdout.
 vi.mock("../commands", async (importOriginal) => {
   const real = await importOriginal<typeof import("../commands")>();
-  const { writeFile: fsWriteFile, mkdir: fsMkdir } = await import("fs/promises");
+  const { readFile: fsReadFile, writeFile: fsWriteFile, mkdir: fsMkdir } = await import("fs/promises");
+  const { default: JSZip } = await import("jszip");
   return {
     ...real,
     runStageCommand: vi.fn(async (opts: Parameters<typeof real.runStageCommand>[0]) => {
@@ -184,7 +185,9 @@ vi.mock("../commands", async (importOriginal) => {
         if (outputDir) {
           await fsMkdir(outputDir, { recursive: true });
           const hwpxPath = outputDir + "/test_built.hwpx";
-          await fsWriteFile(hwpxPath, "fake-hwpx-content", "utf8");
+          const zip = new JSZip();
+          zip.file("Contents/section0.xml", "<hp:sec><hp:p><hp:t>테스트</hp:t></hp:p></hp:sec>");
+          await fsWriteFile(hwpxPath, await zip.generateAsync({ type: "nodebuffer" }));
           return {
             command: opts.command,
             args,
@@ -195,6 +198,30 @@ vi.mock("../commands", async (importOriginal) => {
             signal: null,
             elapsedMs: 0,
           };
+        }
+      }
+      if (firstArg.endsWith("figure_processor.py")) {
+        const examDataIdx = args.indexOf("--exam-data");
+        const outputDirIdx = args.indexOf("--output-dir");
+        const statusIdx = args.indexOf("--status-out");
+        const examDataPath = examDataIdx >= 0 ? args[examDataIdx + 1] : undefined;
+        const outputDir = outputDirIdx >= 0 ? args[outputDirIdx + 1] : undefined;
+        const statusOutPath = statusIdx >= 0 ? args[statusIdx + 1] : undefined;
+        if (typeof examDataPath === "string" && typeof outputDir === "string" && typeof statusOutPath === "string") {
+          const examData = JSON.parse(await fsReadFile(examDataPath, "utf8")) as {
+            problems?: Array<{ number?: number }>;
+          };
+          const questions: Record<string, { status: "ok"; image: string; boundary_uncertain: false }> = {};
+          await fsMkdir(outputDir, { recursive: true });
+          for (const problem of examData.problems ?? []) {
+            const n = problem.number;
+            if (typeof n !== "number") continue;
+            const image = path.join(outputDir, `prob${n}_final.png`);
+            await fsWriteFile(image, "fake-image", "utf8");
+            questions[String(n)] = { status: "ok", image, boundary_uncertain: false };
+          }
+          await fsMkdir(path.dirname(statusOutPath), { recursive: true });
+          await fsWriteFile(statusOutPath, JSON.stringify({ status: "done", questions }, null, 2), "utf8");
         }
       }
       // All other commands (fix_namespaces, validate, figure_processor): return success
@@ -253,10 +280,7 @@ async function prepopulateSolverCache(cache: FileBackedStageCache, questionNums:
   }
 }
 
-async function prepopulateBuilderCache(
-  cache: FileBackedStageCache,
-  questionNums: number[]
-): Promise<void> {
+async function prepopulateBuilderCache(cache: FileBackedStageCache, questionNums: number[]): Promise<void> {
   await cache.ensureCacheDir();
   for (const n of questionNums) {
     const solvedFixture = path.join(FIXTURES_DIR, "solved", `q0${n}.json`);
@@ -264,19 +288,18 @@ async function prepopulateBuilderCache(
     await writeFile(cache.solverResultPath(n), await readFile(solvedFixture, "utf8"), "utf8");
     await writeFile(cache.verifierResultPath(n), await readFile(verifiedFixture, "utf8"), "utf8");
   }
-  // Also write exam_data.json so builder stage can find it.
   const examData = {
     info: { school: "테스트고", grade: 2, subject: "수학" },
     problems: [EXTRACTED_Q1, EXTRACTED_Q2, EXTRACTED_Q3],
   };
   await writeFile(cache.paths.examData, `${JSON.stringify(examData, null, 2)}\n`, "utf8");
-  // Pre-write figure_status.json from fixture (figure mock checks this).
   const figureStatusFixture = await readFile(
     path.join(FIXTURES_DIR, "figure_status.success.json"),
     "utf8"
   );
   await writeFile(cache.paths.figureStatus, figureStatusFixture, "utf8");
 }
+void prepopulateBuilderCache;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tests
@@ -322,7 +345,7 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
       cache,
     });
 
-    expect(result.status).toBe("done");
+    expect(result.status, result.resultSummary).toBe("done");
     expect(Array.isArray(result.providerTelemetry)).toBe(true);
 
     // Solver telemetry: 1 entry per question (3 total).
@@ -430,7 +453,7 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
     });
 
     // Full pipeline should complete to done.
-    expect(result.status).toBe("done");
+    expect(result.status, result.resultSummary).toBe("done");
     expect(Array.isArray(result.providerTelemetry)).toBe(true);
 
     // Per-question incremental extraction_review events should be emitted (one per question).
@@ -501,7 +524,7 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
       cache,
     });
 
-    expect(result.status).toBe("done");
+    expect(result.status, result.resultSummary).toBe("done");
 
     // Verifier passes on first try for all 3 questions → exactly 3 entries.
     const verifierEntries = result.providerTelemetry.filter(
@@ -553,7 +576,7 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
         cache,
       });
 
-      expect(result.status).toBe("done");
+      expect(result.status, result.resultSummary).toBe("done");
 
       const figureCall = spy.mock.calls.find((call) =>
         (call[0].args ?? []).some(

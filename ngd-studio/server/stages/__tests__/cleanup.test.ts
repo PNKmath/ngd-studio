@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm, access } from "fs/promises";
 import os from "os";
 import path from "path";

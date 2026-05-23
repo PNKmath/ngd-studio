@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
-import type { AIProviderAdapter, ProviderRunOptions } from "@/lib/ai/types";
+import type { AIProviderAdapter } from "@/lib/ai/types";
 import type { SSEEvent } from "@/lib/claude";
 import { FileBackedStageCache } from "../cache";
 import type { ExtractorStageInput } from "../extractor";
@@ -95,7 +95,7 @@ function makeMockProvider(
     id,
     label: `Mock(${id})`,
     supportsTools: true as const,
-    run(_prompt: string, _options?: ProviderRunOptions) {
+    run() {
       async function* events() {
         if (delayMs > 0) {
           await new Promise<void>((r) => setTimeout(r, delayMs));
@@ -140,7 +140,7 @@ function makeFailProvider(opts: { id?: AIProviderAdapter["id"] } = {}): AIProvid
     id,
     label: `FailMock(${id})`,
     supportsTools: true as const,
-    run(_prompt: string, _options?: ProviderRunOptions) {
+    run() {
       async function* events() {
         yield { type: "result" as const, subtype: "error" as const, result: "provider failed" };
       }
@@ -229,7 +229,7 @@ vi.mock("../reviewRunner", async (importOriginal) => {
   const real = await importOriginal<typeof import("../reviewRunner")>();
   return {
     ...real,
-    runReviewStage: vi.fn(async (_input: Parameters<typeof real.runReviewStage>[0]): Promise<ReviewRunnerOutput> => {
+    runReviewStage: vi.fn(async (): Promise<ReviewRunnerOutput> => {
       const mockApplied = [
         {
           issue_type: "typo" as const,
@@ -252,7 +252,7 @@ vi.mock("../reviewRunner", async (importOriginal) => {
 
 vi.mock("../commands", async (importOriginal) => {
   const real = await importOriginal<typeof import("../commands")>();
-  const { writeFile: fsWriteFile, mkdir: fsMkdir } = await import("fs/promises");
+  const { readFile: fsReadFile, writeFile: fsWriteFile, mkdir: fsMkdir } = await import("fs/promises");
   return {
     ...real,
     runStageCommand: vi.fn(async (opts: Parameters<typeof real.runStageCommand>[0]) => {
@@ -277,7 +277,42 @@ vi.mock("../commands", async (importOriginal) => {
           };
         }
       }
-      // All other commands (fix_namespaces, validate, figure_processor): return success
+      // figure_processor.py: write the status file that figureRunner expects.
+      if (firstArg.endsWith("figure_processor.py")) {
+        const examDataPath = args[args.indexOf("--exam-data") + 1];
+        const outputDir = args[args.indexOf("--output-dir") + 1];
+        const statusOutPath = args[args.indexOf("--status-out") + 1];
+        if (typeof examDataPath === "string" && typeof outputDir === "string" && typeof statusOutPath === "string") {
+          const examData = JSON.parse(await fsReadFile(examDataPath, "utf8")) as {
+            problems?: Array<{ number?: number }>;
+          };
+          await fsMkdir(outputDir, { recursive: true });
+          const questions: Record<string, { status: "ok"; image: string; boundary_uncertain: false }> = {};
+          for (const problem of examData.problems ?? []) {
+            const n = problem.number;
+            if (typeof n !== "number") continue;
+            const image = path.join(outputDir, `prob${n}_final.png`);
+            await fsWriteFile(image, "fake-image", "utf8");
+            questions[String(n)] = { status: "ok", image, boundary_uncertain: false };
+          }
+          await fsWriteFile(
+            statusOutPath,
+            JSON.stringify({ status: "done", questions }, null, 2),
+            "utf8"
+          );
+        }
+        return {
+          command: opts.command,
+          args,
+          status: "success" as const,
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+          signal: null,
+          elapsedMs: 0,
+        };
+      }
+      // All other commands (fix_namespaces, validate): return success
       return {
         command: opts.command,
         args,

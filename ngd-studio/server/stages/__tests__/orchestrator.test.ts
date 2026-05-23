@@ -37,7 +37,7 @@ vi.mock("../solver", async (importOriginal) => {
   const real = await importOriginal<typeof import("../solver")>();
   return {
     ...real,
-    runSolverStage: vi.fn(async (_input: Parameters<typeof real.runSolverStage>[0]) => {
+    runSolverStage: vi.fn(async () => {
       return MOCK_SOLVER_RESULT;
     }),
   };
@@ -47,7 +47,7 @@ vi.mock("../verifier", async (importOriginal) => {
   const real = await importOriginal<typeof import("../verifier")>();
   return {
     ...real,
-    runVerifierStage: vi.fn(async (_input: Parameters<typeof real.runVerifierStage>[0]) => {
+    runVerifierStage: vi.fn(async () => {
       return MOCK_VERIFIER_RESULT;
     }),
   };
@@ -103,12 +103,6 @@ const VALID_VERIFIER_OUTPUT_PASS = {
   feedback: undefined,
 };
 
-const VALID_VERIFIER_OUTPUT_FAIL = {
-  status: "fail",
-  issues: [{ category: "math_accuracy", description: "answer may be wrong" }],
-  feedback: "Check the calculation",
-};
-
 /**
  * Build a mock AIProviderAdapter that returns a given JSON payload.
  */
@@ -123,7 +117,7 @@ function makeMockProvider(
     id,
     label: "Mock",
     supportsTools: false as const,
-    run(_prompt: string, _options?: ProviderRunOptions) {
+    run() {
       const text = typeof responseJson === "string" ? responseJson : JSON.stringify(responseJson);
 
       async function* events() {
@@ -376,7 +370,8 @@ describe("runStageOrchestrator", () => {
       id: "claude-sdk",
       label: "SignalCapture",
       supportsTools: false,
-      run(_prompt: string, options?: ProviderRunOptions) {
+      run(...args: [string, ProviderRunOptions?]) {
+        const options = args[1];
         capturedSignals.push(options?.signal);
         // Return a valid (non-aborted) response so the stage completes.
         const text = JSON.stringify(VALID_EXTRACTOR_OUTPUT);
@@ -498,7 +493,6 @@ describe("runStageOrchestrator", () => {
     };
 
     // Run 1 question through a simulated feedback loop.
-    let solved = VALID_SOLVER_OUTPUT;
     const MAX_ATTEMPTS = 3;
     let attempt = 0;
     let finalStatus = "unknown";
@@ -512,7 +506,6 @@ describe("runStageOrchestrator", () => {
       attempt++;
       if (attempt >= MAX_ATTEMPTS) break;
       // Re-run solver (simplified: just use same output).
-      solved = VALID_SOLVER_OUTPUT;
     }
 
     // verifier should have been called twice: first fail, second pass.

@@ -243,7 +243,8 @@ describe("validateExtractorOutput", () => {
   });
 
   it("passes when answer is missing (extractor는 answer를 추출하지 않음 — solver 책임)", () => {
-    const { answer: _, ...rest } = VALID_OUTPUT;
+    const rest: Partial<typeof VALID_OUTPUT> = { ...VALID_OUTPUT };
+    delete rest.answer;
     const result = validateExtractorOutput(rest);
     expect(result.ok).toBe(true);
   });

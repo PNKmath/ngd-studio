@@ -173,13 +173,15 @@ describe("validateSolverOutput", () => {
   });
 
   it("passes without number field", () => {
-    const { number: _, ...rest } = VALID_OUTPUT;
+    const rest: Partial<typeof VALID_OUTPUT> = { ...VALID_OUTPUT };
+    delete rest.number;
     const result = validateSolverOutput(rest);
     expect(result.ok).toBe(true);
   });
 
   it("fails when answer is missing", () => {
-    const { answer: _, ...rest } = VALID_OUTPUT;
+    const rest: Partial<typeof VALID_OUTPUT> = { ...VALID_OUTPUT };
+    delete rest.answer;
     const result = validateSolverOutput(rest);
     expect(result.ok).toBe(false);
     expect((result as { ok: false; message: string }).message).toContain("answer");
@@ -192,7 +194,8 @@ describe("validateSolverOutput", () => {
   });
 
   it("fails when explanation_parts is missing", () => {
-    const { explanation_parts: _, ...rest } = VALID_OUTPUT;
+    const rest: Partial<typeof VALID_OUTPUT> = { ...VALID_OUTPUT };
+    delete rest.explanation_parts;
     const result = validateSolverOutput(rest);
     expect(result.ok).toBe(false);
     expect((result as { ok: false; message: string }).message).toContain("explanation_parts");
