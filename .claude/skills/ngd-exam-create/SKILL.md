@@ -240,13 +240,13 @@ nano-banana 스킬로 이미지를 정리해줘.
 입력: inputs/시험지 제작/question_images/q{N:02d}.png
 출력: inputs/시험지 제작/question_images/cleaned/q{N:02d}.png
 
-이 이미지는 수학 시험지 문제 사진이다. 다음을 수행:
-- 손글씨, 필기 흔적 제거
-- 인쇄된 텍스트, 수식, 테이블은 그대로 유지
-- 원본과 동일한 내용 유지 (숫자, 수식 변경 금지)
-- 배경을 깨끗한 흰색으로
+이 이미지는 수학 시험지 문제 사진이지만, **출력은 시험지 위에 임베드될 digital figure** (종이 스캔 아님). 다음을 수행:
+- 손글씨·필기·연필·종이 노이즈 제거
+- 인쇄된 텍스트, 수식, 테이블, 도형/figure 는 원본 그대로 유지
+- 원본과 동일한 내용 유지 (숫자, 수식, 기호 추가·삭제·변경 금지)
+- **배경은 순백(#FFFFFF) — 회색·베이지·종이 텍스처·그림자 금지**
 
-프롬프트: "Clean scan of a Korean math exam question. Remove all handwriting and pen marks. Keep all printed text, numbers, equations, tables, and circle markers exactly as they are. White background, crisp black text. Do not change any numbers or mathematical expressions."
+프롬프트: "This image will be used as a figure embedded in a typeset Korean math exam document. The output is a digital figure, NOT a scan of paper. Output a pure white background (#FFFFFF) with no paper texture, no gray tint, no beige, no shadow. Remove all handwriting, pen marks, pencil strokes, and paper noise. Keep all printed text, numbers, equations, tables, circle markers, and printed figures/diagrams exactly as in the source. Crisp black ink on pure white. No anti-aliasing artifacts at borders. Do not change, add, or remove any numbers, symbols, or mathematical expressions."
 """)
 ```
 

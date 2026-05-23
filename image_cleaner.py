@@ -30,12 +30,13 @@ GEMINI_MODEL = "gemini-3.1-flash-image-preview"
 
 # SKILL.md Step 2-0의 cleaning prompt — verbatim.
 CLEANING_PROMPT = (
-    "Clean scan of a Korean math exam question. "
-    "Remove all handwriting and pen marks. "
-    "Keep all printed text, numbers, equations, tables, and circle markers "
-    "exactly as they are. "
-    "White background, crisp black text. "
-    "Do not change any numbers or mathematical expressions."
+    "This image will be used as a figure embedded in a typeset Korean math exam document. "
+    "The output is a digital figure, NOT a scan of paper. "
+    "Output a pure white background (#FFFFFF) with no paper texture, no gray tint, no beige, no shadow. "
+    "Remove all handwriting, pen marks, pencil strokes, and paper noise. "
+    "Keep all printed text, numbers, equations, tables, circle markers, and printed figures/diagrams exactly as in the source. "
+    "Crisp black ink on pure white. No anti-aliasing artifacts at borders. "
+    "Do not change, add, or remove any numbers, symbols, or mathematical expressions."
 )
 
 
