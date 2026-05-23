@@ -835,6 +835,143 @@ describe("orchestrator per-question pipeline", () => {
     expect(verifierTelemetry[1]?.status).toBe("success");
     expect(verifierTelemetry[1]?.retry).toBe(true);
   }, 30_000);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Scenario E-ext: cache hit + miss 혼합 시 stage counter 정합 (F8)
+  // ────────────────────────────────────────────────────────────────────────
+
+  it("(E-ext) cache hit + miss 혼합 — extractor/solver/verifier stage done events 모두 emit됨", async () => {
+    // Q1: solver cache hit (extracted + solved already), Q2/Q3 fresh
+    await cache.ensureCacheDir();
+    await writeFile(
+      cache.extractorResultPath(1),
+      `${JSON.stringify(MOCK_EXTRACTOR_RESPONSE_Q1, null, 2)}\n`,
+      "utf8"
+    );
+    await writeFile(
+      cache.solverResultPath(1),
+      `${JSON.stringify(MOCK_SOLVER_RESPONSE_Q1, null, 2)}\n`,
+      "utf8"
+    );
+
+    extractorResponses.set(1, MOCK_EXTRACTOR_RESPONSE_Q1); // not used (cache hit)
+    extractorResponses.set(2, MOCK_EXTRACTOR_RESPONSE_Q2);
+    extractorResponses.set(3, MOCK_EXTRACTOR_RESPONSE_Q3);
+
+    solverResponses.set(1, MOCK_SOLVER_RESPONSE_Q1); // not used (cache hit)
+    solverResponses.set(2, MOCK_SOLVER_RESPONSE_Q2);
+    solverResponses.set(3, MOCK_SOLVER_RESPONSE_Q3);
+
+    verifierQueues.set(1, [MOCK_VERIFIER_RESPONSE_Q1_PASS]);
+    verifierQueues.set(2, [MOCK_VERIFIER_RESPONSE_Q2_PASS]);
+    verifierQueues.set(3, [MOCK_VERIFIER_RESPONSE_Q3_PASS]);
+
+    const { events, send } = makeSseCollector();
+    const questionImages = QUESTION_NUMS.map((n) => ({ number: n, path: `/fake/q0${n}.png` }));
+
+    const { runStageOrchestrator } = await import("../orchestrator");
+    const result = await runStageOrchestrator({
+      mode: "resume",
+      resumeFrom: "extractor",
+      meta: COMPLETE_META,
+      questionImages,
+      stageOverrides: STAGE_OVERRIDES,
+      defaultProvider: "auto",
+      baseDir,
+      send,
+      isAborted: () => false,
+      cache,
+    });
+
+    expect(result.status).toBe("done");
+
+    // extractor stage must emit "done" (2 miss + 1 cache-hit)
+    const extractorDone = events.find(
+      (e) => e.event === "stage"
+        && (e.data as Record<string, unknown>).name === "extractor"
+        && (e.data as Record<string, unknown>).status === "done"
+    );
+    expect(extractorDone).toBeDefined();
+
+    // solver stage must emit "done" (2 miss + 1 cache-hit)
+    const solverDone = events.find(
+      (e) => e.event === "stage"
+        && (e.data as Record<string, unknown>).name === "solver"
+        && (e.data as Record<string, unknown>).status === "done"
+    );
+    expect(solverDone).toBeDefined();
+
+    // verifier stage must emit "done" (3 miss)
+    const verifierDone = events.find(
+      (e) => e.event === "stage"
+        && (e.data as Record<string, unknown>).name === "verifier"
+        && (e.data as Record<string, unknown>).status === "done"
+    );
+    expect(verifierDone).toBeDefined();
+  }, 30_000);
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Scenario F-ext: targetQuestionNumbers — per-Q figure 재처리 (F3)
+  // ────────────────────────────────────────────────────────────────────────
+
+  it("(F-ext) targetQuestionNumbers=[2] — figure stage에서 --question 2만 처리됨", async () => {
+    // Pre-cache all extractors/solvers/verifiers so pipeline skips to figure
+    await cache.ensureCacheDir();
+    for (const n of QUESTION_NUMS) {
+      await writeFile(
+        cache.extractorResultPath(n),
+        `${JSON.stringify(MOCK_EXTRACTOR_RESPONSE_Q1, null, 2)}\n`,
+        "utf8"
+      );
+      await writeFile(
+        cache.solverResultPath(n),
+        `${JSON.stringify(MOCK_SOLVER_RESPONSE_Q1, null, 2)}\n`,
+        "utf8"
+      );
+      await writeFile(
+        cache.verifierResultPath(n),
+        `${JSON.stringify(MOCK_VERIFIER_RESPONSE_Q1_PASS, null, 2)}\n`,
+        "utf8"
+      );
+    }
+
+    const { send } = makeSseCollector();
+    const questionImages = QUESTION_NUMS.map((n) => ({ number: n, path: `/fake/q0${n}.png` }));
+    const { runStageCommand } = await import("../commands");
+    vi.clearAllMocks();
+
+    const { runStageOrchestrator } = await import("../orchestrator");
+    const result = await runStageOrchestrator({
+      mode: "resume",
+      resumeFrom: "figure",
+      meta: COMPLETE_META,
+      questionImages,
+      stageOverrides: STAGE_OVERRIDES,
+      defaultProvider: "auto",
+      targetQuestionNumbers: [2],
+      stopAfterStage: "figure",
+      baseDir,
+      send,
+      isAborted: () => false,
+      cache,
+    });
+
+    expect(result.status).toBe("done");
+
+    // figure_processor.py should have been called with --question 2
+    const figureCalls = (runStageCommand as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call) => {
+        const args = (call[0] as { args?: string[] }).args ?? [];
+        return typeof args[0] === "string" && args[0].endsWith("figure_processor.py");
+      }
+    );
+
+    expect(figureCalls.length).toBeGreaterThanOrEqual(1);
+    const firstFigureCall = figureCalls[0]![0] as { args: string[] };
+    const qIdx = firstFigureCall.args.indexOf("--question");
+    expect(qIdx).toBeGreaterThan(-1);
+    expect(firstFigureCall.args[qIdx + 1]).toBe("2");
+  }, 30_000);
 });
 
 // ────────────────────────────────────────────────────────────────────────────

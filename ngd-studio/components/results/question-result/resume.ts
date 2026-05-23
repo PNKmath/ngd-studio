@@ -1,5 +1,6 @@
 import { useJobStore } from "@/lib/store";
 import type { SSEEvent } from "@/lib/claude";
+import { applySSEEvent } from "@/lib/sseClient";
 
 type Store = ReturnType<typeof useJobStore.getState>;
 
@@ -46,7 +47,7 @@ export async function sendResumeAction(
         if (!dataLine.startsWith("data: ")) continue;
         try {
           const sseEvent: SSEEvent = JSON.parse(dataLine.slice(6));
-          handleSSEEvent(sseEvent, store);
+          applySSEEvent(sseEvent, store);
         } catch { /* skip */ }
       }
     }
@@ -59,57 +60,4 @@ export async function sendResumeAction(
   }
 }
 
-function handleSSEEvent(event: SSEEvent, store: Store) {
-  const data = event.data;
-  switch (event.event) {
-    case "log":
-      store.addLog({
-        timestamp: (data.timestamp as string) ?? new Date().toISOString(),
-        stage: (data.stage as string) ?? "system",
-        message: (data.message as string) ?? "",
-        level: (data.level as "info" | "warn" | "error") ?? "info",
-      });
-      break;
-    case "stage":
-      store.updateStage(data.name as string, {
-        status: data.status as "running" | "done",
-        ...(data.status === "running" ? { startedAt: new Date().toISOString() } : {}),
-        ...(data.status === "done" ? { finishedAt: new Date().toISOString() } : {}),
-      });
-      break;
-    case "question":
-      if (data.status === "ok") {
-        store.updateQuestionResult(
-          data.number as number,
-          (data.stage as string) ?? (data.phase as string),
-          (data.data as Record<string, unknown>) ?? (data.content as Record<string, unknown>),
-        );
-      }
-      break;
-    case "extraction_review": {
-      const items = (data.items as { number: number; data: Record<string, unknown> }[]) ?? [];
-      for (const it of items) {
-        store.updateQuestionResult(it.number, "extracted", it.data);
-      }
-      store.setExtractionReviewActive(true);
-      break;
-    }
-    case "result":
-      store.setResult({
-        status: data.status as string,
-        outputPath: data.outputPath as string | undefined,
-        summary: data.result as string | undefined,
-      });
-      store.setStatus((data.status as string) === "success" ? "done" : "failed");
-      break;
-    case "error":
-      store.addLog({
-        timestamp: new Date().toISOString(),
-        stage: "system",
-        message: (data.message as string) ?? "",
-        level: "error",
-      });
-      store.setStatus("failed");
-      break;
-  }
-}
+// 로컬 handleSSEEvent는 lib/sseClient.ts의 applySSEEvent로 통합됨 (P7 F5)

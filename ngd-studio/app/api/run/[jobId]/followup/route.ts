@@ -326,6 +326,7 @@ export async function POST(
           questionImages,
           stageOverrides,
           stopAfterStage,
+          targetQuestionNumbers: targetQuestions,
           checkerMaxAttempts,
           verifierMaxAttempts,
           defaultProvider: normalizeProviderId(job.requestedProvider as AIProviderId | undefined),

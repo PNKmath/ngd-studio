@@ -1,22 +1,22 @@
 /**
- * cleanup.ts — Phase 2
+ * cleanup.ts — Phase 2 (updated Phase 7)
  *
  * Deterministic cache cleanup for resume operations.
  * Codifies the cleanup_from_stage Python logic in
  * .claude/skills/ngd-exam-create/SKILL.md:88-128.
  *
- * Stage → deletion targets table:
- * | fromStage     | 삭제 대상                                                  |
- * |---------------|------------------------------------------------------------|
+ * Stage → deletion targets table (P7 원칙: 어느 stage에서 재개해도 exam_data는 새로 rebuild):
+ * | fromStage     | 삭제 대상                                                                          |
+ * |---------------|------------------------------------------------------------------------------------|
  * | extractor     | _extracted, _solved, _verified, figure outputs, figure_status.json, exam_data.json |
- * | solver        | _solved, _verified, figure outputs, figure_status.json, exam_data.json |
- * | verifier      | _verified, exam_data.json                                  |
- * | figure        | figure outputs, figure_status.json                         |
- * | confirm       | 없음 (단순 통과)                                            |
- * | builder       | hwpx outputs                                               |
- * | cleaned       | _extracted, downstream all (이미지 보존)                    |
- * | image_replace | 원본 이미지 + downstream all                               |
- * | review_extract| _solved, _verified, exam_data.json                         |
+ * | solver        | _solved, _verified, figure outputs, figure_status.json, exam_data.json             |
+ * | verifier      | _verified, figure outputs, figure_status.json, exam_data.json                      |
+ * | figure        | figure outputs, figure_status.json, exam_data.json                                 |
+ * | confirm       | exam_data.json (builder 진입 직전)                                                  |
+ * | builder       | hwpx outputs, exam_data.json                                                       |
+ * | cleaned       | _extracted, downstream all (이미지 보존)                                            |
+ * | image_replace | 원본 이미지 + downstream all                                                        |
+ * | review_extract| _solved, _verified, exam_data.json                                                 |
  */
 
 import { unlink, readdir } from "fs/promises";
@@ -98,6 +98,8 @@ export async function cleanupFromStage(
       for (const n of questionNums) {
         await tryDelete(cache.verifierResultPath(n));
       }
+      await deleteFigureOutputs(cache, questionNums, tryDelete);
+      await tryDelete(cache.paths.figureStatus);
       await tryDelete(cache.paths.examData);
       break;
     }
@@ -105,16 +107,19 @@ export async function cleanupFromStage(
     case "figure": {
       await deleteFigureOutputs(cache, questionNums, tryDelete);
       await tryDelete(cache.paths.figureStatus);
+      await deleteExamData(cache, tryDelete);
       break;
     }
 
     case "confirm": {
-      // No-op: confirm is a pass-through stage
+      // confirm = builder 진입 직전. exam_data를 새 rebuild.
+      await deleteExamData(cache, tryDelete);
       break;
     }
 
     case "builder": {
       await deleteHwpxOutputs(cache, tryDelete);
+      await deleteExamData(cache, tryDelete);
       break;
     }
 
@@ -133,6 +138,13 @@ export async function cleanupFromStage(
 // ──────────────────────────────────────────────
 
 type TryDelete = (filePath: string) => Promise<void>;
+
+async function deleteExamData(
+  cache: StageCache,
+  tryDelete: TryDelete
+): Promise<void> {
+  await tryDelete(cache.paths.examData);
+}
 
 async function deleteExtractorAndDownstream(
   cache: StageCache,

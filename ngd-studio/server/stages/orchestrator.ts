@@ -1,5 +1,5 @@
 import path from "path";
-import { readFile, stat } from "fs/promises";
+import { readFile, stat, writeFile } from "fs/promises";
 import type { SSEEvent } from "@/lib/claude";
 import type { AIProviderId } from "@/lib/ai/types";
 import { getProviderAdapter } from "@/lib/ai/registry";
@@ -71,6 +71,12 @@ export interface OrchestratorInput {
    * "cleaning" 은 extractor 직전의 cleaning 블록까지만 실행하고 멈추는 가상 단계.
    */
   stopAfterStage?: "cleaning" | "extractor" | "solver" | "verifier" | "figure" | "builder" | "checker";
+  /**
+   * figure stage에서 특정 문제만 재처리할 때 지정.
+   * 지정하지 않으면 전체 figure 문제를 처리한다.
+   * 단일 → --question N, 복수 → 번호별 runFigureStage 반복 + figure_status 병합.
+   */
+  targetQuestionNumbers?: number[];
   baseDir: string;
   send: (event: SSEEvent) => void;
   isAborted: () => boolean;
@@ -438,6 +444,24 @@ export async function runStageOrchestrator(
     send(logEvent(stage, `Q${n} ${stageLabel[stage]} 시작`));
   }
 
+  /**
+   * cache-hit 분기에서 stageCounter를 정확히 카운팅하기 위한 헬퍼.
+   * onEnter + onLeave를 한 번에 호출한다.
+   */
+  function markCacheHit(stage: PipelineStageName, n: number): void {
+    onEnter(stage, n);
+    onLeave(stage, n, "completed");
+  }
+
+  /**
+   * 이전 stage 실패로 인해 이 stage에 진입하지 못할 때 카운터를 맞추기 위한 헬퍼.
+   * total에는 포함됐지만 실제 실행 없이 failed로 처리한다.
+   */
+  function markSkippedDueToFailure(stage: PipelineStageName, n: number): void {
+    onEnter(stage, n);
+    onLeave(stage, n, "failed");
+  }
+
   function onLeave(stage: PipelineStageName, n: number, status: "completed" | "failed"): void {
     const c = stageCounter[stage];
     if (status === "completed") c.completed++;
@@ -516,6 +540,12 @@ export async function runStageOrchestrator(
           data: { number: n, stage: "extracted", status: "ok", data: extractedOutput },
         });
       }
+      // P7 F8: cache-hit도 stageCounter에 카운트해 done === total 조건을 보장한다.
+      const forceExtracted = startStage === "solver" || startStage === "verifier";
+      const runExtractorLocal = shouldRunStage(startStage, "extractor") && stillUnder("extractor");
+      if (runExtractorLocal && !forceExtracted) {
+        markCacheHit("extractor", n);
+      }
     } else {
       const result = await extractSem.acquire(async () => {
         if (isAborted()) throw new Error("aborted");
@@ -553,6 +583,11 @@ export async function runStageOrchestrator(
           event: "question",
           data: { number: n, stage: "extracted", status: "failed", error: result.error?.message },
         });
+        // P7 F8: extractor 실패로 solver/verifier에 진입 못 하므로 total 카운터를 맞춤
+        const runSolverL = shouldRunStage(startStage, "solver") && stillUnder("solver");
+        const runVerifierL = shouldRunStage(startStage, "verifier") && stillUnder("verifier");
+        if (runSolverL)   markSkippedDueToFailure("solver", n);
+        if (runVerifierL) markSkippedDueToFailure("verifier", n);
         return { number: n, failedAt: "extractor", error: result.error?.message };
       }
 
@@ -576,6 +611,9 @@ export async function runStageOrchestrator(
           data: { number: n, stage: "solved", status: "ok", data: solvedOutput },
         });
       }
+      // P7 F8: cache-hit도 stageCounter에 카운트
+      const runSolverLocal = shouldRunStage(startStage, "solver") && stillUnder("solver");
+      if (runSolverLocal) markCacheHit("solver", n);
     } else {
       const result = await solveSem.acquire(async () => {
         if (isAborted()) throw new Error("aborted");
@@ -613,6 +651,9 @@ export async function runStageOrchestrator(
           event: "question",
           data: { number: n, stage: "solved", status: "failed", error: result.error?.message },
         });
+        // P7 F8: solver 실패로 verifier에 진입 못 하므로 total 카운터를 맞춤
+        const runVerifierL2 = shouldRunStage(startStage, "verifier") && stillUnder("verifier");
+        if (runVerifierL2) markSkippedDueToFailure("verifier", n);
         return { number: n, failedAt: "solver", error: result.error?.message };
       }
 
@@ -642,6 +683,14 @@ export async function runStageOrchestrator(
           data: { number: n, stage: "verified", status: "ok", data: cachedVerified },
         });
       }
+      // P7 F8: verifier cache-hit도 stageCounter에 카운트
+      const runVerifierLocal = shouldRunStage(startStage, "verifier") && stillUnder("verifier");
+      if (runVerifierLocal) markCacheHit("verifier", n);
+    } else if (skipVerifier && !state.verified) {
+      // 명시적 스킵(verifierMaxAttempts=0 등): runVerifier가 켜져 있어서 total에 포함됐으나
+      // 실제 실행이 없으므로 카운터를 맞추기 위해 markSkippedDueToFailure로 처리.
+      const runVerifierLocal2 = shouldRunStage(startStage, "verifier") && stillUnder("verifier");
+      if (runVerifierLocal2) markSkippedDueToFailure("verifier", n);
     }
 
     if (!skipVerifier) {
@@ -830,13 +879,14 @@ export async function runStageOrchestrator(
       if (checkAborted()) return cancelled(providerTelemetry);
 
       // Initialise stage totals so onLeave can emit summaries correctly.
-      // total = how many questions will actually visit each stage.
+      // P7: total = pipeline에 들어가는 전체 문제 수 (cache hit + miss 모두 포함).
+      // markCacheHit(stage, n)이 onEnter + onLeave를 호출하므로 hit도 total에 포함해야
+      // done === total 조건이 정확히 성립한다.
       for (const img of pipelineQuestions) {
-        const state = await cache.scanQuestionState(img.number);
         const forceExtracted = startStage === "solver" || startStage === "verifier";
-        if (runExtractor && !state.extracted && !forceExtracted) stageCounter.extractor.total++;
-        if (runSolver    && !state.solved)                        stageCounter.solver.total++;
-        if (runVerifier  && !state.verified)                      stageCounter.verifier.total++;
+        if (runExtractor && !forceExtracted) stageCounter.extractor.total++;
+        if (runSolver)   stageCounter.solver.total++;
+        if (runVerifier) stageCounter.verifier.total++;
       }
 
       // If all questions already have cached results for a given stage, emit
@@ -918,7 +968,7 @@ export async function runStageOrchestrator(
         ? `figure_processor.py를 실행합니다 (${imageProvider} 재생성).`
         : "figure_processor.py를 실행합니다 (crop만, Gemini 호출 없음)."));
 
-      const figureResult = await runFigureStage({
+      const figureResult = await runTargetedFigureStage({
         examDataPath: cache.paths.examData,
         outputDir: path.join(baseDir, "outputs", "images"),
         statusOutPath: cache.paths.figureStatus,
@@ -926,6 +976,7 @@ export async function runStageOrchestrator(
         imageProvider,
         baseDir,
         env: runtimeEnv as NodeJS.ProcessEnv,
+        targetQuestionNumbers: input.targetQuestionNumbers,
       });
 
       // figure_status.json을 읽어 문제별 결과를 SSE로 흘려준다.
@@ -1211,4 +1262,75 @@ function cancelled(providerTelemetry: ProviderTelemetryEntry[]): OrchestratorRes
 
 function failed(providerTelemetry: ProviderTelemetryEntry[], message?: string): OrchestratorResult {
   return { status: "failed", resultSummary: message, providerTelemetry };
+}
+
+// ──────────────────────────────────────────────
+// Per-Q figure forwarding (F3)
+// ──────────────────────────────────────────────
+
+import type { FigureRunnerInput, FigureRunnerOutput } from "./figureRunner";
+
+type TargetedFigureInput = FigureRunnerInput & { targetQuestionNumbers?: number[] };
+
+/**
+ * figure_processor.py 실행 래퍼.
+ * - targetQuestionNumbers 없음 → 전체 문제 처리 (기존 동작)
+ * - 단일 → --question N 전달
+ * - 복수 → 번호별 runFigureStage 반복 + figure_status.json 병합
+ */
+async function runTargetedFigureStage(
+  input: TargetedFigureInput
+): Promise<FigureRunnerOutput> {
+  const targets = input.targetQuestionNumbers;
+
+  if (!targets || targets.length === 0) {
+    return runFigureStage(input);
+  }
+
+  if (targets.length === 1) {
+    return runFigureStage({ ...input, questionNumber: targets[0] });
+  }
+
+  // 복수 문제: 번호별로 실행하고 figure_status.json을 병합한다.
+  // figure_processor.py는 --question N 지정 시 해당 문제만 status에 기록(나머지 보존).
+  // TS에서 각 실행 직후 읽어 최종 merged status를 직접 병합한다.
+  const mergedQuestions: Record<string, unknown> = {};
+  let overallStatus: "done" | "partial" | "failed" = "done";
+  const needsAgentReview: number[] = [];
+
+  for (const n of targets) {
+    const result = await runFigureStage({ ...input, questionNumber: n });
+    if (result.status === "failed") {
+      overallStatus = "failed";
+    } else if (result.status === "partial" && overallStatus !== "failed") {
+      overallStatus = "partial";
+    }
+    if (result.needsAgentReview.length > 0) {
+      needsAgentReview.push(...result.needsAgentReview);
+    }
+    // 이번 실행 결과를 figure_status.json에서 읽어 merged에 반영한다.
+    try {
+      const text = await readFile(input.statusOutPath, "utf8");
+      const parsed = JSON.parse(text) as { questions?: Record<string, unknown> };
+      if (parsed.questions) {
+        Object.assign(mergedQuestions, parsed.questions);
+      }
+    } catch {
+      // ignore — 이번 문제 결과를 반영 못 한 경우
+    }
+  }
+
+  // merged 결과를 statusOutPath에 덮어쓴다.
+  const mergedStatus = { status: overallStatus, questions: mergedQuestions };
+  try {
+    await writeFile(input.statusOutPath, JSON.stringify(mergedStatus, null, 2), "utf8");
+  } catch {
+    // ignore write errors — best effort
+  }
+
+  return {
+    status: overallStatus,
+    statusJsonPath: input.statusOutPath,
+    needsAgentReview: [...new Set(needsAgentReview)].sort((a, b) => a - b),
+  };
 }

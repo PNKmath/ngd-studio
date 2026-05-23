@@ -96,13 +96,14 @@ describe("cleanupFromStage — solver", () => {
 });
 
 describe("cleanupFromStage — verifier", () => {
-  it("deletes _verified and exam_data.json; keeps _extracted and _solved", async () => {
+  it("deletes _verified, figure outputs, figure_status.json, and exam_data.json; keeps _extracted and _solved", async () => {
     const baseDir = await makeTempDir();
     const cache = await makeCache(baseDir);
 
     await touchFile(cache.extractorResultPath(3));
     await touchFile(cache.solverResultPath(3));
     await touchFile(cache.verifierResultPath(3));
+    await touchFile(cache.paths.figureStatus);
     await touchFile(cache.paths.examData);
 
     await cleanupFromStage(cache, [3], "verifier");
@@ -110,12 +111,13 @@ describe("cleanupFromStage — verifier", () => {
     expect(await fileExists(cache.extractorResultPath(3))).toBe(true);
     expect(await fileExists(cache.solverResultPath(3))).toBe(true);
     expect(await fileExists(cache.verifierResultPath(3))).toBe(false);
+    expect(await fileExists(cache.paths.figureStatus)).toBe(false);
     expect(await fileExists(cache.paths.examData)).toBe(false);
   });
 });
 
 describe("cleanupFromStage — figure", () => {
-  it("deletes figure outputs and figure_status.json; keeps everything else", async () => {
+  it("deletes figure outputs, figure_status.json, and exam_data.json; keeps per-question cache", async () => {
     const baseDir = await makeTempDir();
     const cache = await makeCache(baseDir);
 
@@ -131,28 +133,29 @@ describe("cleanupFromStage — figure", () => {
     expect(await fileExists(cache.solverResultPath(1))).toBe(true);
     expect(await fileExists(cache.verifierResultPath(1))).toBe(true);
     expect(await fileExists(cache.paths.figureStatus)).toBe(false);
-    expect(await fileExists(cache.paths.examData)).toBe(true);
+    expect(await fileExists(cache.paths.examData)).toBe(false);
   });
 });
 
 describe("cleanupFromStage — confirm", () => {
-  it("is a no-op (deletes nothing)", async () => {
+  it("deletes exam_data.json (builder 진입 직전 rebuild 준비); keeps everything else", async () => {
     const baseDir = await makeTempDir();
     const cache = await makeCache(baseDir);
 
     await touchFile(cache.extractorResultPath(1));
     await touchFile(cache.paths.figureStatus);
+    await touchFile(cache.paths.examData);
 
-    const result = await cleanupFromStage(cache, [1], "confirm");
+    await cleanupFromStage(cache, [1], "confirm");
 
-    expect(result.deleted).toHaveLength(0);
     expect(await fileExists(cache.extractorResultPath(1))).toBe(true);
     expect(await fileExists(cache.paths.figureStatus)).toBe(true);
+    expect(await fileExists(cache.paths.examData)).toBe(false);
   });
 });
 
 describe("cleanupFromStage — builder", () => {
-  it("deletes .hwpx files in outputs/ and build_status.json", async () => {
+  it("deletes .hwpx files, build_status.json, and exam_data.json", async () => {
     const baseDir = await makeTempDir();
     const cache = await makeCache(baseDir);
 
@@ -160,11 +163,13 @@ describe("cleanupFromStage — builder", () => {
     const hwpxFile = path.join(outputsDir, "test_output.hwpx");
     await touchFile(hwpxFile);
     await touchFile(cache.paths.buildStatus);
+    await touchFile(cache.paths.examData);
 
     await cleanupFromStage(cache, [1], "builder");
 
     expect(await fileExists(hwpxFile)).toBe(false);
     expect(await fileExists(cache.paths.buildStatus)).toBe(false);
+    expect(await fileExists(cache.paths.examData)).toBe(false);
   });
 });
 
