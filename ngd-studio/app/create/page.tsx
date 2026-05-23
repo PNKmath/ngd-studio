@@ -190,11 +190,10 @@ export default function CreateV4Page() {
       .catch(() => {});
   }, [v3Meta, startJob, setV3Meta]);
 
-  const [autoSplitEnabled, setAutoSplitEnabled] = useState(false);
+  const [autoSplitEnabled, setAutoSplitEnabled] = useState(loadStoredAutoSplitEnabled);
   const [aiSettings, setAiSettings] = useState<AISettings>(() => readAISettings());
 
   useEffect(() => {
-    setAutoSplitEnabled(loadStoredAutoSplitEnabled());
     const onFocus = () => setAiSettings(readAISettings());
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -213,11 +212,7 @@ export default function CreateV4Page() {
     } catch {}
   }
 
-  const [meta, setMeta] = useState<MetaValue>(DEFAULT_META);
-
-  useEffect(() => {
-    setMeta(loadStoredMeta());
-  }, []);
+  const [meta, setMeta] = useState<MetaValue>(loadStoredMeta);
 
   function handleMetaChange(next: MetaValue) {
     setMeta(next);
@@ -632,7 +627,7 @@ export default function CreateV4Page() {
           {!hasJob && existingImages && (
             <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-200 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm flex items-center gap-2">
               <span className="flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
-              이전 작업이 존재합니다. "작업 재개"를 클릭하세요.
+              이전 작업이 존재합니다. &quot;작업 재개&quot;를 클릭하세요.
             </div>
           )}
           <div className="flex items-center gap-2">
@@ -682,6 +677,15 @@ export default function CreateV4Page() {
               </div>
             )}
           </div>
+
+          {submitError && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[11px] text-destructive">
+              <div className="font-bold">{submitError}</div>
+              {recoveryHint && (
+                <div className="mt-1 font-normal text-destructive/80">{recoveryHint}</div>
+              )}
+            </div>
+          )}
           
           <div className="flex flex-col gap-1.5">
             <label className="flex items-center gap-2 cursor-pointer group">

@@ -82,6 +82,7 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
              <div className="pt-6 border-t border-border/60">
                <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] mb-4">처리된 그림</h3>
                <div className="rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-shadow">
+                 {/* eslint-disable-next-line @next/next/no-img-element */}
                  <img
                    src={`/api/file?path=${encodeURIComponent(`outputs/images/prob${qr.number}_final.png`)}&v=${encodeURIComponent(qr.updatedAt ?? "")}`}
                    className="w-full h-auto object-contain"

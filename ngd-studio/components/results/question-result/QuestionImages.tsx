@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
 export function QuestionImages({ qNum, version }: { qNum: number; version?: string }) {
+  return <QuestionImagesContent key={`${qNum}:${version ?? ""}`} qNum={qNum} version={version} />;
+}
+
+function QuestionImagesContent({ qNum, version }: { qNum: number; version?: string }) {
   const padded = String(qNum).padStart(2, "0");
   const v = encodeURIComponent(version ?? "");
   const originalSrc = `/api/file?path=${encodeURIComponent(`inputs/시험지 제작/question_images/q${padded}.png`)}&v=${v}`;
@@ -13,8 +17,6 @@ export function QuestionImages({ qNum, version }: { qNum: number; version?: stri
   const [isActuallyCleaned, setIsActuallyCleaned] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setCleanedError(false);
-    setIsActuallyCleaned(null);
     // cleaning_status.json을 읽어 이 문제가 실제로 정리됐는지 확인한다.
     // cleaned=false이면 파일은 존재하지만 원본의 복사본 — raw 이미지를 "정리본"으로 표시하지 않기 위해.
     fetch(

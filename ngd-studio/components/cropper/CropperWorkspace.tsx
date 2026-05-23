@@ -822,3 +822,5 @@ export const CropperWorkspace = forwardRef<CropperWorkspaceRef, CropperWorkspace
     </div>
   );
 });
+
+CropperWorkspace.displayName = "CropperWorkspace";
