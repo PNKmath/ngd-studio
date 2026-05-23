@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: figure_info.final_image → figure_status.json 이전 (Python read-only)
-status: pending
+status: completed
 depends_on: [2]
 scope:
   - figure_processor.py
@@ -104,13 +104,13 @@ const payload: Record<string, unknown> = {
   - **`exam_data.json`이 figure 실행 후에도 변하지 않는다** (read-only 검증) — 디스크 mtime 비교 또는 내용 hash
 
 ## 체크리스트
-- [ ] `figure_processor.py:213-219` legacy positional shim 삭제
-- [ ] `figure_processor.py:312, 328-329` `exam_data.json` write back + `prob["figure_info"]["final_image"]` 대입 삭제
-- [ ] `figure_processor.py:_make_q_status`에 `finalImage`/`boundaryUncertain`/`cropAttempts`/`needsAgentReview` camelCase 키 추가 (legacy snake 키도 동시 emit하여 P4까지 backward compat)
-- [ ] `figureRunner.ts:FigureQuestionStatus` 인터페이스 camelCase 키 반영
-- [ ] `orchestrator.ts:emitFigureQuestionEvents` `finalImage` 우선 + `image` 폴백
-- [ ] `figureRunner.test.ts`에 read-only 검증 케이스 추가 (figure_processor 실행 후 exam_data.json mtime 불변)
-- [ ] `npx vitest run server/stages/__tests__/figureRunner.test.ts --reporter=basic` 통과
+- [x] `figure_processor.py:213-219` legacy positional shim 삭제
+- [x] `figure_processor.py:312, 328-329` `exam_data.json` write back + `prob["figure_info"]["final_image"]` 대입 삭제
+- [x] `figure_processor.py:_make_q_status`에 `finalImage`/`boundaryUncertain`/`cropAttempts`/`needsAgentReview` camelCase 키 추가 (legacy snake 키도 동시 emit하여 P4까지 backward compat)
+- [x] `figureRunner.ts:FigureQuestionStatus` 인터페이스 camelCase 키 반영
+- [x] `orchestrator.ts:emitFigureQuestionEvents` `finalImage` 우선 + `image` 폴백
+- [x] `figureRunner.test.ts`에 read-only 검증 케이스 추가 (figure_processor 실행 후 exam_data.json mtime 불변)
+- [x] `npx vitest run server/stages/__tests__/figureRunner.test.ts --reporter=basic` 통과
 
 ## 영향 범위
 
@@ -131,3 +131,45 @@ md5sum inputs/시험지\ 제작/.v3cache/exam_data.json
 cd ngd-studio
 npx vitest run server/stages/__tests__/figureRunner.test.ts --reporter=basic
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-23 23:23 KST) — 완료
+**상태**: completed
+**소요 시간**: 약 10분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`figure_processor.py`에서 `exam_data.json` write-back(줄 328-329)과 `prob["figure_info"]["final_image"]` 대입(줄 312), legacy positional shim(줄 213-219)을 삭제했다. `_make_q_status`에 `finalImage`/`boundaryUncertain`/`cropAttempts`/`needsAgentReview` camelCase 키를 추가(snake 키도 P4 backward compat 위해 동시 emit). `figureRunner.ts` 인터페이스와 `extractNeedsAgentReview` 함수를 camelCase 키 인식으로 업데이트, `orchestrator.ts:emitFigureQuestionEvents`를 `finalImage` 우선 + `image` 폴백 구조로 변경, 테스트 픽스처와 read-only 검증 케이스 3개를 추가했다.
+
+#### 변경 파일
+- `figure_processor.py` (수정, -12/+18줄): legacy shim 삭제, exam_data write-back 삭제, camelCase 키 추가
+- `ngd-studio/server/stages/figureRunner.ts` (수정, +10/-5줄): FigureQuestionStatus 인터페이스 camelCase 키 추가, extractNeedsAgentReview camelCase 인식
+- `ngd-studio/server/stages/orchestrator.ts` (수정, +4/-2줄): FigureStatusFile 인터페이스 finalImage 추가, emitFigureQuestionEvents finalImage 우선 폴백 구조
+- `ngd-studio/server/stages/__tests__/figureRunner.test.ts` (수정, +72/-1줄): read-only 검증 케이스 3개 추가 (mtime 불변, finalImage 키 존재, camelCase 키 인식)
+- `ngd-studio/server/stages/__tests__/fixtures/figure-cases/figure_status.done.json` (수정): finalImage/boundaryUncertain 키 추가
+- `ngd-studio/server/stages/__tests__/fixtures/figure-cases/figure_status.partial.json` (수정): finalImage/boundaryUncertain/cropAttempts/needsAgentReview camelCase 키 추가
+
+#### 검증 결과
+- [x] vitest 12 tests: `npx vitest run server/stages/__tests__/figureRunner.test.ts --reporter=basic` → pass (12/12)
+- [x] TypeScript 타입 체크: `npx tsc --noEmit` → pass (에러 없음)
+- [x] Python 문법 검사: `python3 -c "import ast; ast.parse(...)"` → syntax OK
+- [ ] `md5sum` exam_data.json 불변 검증: 실 캐시 파일 없음 — 대신 vitest read-only mtime 테스트로 커버
+
+#### 추가 발견사항
+- `figure_status.success.json` (기존 파일, `__tests__/fixtures/` 루트)은 snake_case만 있는 legacy fixture. 이 파일을 사용하는 테스트가 없어 이번 phase scope 밖으로 두었음. P4 이후 정리 권고.
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+escalate → 사용자 승인 — orchestrator.ts dual-read 8줄(finalImage 우선 + image 폴백), fixture finalImage 키 갱신 2건. P3 contract 정합 필수 변경, 사용자 drift 허용.
+
+#### Verification Re-run (orchestrator)
+tsc exit 0 + vitest 527/527 통과 (5건 증가는 P3 새 테스트).
+
+#### Simplify (orchestrator)
+SIMPLIFIED: 0 — diff 이미 최소화.
+
+#### Review (orchestrator)
+VERDICT: pass — figure_processor.py read-only 전환 + finalImage 정본 키 이전 스펙 일치, J(인과사슬) 논리 검증 통과.

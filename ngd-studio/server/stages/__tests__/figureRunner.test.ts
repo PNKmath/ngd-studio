@@ -7,7 +7,7 @@
  *  3. boundary_uncertain=false → needsAgentReview empty (agent call 0)
  */
 
-import { mkdtemp, rm, writeFile } from "fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -252,5 +252,87 @@ describe("runFigureStage — spawn failure", () => {
 
     expect(result.status).toBe("failed");
     expect(result.needsAgentReview).toEqual([]);
+  });
+});
+
+// ──────────────────────────────────────────────
+// 5. exam_data.json read-only 검증 (P3 load-bearing)
+// ──────────────────────────────────────────────
+
+describe("runFigureStage — exam_data.json read-only", () => {
+  it("figure stage 실행 후 exam_data.json mtime 불변 (TS runner가 exam_data 수정 안 함)", async () => {
+    const dir = await makeTempDir();
+    const examDataPath = path.join(dir, "exam_data.json");
+    const statusOutPath = path.join(dir, "figure_status.json");
+
+    // exam_data.json 초기 파일 생성
+    const examDataContent = JSON.stringify({ problems: [] });
+    await writeFile(examDataPath, examDataContent, "utf8");
+
+    // mtime 캡처 (초 단위로 비교하면 충분)
+    const statBefore = await stat(examDataPath);
+
+    // figure stage 실행 (mock: figure_status.json만 씀)
+    mockSuccessSpawn(statusOutPath, doneFixture);
+    await runFigureStage({
+      examDataPath,
+      outputDir: path.join(dir, "images"),
+      statusOutPath,
+      regenerate: false,
+      baseDir: dir,
+    });
+
+    // exam_data.json mtime이 변하지 않아야 함
+    const statAfter = await stat(examDataPath);
+    expect(statAfter.mtimeMs).toBe(statBefore.mtimeMs);
+
+    // exam_data.json 내용도 동일해야 함
+    const { readFile: _readFile } = await import("fs/promises");
+    const contentAfter = await _readFile(examDataPath, "utf8");
+    expect(contentAfter).toBe(examDataContent);
+  });
+
+  it("done fixture: finalImage 키가 figure_status에 존재함 (P3 정본 키 검증)", async () => {
+    const dir = await makeTempDir();
+    const statusOutPath = path.join(dir, "figure_status.json");
+    mockSuccessSpawn(statusOutPath, doneFixture);
+
+    const result = await runFigureStage({
+      examDataPath: path.join(dir, "exam_data.json"),
+      outputDir: path.join(dir, "images"),
+      statusOutPath,
+      regenerate: false,
+      baseDir: dir,
+    });
+
+    expect(result.status).toBe("done");
+
+    // fixture에 finalImage 키가 있는지 확인
+    for (const q of Object.values(doneFixture.questions)) {
+      expect(q).toHaveProperty("finalImage");
+    }
+  });
+
+  it("partial fixture: camelCase 키(needsAgentReview, boundaryUncertain) 인식", async () => {
+    const dir = await makeTempDir();
+    const statusOutPath = path.join(dir, "figure_status.json");
+    mockSuccessSpawn(statusOutPath, partialFixture);
+
+    const result = await runFigureStage({
+      examDataPath: path.join(dir, "exam_data.json"),
+      outputDir: path.join(dir, "images"),
+      statusOutPath,
+      regenerate: false,
+      baseDir: dir,
+    });
+
+    // Q5: needsAgentReview=true (camelCase)
+    expect(result.needsAgentReview).toContain(5);
+
+    // fixture에 camelCase 키가 존재하는지 확인
+    const q5 = (partialFixture.questions as Record<string, Record<string, unknown>>)["5"];
+    expect(q5).toHaveProperty("needsAgentReview", true);
+    expect(q5).toHaveProperty("boundaryUncertain", true);
+    expect(q5).toHaveProperty("finalImage");
   });
 });

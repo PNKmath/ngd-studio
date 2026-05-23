@@ -177,12 +177,16 @@ def process_figure(
     def _make_q_status(uncertain: bool) -> dict:
         s: dict = {
             "status": "boundary_uncertain" if uncertain else "ok",
-            "image": str(final_path),
-            "boundary_uncertain": uncertain,
+            "image": str(final_path),         # legacy 키 (backward compat)
+            "finalImage": str(final_path),    # 정본 키 (camelCase, 새 컨트랙트)
+            "boundary_uncertain": uncertain,  # legacy 키 (backward compat)
+            "boundaryUncertain": uncertain,   # camelCase 키
         }
         if uncertain:
-            s["crop_attempts"] = 1
-            s["needs_agent_review"] = True
+            s["crop_attempts"] = 1          # legacy 키 (backward compat)
+            s["cropAttempts"] = 1           # camelCase 키
+            s["needs_agent_review"] = True  # legacy 키 (backward compat)
+            s["needsAgentReview"] = True    # camelCase 키
         return s
 
     if no_regen:
@@ -209,21 +213,12 @@ def process_figure(
 
 
 def main() -> None:
-    # Backward-compatible: if the first arg looks like a file path (not a --flag),
-    # treat it as the legacy positional exam_data argument so the existing orchestrator.ts
-    # call (args = [scriptPath, examDataPath, ?--no-regen]) continues to work.
-    _raw = sys.argv[1:]
-    _legacy_exam_data: str | None = None
-    if _raw and not _raw[0].startswith("--"):
-        _legacy_exam_data = _raw[0]
-        sys.argv = [sys.argv[0]] + _raw[1:]
-
     parser = argparse.ArgumentParser(
         description="NGD Figure Processor — crop+Gemini+trim+watermark pipeline"
     )
     parser.add_argument(
         "--exam-data",
-        default=_legacy_exam_data or "inputs/시험지 제작/.v3cache/exam_data.json",
+        default="inputs/시험지 제작/.v3cache/exam_data.json",
         help="Path to exam_data.json",
     )
     parser.add_argument(
@@ -308,8 +303,6 @@ def main() -> None:
             provider, prob, cache_dir, question_images_dir, output_dir, args.no_regen
         )
         questions_status[str(n)] = q_result
-        if q_result["status"] in ("ok", "boundary_uncertain"):
-            prob["figure_info"]["final_image"] = q_result["image"]
 
     # Derive top-level status
     statuses = {v["status"] for v in questions_status.values()}
@@ -324,9 +317,6 @@ def main() -> None:
         "status": top_status,
         "questions": questions_status,
     }
-
-    with open(str(exam_data_path), "w", encoding="utf-8") as f:
-        json.dump(exam_data, f, ensure_ascii=False, indent=2)
 
     status_out_path.write_text(
         json.dumps(status_data, ensure_ascii=False, indent=2), encoding="utf-8"

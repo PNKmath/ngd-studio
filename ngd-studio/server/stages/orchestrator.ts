@@ -1133,7 +1133,12 @@ async function swapToCleanedPaths(
 }
 
 interface FigureStatusFile {
-  questions?: Record<string, { status?: string; image?: string; error?: string }>;
+  questions?: Record<string, {
+    status?: string;
+    image?: string;        // legacy (backward compat)
+    finalImage?: string;   // 정본 키 (camelCase, P3+)
+    error?: string;
+  }>;
 }
 
 /**
@@ -1167,7 +1172,8 @@ async function emitFigureQuestionEvents(
     // 구분은 payload 내부 status 필드로 전달하여 클라이언트 핸들러 필터에 막히지 않도록 한다.
     const payload: Record<string, unknown> = {
       status: q?.status ?? "ok",
-      ...(q?.image ? { image: q.image } : {}),
+      // finalImage 우선, image 폴백 — P3 이후 양쪽 emit됨
+      ...(q?.finalImage ? { finalImage: q.finalImage } : q?.image ? { finalImage: q.image } : {}),
       ...(q?.error ? { error: q.error } : {}),
     };
     send({

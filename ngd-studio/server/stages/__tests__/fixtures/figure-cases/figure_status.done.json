@@ -4,12 +4,16 @@
     "2": {
       "status": "ok",
       "image": "outputs/images/prob2_final.png",
-      "boundary_uncertain": false
+      "finalImage": "outputs/images/prob2_final.png",
+      "boundary_uncertain": false,
+      "boundaryUncertain": false
     },
     "5": {
       "status": "ok",
       "image": "outputs/images/prob5_final.png",
-      "boundary_uncertain": false
+      "finalImage": "outputs/images/prob5_final.png",
+      "boundary_uncertain": false,
+      "boundaryUncertain": false
     }
   }
 }
