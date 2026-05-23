@@ -22,8 +22,8 @@ created: 2026-05-23
 | 7 | [phase-07-orchestrator-resume-safety.md](./phase-07-orchestrator-resume-safety.md) | 9 | 9 | 100% | completed | 80612d9 |
 | 8 | [phase-08-housekeeping-orphans.md](./phase-08-housekeeping-orphans.md) | 6 | 6 | 100% | completed | 8f6214c |
 | 9 | [phase-09-fixture-regression.md](./phase-09-fixture-regression.md) | 7 | 7 | 100% | completed | d1f686b |
-| 10 | [phase-10-manual-smoke.md](./phase-10-manual-smoke.md) | 6 | 0 | 0% | pending | - |
-| **Total** | | **66** | **58** | **88%** | | |
+| 10 | [phase-10-manual-smoke.md](./phase-10-manual-smoke.md) | 6 | 1 | 17% | completed | 3519f40 |
+| **Total** | | **66** | **59** | **89%** | | |
 
 ## Phase 의존성
 
