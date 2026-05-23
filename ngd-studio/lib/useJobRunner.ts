@@ -6,6 +6,7 @@ import type { SSEEvent } from "./claude";
 import type { AIProviderId } from "./ai";
 import { readAISettings } from "./ai/settings";
 import { parseReviewReport } from "./reviewParser";
+import type { ExamMetaInput } from "@/lib/exam/meta";
 
 // SSE server runs on a separate port to avoid Next.js response buffering
 const SSE_BASE = process.env.NEXT_PUBLIC_SSE_URL ?? "http://localhost:3021";
@@ -46,7 +47,7 @@ export function useJobRunner() {
     async (
       mode: "create" | "resume" | "crop" | "review",
       files: { pdf: string; hwpx?: string; questionImages?: number[] },
-      meta?: { school?: string; grade?: number; subject?: string; semester?: string; examType?: string; range?: string; resumeFrom?: string; questionCount?: number },
+      meta?: ExamMetaInput & { resumeFrom?: string; questionCount?: number },
       provider?: AIProviderId
     ) => {
       const jobId = crypto.randomUUID();

@@ -3,6 +3,7 @@ import { PIPELINE_STAGES, type PipelineStageName } from "@/lib/pipelineStages";
 import type { PipelineStage } from "@/components/pipeline/PipelineView";
 import type { LogEntry } from "@/components/log/LogStream";
 import type { ReviewItem } from "@/lib/reviewParser";
+import type { ExamMetaInput } from "@/lib/exam/meta";
 
 export interface QuestionFigureResult {
   /** "ok": 그림 처리 성공, "failed": 실패, "boundary_uncertain": 경계 재조정 필요 */
@@ -22,18 +23,8 @@ export interface QuestionResult {
   updatedAt: string;
 }
 
-export interface V3Meta {
-  schoolLevel?: "중" | "고";
-  school?: string;
-  grade?: number;
-  year?: number;
-  subject?: string;
-  semester?: string;
-  examType?: string;
-  range?: string;
-  questionCount?: number;
-  resumeFrom?: string;
-}
+/** Store meta shape — ExamMetaInput plus UI-only fields. */
+export type V3Meta = ExamMetaInput & { questionCount?: number; resumeFrom?: string };
 
 export interface JobState {
   jobId: string | null;

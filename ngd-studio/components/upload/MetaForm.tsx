@@ -1,20 +1,14 @@
 "use client";
 
+import type { SchoolLevel, ExamMeta } from "@/lib/exam/meta";
+
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
 
-export type SchoolLevel = "중" | "고";
+export type { SchoolLevel };
 
-export type MetaValue = {
-  schoolLevel: SchoolLevel;
-  school: string;
-  grade: number;
-  year: number;
-  subject: string;
-  semester: string;
-  examType: string;
-  range: string;
-};
+/** MetaValue = ExamMeta (the 8 required UI fields). */
+export type MetaValue = ExamMeta;
 
 export const HIGH_SCHOOL_SUBJECTS = ["수학", "수학 I", "수학 II", "확률과 통계", "미적분", "기하"] as const;
 export const MIDDLE_SCHOOL_SUBJECT = "수학";

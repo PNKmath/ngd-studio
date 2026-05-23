@@ -1,6 +1,6 @@
-import type { MetaValue } from "@/components/upload/MetaForm";
+import type { ExamMetaInput } from "@/lib/exam/meta";
 
-export type ParsedFilenameMeta = Partial<MetaValue>;
+export type ParsedFilenameMeta = ExamMetaInput;
 
 const SUBJECT_MAP: Record<string, string> = {
   수1: "수학 I",

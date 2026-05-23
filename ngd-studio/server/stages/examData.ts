@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "fs/promises";
 import type { StageCache } from "./cache";
+import type { ExamMetaInput } from "@/lib/exam/meta";
 
 /**
  * Per-question cache merge contract (verifier = solver reviewer).
@@ -29,30 +30,6 @@ import type { StageCache } from "./cache";
  */
 
 /**
- * Exam metadata matching the `info` key in exam_data.json.
- * Field names match build_hwpx.py / figure_processor.py consumption.
- */
-export interface ExamMetaInput {
-  schoolLevel?: "중" | "고";
-  school_level?: "중" | "고"; // snake_case alias (Python side reads this)
-  school?: string;
-  grade?: number;
-  subject?: string;
-  subject_code?: string;
-  semester?: string;
-  exam_type?: string;
-  examType?: string; // camelCase alias accepted on input
-  range?: string;
-  region?: string;
-  code?: string;
-  year?: number;
-  textbook?: string;
-  total_pages?: number;
-  filename_base?: string;
-  [key: string]: unknown;
-}
-
-/**
  * A single problem entry in the combined exam_data.json.
  * The shape is determined by the extractor/solver/verifier JSON output.
  */
@@ -61,9 +38,11 @@ export type ExamDataProblem = Record<string, unknown>;
 /**
  * Top-level shape of exam_data.json.
  * Uses `info` key for compatibility with figure_processor.py and build_hwpx.py.
+ * `info` is typed as Record<string, unknown> to accommodate the dual-emit
+ * snake_case keys that P2 will remove (exam_type, school_level, filename_base).
  */
 export interface ExamDataOutput {
-  info: ExamMetaInput;
+  info: ExamMetaInput & Record<string, unknown>;
   problems: ExamDataProblem[];
 }
 
@@ -102,13 +81,17 @@ export async function buildExamDataJson(input: {
   return output;
 }
 
-function normalizeMeta(meta: ExamMetaInput): ExamMetaInput {
-  const examType = meta.exam_type ?? meta.examType ?? "";
+function normalizeMeta(meta: ExamMetaInput): ExamMetaInput & Record<string, unknown> {
+  // NOTE: body preserved for P2 cleanup. snake_case fields (exam_type, school_level,
+  // filename_base) are accessed via cast — P2 will remove dual emit once all consumers
+  // are migrated to camelCase.
+  const m = meta as Record<string, unknown>;
+  const examType = (m.exam_type as string | undefined) ?? meta.examType ?? "";
   const year = typeof meta.year === "number" ? meta.year : new Date().getFullYear();
   const semester = meta.semester ?? "";
   const subject = meta.subject ?? "";
-  const schoolLevel: "중" | "고" = meta.schoolLevel ?? meta.school_level ?? "고"; // default "고" for legacy
-  let filenameBase = meta.filename_base;
+  const schoolLevel: "중" | "고" = meta.schoolLevel ?? (m.school_level as "중" | "고" | undefined) ?? "고"; // default "고" for legacy
+  let filenameBase = m.filename_base as string | undefined;
   if (!filenameBase) {
     const parts = [meta.code, schoolLevel, year, semester, meta.region, meta.school, subject, meta.code]
       .filter((v) => v !== undefined && v !== "")
@@ -116,15 +99,17 @@ function normalizeMeta(meta: ExamMetaInput): ExamMetaInput {
       .join("");
     filenameBase = parts.length > 0 ? parts : `exam_${year}`;
   }
+  // P2 will remove snake_case dual-emit; cast needed until then.
   return {
     ...meta,
-    exam_type: examType,
     examType,
     year,
+    schoolLevel,
+    // snake_case keys for Python consumption — P2 will remove these:
+    exam_type: examType,
     filename_base: filenameBase,
-    school_level: schoolLevel, // snake_case for Python consumption
-    schoolLevel,               // camelCase preserved for TS usage
-  };
+    school_level: schoolLevel,
+  } as ExamMetaInput & Record<string, unknown>;
 }
 
 /**

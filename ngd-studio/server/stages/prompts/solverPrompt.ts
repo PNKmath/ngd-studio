@@ -6,6 +6,7 @@
  */
 
 import type { ExamMeta } from "./extractorPrompt";
+import type { SchoolLevel } from "@/lib/exam/meta";
 
 export interface SolverPromptInput {
   extracted: unknown;
@@ -57,7 +58,7 @@ answer는 solver가 직접 풀어서 도출한 값이다.
 JSON만 반환하고 마크다운 코드 블록 없이 출력하라.
 `;
 
-function buildSolverSystemPrompt(schoolLevel?: "중" | "고"): string {
+function buildSolverSystemPrompt(schoolLevel?: SchoolLevel): string {
   if (schoolLevel === "중") {
     return SOLVER_SYSTEM + "\n이 문제는 중학교 수준입니다. 중학교 수준에 맞는 풀이 (예: 인수분해, 일차/이차방정식 등 사용; 미적분·삼각함수 사용 자제) 로 작성하세요.";
   }

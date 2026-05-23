@@ -2,6 +2,7 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import JSZip from "jszip";
 import type { StageResult, StageRunner } from "./types";
+import type { SchoolLevel } from "@/lib/exam/meta";
 
 // ──────────────────────────────────────────────
 // unit_classification.json types + loader
@@ -121,7 +122,7 @@ export interface CheckerStageInput {
   sectionXmlPath?: string;
   sectionXml?: string;
   /** School level for vocabulary rule; drives which classification JSON is used. */
-  schoolLevel?: "중" | "고";
+  schoolLevel?: SchoolLevel;
 }
 
 export interface CheckerStageOutput {
@@ -145,7 +146,7 @@ interface SectionSource {
 // ──────────────────────────────────────────────
 
 interface RuleHandler {
-  detect: (xml: string, file: string, context?: { schoolLevel?: "중" | "고" }) => CheckerIssue[];
+  detect: (xml: string, file: string, context?: { schoolLevel?: SchoolLevel }) => CheckerIssue[];
   /**
    * Optional deterministic XML-level fix.
    * When present, `runCheckerWithAutoFix` will apply this before triggering a
@@ -231,7 +232,7 @@ export async function runCheckerStage(input: CheckerStageInput): Promise<StageRe
 export function runDeterministicCheckerRules(
   sectionXml: string,
   file = "Contents/section0.xml",
-  context?: { schoolLevel?: "중" | "고" },
+  context?: { schoolLevel?: SchoolLevel },
 ): CheckerIssue[] {
   const issues: CheckerIssue[] = [];
   for (const handler of Object.values(RULES)) {
@@ -708,7 +709,7 @@ function checkSectionStyleFormat(xml: string, file: string): CheckerIssue[] {
  *   undefined → union of both (관대 기본값, backward-compatible)
  * Returns empty array if no classification is loaded.
  */
-function checkTextVocabularySync(xml: string, file: string, context?: { schoolLevel?: "중" | "고" }): CheckerIssue[] {
+function checkTextVocabularySync(xml: string, file: string, context?: { schoolLevel?: SchoolLevel }): CheckerIssue[] {
   const high = _unitClassificationCache || null;
   const middle = _unitClassificationMiddleCache || null;
 

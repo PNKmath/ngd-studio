@@ -8,7 +8,7 @@ import type { ProviderTelemetryEntry } from "@/lib/ai/retry";
 import { createProviderTelemetryEntry } from "@/lib/ai/retry";
 import type { StageCache } from "./cache";
 import { createStageCache } from "./cache";
-import type { ExamMetaInput } from "./examData";
+import type { ExamMetaInput } from "@/lib/exam/meta";
 import { buildExamDataJson } from "./examData";
 import { runExtractorStage } from "./extractor";
 import { runSolverStage } from "./solver";

@@ -6,6 +6,7 @@
  */
 
 import type { ExamMeta } from "./extractorPrompt";
+import type { SchoolLevel } from "@/lib/exam/meta";
 
 export interface VerifierPromptInput {
   extracted: unknown;
@@ -87,7 +88,7 @@ const VERIFIER_SYSTEM = `너는 NGD V3 시험지 해설 검증 전문 에이전�
 JSON만 반환하고 마크다운 코드 블록 없이 출력하라.
 `;
 
-function buildVerifierSystemPrompt(schoolLevel?: "중" | "고"): string {
+function buildVerifierSystemPrompt(schoolLevel?: SchoolLevel): string {
   if (schoolLevel === "중") {
     return VERIFIER_SYSTEM + "\n이 문제는 중학교 수준입니다. 중학교 풀이는 중학교 범위 안에서만 검증하세요 (미적분·삼각함수 등 고교 개념 사용 시 fail).";
   }

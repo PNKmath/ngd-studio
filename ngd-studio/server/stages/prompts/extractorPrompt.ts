@@ -5,16 +5,10 @@
  * Source: .claude/agents/ngd-exam-extractor.md
  */
 
-export interface ExamMeta {
-  schoolLevel?: "중" | "고";
-  school?: string;
-  year?: number;
-  grade?: number;
-  subject?: string;
-  semester?: string;
-  examType?: string;
-  range?: string;
-}
+import type { ExamMetaInput, SchoolLevel } from "@/lib/exam/meta";
+
+/** ExamMeta for prompt builders — subset of ExamMetaInput used in prompts. */
+export type ExamMeta = Pick<ExamMetaInput, "schoolLevel" | "school" | "year" | "grade" | "subject" | "semester" | "examType" | "range">;
 
 export interface ExtractorPromptInput {
   questionNumber: number;
@@ -194,7 +188,7 @@ HWPX에서는 모든 수학적 내용이 <hp:equation>으로 들어간다. 다�
   - cells: 각 행의 셀 값 list (예: [["1"], ["1","1"], ["1","2","1"]])
 `;
 
-function buildExtractorSystemPrompt(schoolLevel?: "중" | "고"): string {
+function buildExtractorSystemPrompt(schoolLevel?: SchoolLevel): string {
   const classificationFile = schoolLevel === "중"
     ? "unit_classification_middle.json"
     : "unit_classification.json";

@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile, writeFile, mkdir } from "fs/promises";
 import path from "path";
+import type { ExamMetaInput } from "@/lib/exam/meta";
 
 const BASE_DIR = path.resolve(process.cwd(), "..");
 const EXAM_DATA_PATH = path.join(BASE_DIR, "inputs", "시험지 제작", ".v3cache", "exam_data.json");
 const SESSION_META_PATH = path.join(BASE_DIR, "inputs", "시험지 제작", "session_meta.json");
 
-interface MetaResult {
-  found: boolean;
-  schoolLevel?: "중" | "고"; // 신규: 학교급 복원용
-  school?: string;
-  grade?: number;
-  subject?: string;
-  semester?: string;
-  examType?: string;
-  range?: string;
-}
+type MetaResult = ExamMetaInput & { found: boolean };
 
 function toSchoolLevel(raw: unknown): "중" | "고" {
   if (raw === "중" || raw === "고") return raw;
