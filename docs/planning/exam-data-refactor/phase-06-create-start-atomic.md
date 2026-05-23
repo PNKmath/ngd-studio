@@ -40,7 +40,13 @@ e2e_triggers: []
 
 ### 해결
 
-**클라이언트는 단일 fetch**. 서버가 reset + image 저장 + meta 저장을 한 트랜잭션으로 수행. 어느 sub-step에서 실패하면 전체 rollback.
+**클라이언트는 단일 fetch**. 서버가 reset + image 저장 + meta 저장을 한 트랜잭션으로 수행한다.
+
+핵심 원칙:
+- 새 상태는 final path(`.v3cache`, `question_images`)에 직접 쓰지 않고 `*.next_<txid>` 임시 디렉터리에 먼저 완성한다.
+- commit 전까지 현재 final path는 직전 일관 상태 그대로 유지한다.
+- commit은 같은 부모 디렉터리 안의 `rename` 순서로 수행한다. 두 디렉터리(`.v3cache`, `question_images`)를 동시에 atomic swap할 수는 없으므로 commit window 동안에는 짧은 transaction lock으로 reader API가 중간 상태를 반환하지 않게 한다.
+- write/validate 단계 실패 시 임시 디렉터리만 삭제한다. final path를 건드리지 않았으므로 rollback은 단순하고 관측 가능한 partial 상태가 없다.
 
 ## 설계
 
@@ -57,7 +63,7 @@ const EXAM_DIR = path.join(BASE_DIR, "inputs", "시험지 제작");
 const CACHE_DIR = path.join(EXAM_DIR, ".v3cache");
 const PREV_DIR = path.join(EXAM_DIR, ".v3cache_prev");
 const IMAGES_DIR = path.join(EXAM_DIR, "question_images");
-const SESSION_META_PATH = path.join(CACHE_DIR, "session_meta.json");
+const LOCK_PATH = path.join(EXAM_DIR, ".create_start.lock");
 
 async function exists(p: string): Promise<boolean> {
   try { await stat(p); return true; } catch { return false; }
@@ -65,11 +71,13 @@ async function exists(p: string): Promise<boolean> {
 
 /**
  * 신규 시험지 작업 시작 — 단일 트랜잭션:
- *   1. .v3cache → .v3cache_prev (rename. P8에서 prev orphan 제거 예정)
- *   2. question_images 디렉터리 전체 삭제 후 새 이미지 저장
- *   3. session_meta.json 작성 (.v3cache 안)
+ *   1. .v3cache.next_<txid> / question_images.next_<txid> 임시 디렉터리에 새 상태 완성
+ *   2. 모든 파일 검증 완료 후 transaction lock을 잡고 final path를 짧은 rename window에서 교체
+ *   3. session_meta.json은 새 .v3cache.next_<txid> 안에 작성
  *
- * 어느 단계에서 실패하면 rollback 시도 후 500 반환. 부분 성공 상태 디스크에 남기지 않음.
+ * write/validate 단계에서 실패하면 임시 디렉터리만 삭제하고 500 반환.
+ * final path는 commit 전까지 변경하지 않는다. commit 중에는 reader API가 lock을 보고
+ * 409/`{ pending: true }`를 반환하므로 partial 상태를 외부에 노출하지 않는다.
  *
  * multipart/form-data 입력:
  *   - meta: JSON string (ExamMetaInput)
@@ -98,21 +106,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `request 파싱 실패: ${err instanceof Error ? err.message : String(err)}` }, { status: 400 });
   }
 
-  // ── stage 2: backup current state (for rollback) ──
-  const cacheBackup = await exists(CACHE_DIR) ? path.join(EXAM_DIR, `.v3cache_pending_${Date.now()}`) : null;
-  const imagesBackup = await exists(IMAGES_DIR) ? path.join(EXAM_DIR, `question_images_pending_${Date.now()}`) : null;
-  try {
-    if (cacheBackup) await rename(CACHE_DIR, cacheBackup);
-    if (imagesBackup) await rename(IMAGES_DIR, imagesBackup);
-  } catch (err) {
-    return NextResponse.json({ error: `백업 실패: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
-  }
-
-  // ── stage 3: write fresh state ──
+  // ── stage 2: write fresh state into temp dirs (final path untouched) ──
+  const txid = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const nextCacheDir = path.join(EXAM_DIR, `.v3cache.next_${txid}`);
+  const nextImagesDir = path.join(EXAM_DIR, `question_images.next_${txid}`);
+  const oldCacheDir = path.join(EXAM_DIR, `.v3cache.old_${txid}`);
+  const oldImagesDir = path.join(EXAM_DIR, `question_images.old_${txid}`);
+  const nextSessionMetaPath = path.join(nextCacheDir, "session_meta.json");
   const saved: { number: number; kind: "regular" | "essay"; path: string }[] = [];
   try {
-    await mkdir(CACHE_DIR, { recursive: true });
-    await mkdir(IMAGES_DIR, { recursive: true });
+    await mkdir(nextCacheDir, { recursive: true });
+    await mkdir(nextImagesDir, { recursive: true });
 
     // images
     for (const { key, file } of images) {
@@ -124,32 +128,52 @@ export async function POST(req: NextRequest) {
       const padded = String(num).padStart(2, "0");
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "png";
       const fileName = essay ? `q_s${padded}.${ext}` : `q${padded}.${ext}`;
-      const filePath = path.join(IMAGES_DIR, fileName);
+      const filePath = path.join(nextImagesDir, fileName);
       const buffer = Buffer.from(await file.arrayBuffer());
       await writeFile(filePath, buffer);
       saved.push({ number: num, kind: essay ? "essay" : "regular", path: `inputs/시험지 제작/question_images/${fileName}` });
     }
 
-    // session_meta (.v3cache 안)
-    await writeFile(SESSION_META_PATH, JSON.stringify(meta, null, 2), "utf-8");
+    if (saved.length !== images.length) {
+      throw new Error(`저장 가능한 이미지 수 불일치 (${saved.length}/${images.length})`);
+    }
+
+    // session_meta (next .v3cache 안)
+    await writeFile(nextSessionMetaPath, JSON.stringify(meta, null, 2), "utf-8");
   } catch (err) {
-    // ── rollback ──
+    // final path는 아직 untouched. temp만 정리.
     try {
-      if (await exists(CACHE_DIR)) await rm(CACHE_DIR, { recursive: true, force: true });
-      if (await exists(IMAGES_DIR)) await rm(IMAGES_DIR, { recursive: true, force: true });
-      if (cacheBackup) await rename(cacheBackup, CACHE_DIR);
-      if (imagesBackup) await rename(imagesBackup, IMAGES_DIR);
-    } catch { /* rollback 실패는 별도 로깅 정도 — 일관성 깨질 위험 알림 */ }
-    return NextResponse.json({ error: `작업 시작 실패 (rollback 수행): ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
+      await rm(nextCacheDir, { recursive: true, force: true });
+      await rm(nextImagesDir, { recursive: true, force: true });
+    } catch { /* temp cleanup best effort */ }
+    return NextResponse.json({ error: `작업 시작 실패: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
   }
 
-  // ── stage 4: commit (rotate prev) ──
-  // 성공 → 백업본을 .v3cache_prev로 회전. 기존 prev는 폐기.
+  // ── stage 3: commit (short locked rename window) ──
+  // P8 전까지는 old .v3cache를 .v3cache_prev로 회전한다. question_images old는 파생 입력이므로 성공 후 삭제.
   try {
+    await writeFile(LOCK_PATH, JSON.stringify({ txid, startedAt: new Date().toISOString() }), "utf-8");
+    if (await exists(CACHE_DIR)) await rename(CACHE_DIR, oldCacheDir);
+    if (await exists(IMAGES_DIR)) await rename(IMAGES_DIR, oldImagesDir);
+    await rename(nextCacheDir, CACHE_DIR);
+    await rename(nextImagesDir, IMAGES_DIR);
+
     if (await exists(PREV_DIR)) await rm(PREV_DIR, { recursive: true, force: true });
-    if (cacheBackup) await rename(cacheBackup, PREV_DIR);
-    if (imagesBackup) await rm(imagesBackup, { recursive: true, force: true });
-  } catch { /* 비치명적 — 다음 reset 때 정리됨. 단, P8에서 prev 자체를 제거할 예정이라 더더욱 무해 */ }
+    if (await exists(oldCacheDir)) await rename(oldCacheDir, PREV_DIR);
+    if (await exists(oldImagesDir)) await rm(oldImagesDir, { recursive: true, force: true });
+    await rm(LOCK_PATH, { force: true }).catch(() => {});
+  } catch (err) {
+    // Commit 실패는 위험 상태일 수 있으므로 best-effort 복구 후 hard fail.
+    // 구현 시 이 branch는 route.test.ts에서 반드시 회귀 검증한다.
+    try {
+      if (!(await exists(CACHE_DIR)) && await exists(oldCacheDir)) await rename(oldCacheDir, CACHE_DIR);
+      if (!(await exists(IMAGES_DIR)) && await exists(oldImagesDir)) await rename(oldImagesDir, IMAGES_DIR);
+      await rm(nextCacheDir, { recursive: true, force: true });
+      await rm(nextImagesDir, { recursive: true, force: true });
+      await rm(LOCK_PATH, { force: true }).catch(() => {});
+    } catch { /* recovery best effort */ }
+    return NextResponse.json({ error: `작업 시작 commit 실패: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true, images: saved });
 }
@@ -217,24 +241,33 @@ const handleExtract = useCallback(async (items: { number: number; kind?: "regula
 - `app/api/question-images/route.ts:POST`: handleExtract에서 더 이상 호출 안 함. PATCH는 image_replace 액션에서 여전히 사용 — 보존. POST handler만 410 Gone 또는 삭제 (선택 — 보수적으로 410 반환).
 - `app/api/v3cache-meta/route.ts:POST`: handleExtract에서 더 이상 호출 안 함. GET만 남기고 POST는 삭제 (P5의 POST 정의를 삭제) — `create/start`가 session_meta 작성 책임.
 
+reader API lock 정책:
+- `GET /api/question-images`와 `GET /api/v3cache-meta`는 `LOCK_PATH`가 있으면 final path를 읽지 않고 `409` 또는 `{ pending: true }`를 반환한다.
+- stale lock은 `mtime` 기준 30초 이상이면 경고 로그 후 제거하고 정상 읽기를 재시도한다. 개발 중 서버 강제 종료로 lock만 남는 경우를 복구하기 위함이다.
+- 클라이언트 `handleResume`/idle probe는 `pending` 응답을 “재개 카드 표시 안 함, 잠시 후 재시도”로 처리한다.
+
 ### 4) 라우트 테스트
 
 `app/api/create/start/__tests__/route.test.ts` 신설:
 - 정상 흐름: meta + image 2장 → 디스크에 .v3cache/session_meta.json + question_images/qNN.png 존재, .v3cache_prev로 이전 상태 회전
 - meta 파싱 실패 → 400
 - meta JSON은 OK인데 images 0개 → 400
-- 디스크 write 도중 실패 시 rollback (mock: writeFile 실패 → 백업이 원상복귀)
+- 디스크 write 도중 실패 시 final path untouched (mock: writeFile 실패 → 기존 .v3cache/question_images 그대로)
+- temp 디렉터리에 일부 파일이 쓰인 상태에서도 `/api/question-images`/`/api/v3cache-meta`가 temp를 절대 읽지 않는다는 회귀
+- commit lock이 있을 때 reader API가 partial final path를 읽지 않고 pending/409를 반환한다는 회귀
+- commit 단계 실패 시 best-effort 복구 후 500, `.next_*`/`.old_*` 찌꺼기 정리
 
 ### 5) catalog mutation 인터뷰
 
 `/api/create/start`는 신규 entry point. `docs/e2e/index.md`에 `create-v4-full-pipeline` 시나리오의 `involved_globs`에 `ngd-studio/app/api/create/**` 추가 + `entry_points`에 `api-create-start` 추가 필요. catalog mutation은 사용자 승인 후 진행 — phase 실행 시점에 인터뷰.
 
 ## 체크리스트
-- [ ] `app/api/create/start/route.ts` 신설 — 트랜잭션 로직 (백업 → write → 실패 rollback → 성공 commit)
+- [ ] `app/api/create/start/route.ts` 신설 — 트랜잭션 로직 (temp write/validate → atomic-ish rename commit → 실패 시 final path untouched/best-effort 복구)
 - [ ] `app/create/page.tsx:handleExtract` 단일 fetch로 단순화 (3-step → 1-step + startJob)
 - [ ] `app/api/v3cache-meta/route.ts:POST` 삭제 (GET만 유지)
 - [ ] `app/api/question-images/route.ts:POST` 410 Gone 반환 또는 삭제 (PATCH는 유지)
-- [ ] `app/api/create/start/__tests__/route.test.ts` 트랜잭션/rollback 케이스 추가
+- [ ] `app/api/question-images/route.ts:GET` + `app/api/v3cache-meta/route.ts:GET`: `.create_start.lock` 감지 시 pending/409 반환, stale lock 복구
+- [ ] `app/api/create/start/__tests__/route.test.ts` 트랜잭션/rollback/partial-state 비노출/commit-failure 케이스 추가
 - [ ] `docs/e2e/index.md` catalog mutation 인터뷰 후 시나리오 globs/entry_points 갱신
 - [ ] `npx tsc --noEmit` 통과 + `npx vitest run app/api/create/start/__tests__/ --reporter=basic` 통과
 - [ ] manual: 신규 작업 도중 새로고침/네트워크 끊김 → 디스크가 항상 직전 일관 상태(이전 시험지 or 신규 완료)임을 확인
@@ -255,6 +288,6 @@ npx vitest run --reporter=basic
 
 # manual
 # 1) 신규 시험지 → handleExtract 정상 (saved.images에 모든 번호 들어옴)
-# 2) 신규 시험지 도중 서버 강제 종료 → 디스크가 .v3cache 또는 .v3cache_pending_<ts>로 일관됨
-# 3) rollback 검증: 일부러 disk full 등으로 실패 트리거 → 이전 상태 복원
+# 2) 신규 시험지 write 단계 도중 서버 강제 종료 → final path는 직전 상태, .next_<txid>만 남을 수 있음
+# 3) rollback 검증: 일부러 write 실패 트리거 → 이전 상태 복원(final path untouched)
 ```

@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: ExamMeta 단일 타입 (camelCase 컨트랙트)
-status: in_progress
+status: pending
 depends_on: []
 scope:
   - ngd-studio/lib/exam/meta.ts
@@ -14,6 +14,8 @@ scope:
   - ngd-studio/server/stages/prompts/extractorPrompt.ts
   - ngd-studio/server/stages/prompts/solverPrompt.ts
   - ngd-studio/server/stages/prompts/verifierPrompt.ts
+  - ngd-studio/server/stages/checker.ts
+  - ngd-studio/lib/pdf/filenameMeta.ts
   - ngd-studio/app/api/v3cache-meta/route.ts
 intervention_likely: false
 intervention_reason: ""
@@ -29,7 +31,7 @@ e2e_triggers: []
 > **범위**: Both
 > **난이도**: M
 > **의존성**: 없음
-> **영향 파일**: `ngd-studio/lib/exam/meta.ts` (신설) + 10개 consumer
+> **영향 파일**: `ngd-studio/lib/exam/meta.ts` (신설) + 11개 consumer
 
 ## 배경
 
@@ -136,13 +138,13 @@ export const DEFAULT_EXAM_META: ExamMeta = {
 이 phase에선 **타입만 일원화**. `examData.ts:normalizeMeta`의 dual emit / `school_level`/`exam_type` write는 P2에서 제거. 그 동안 디스크 키는 변경 없음.
 
 ## 체크리스트
-- [x] `ngd-studio/lib/exam/meta.ts` 신설 — `ExamMeta`, `ExamMetaInput`, `isExamMetaComplete`, `buildFilenameBase`, `DEFAULT_EXAM_META`, `SchoolLevel` 모두 export
-- [ ] 10개 consumer 파일에서 inline meta 타입 선언 제거하고 `@/lib/exam/meta` import로 교체 (scope 목록 전체)
+- [ ] `ngd-studio/lib/exam/meta.ts` 신설 — `ExamMeta`, `ExamMetaInput`, `isExamMetaComplete`, `buildFilenameBase`, `DEFAULT_EXAM_META`, `SchoolLevel` 모두 export
+- [ ] 11개 consumer 파일에서 inline meta 타입 선언 제거하고 `@/lib/exam/meta` import로 교체 (scope 목록 전체, `checker.ts`/`filenameMeta.ts` 포함)
 - [ ] `app/create/page.tsx:DEFAULT_META`를 `DEFAULT_EXAM_META`로 대체, `MetaValue` 타입 import 정합
 - [ ] `examData.ts:normalizeMeta` 시그니처를 `ExamMeta`로 좁히되 본문(dual emit)은 P2에서 정리하므로 이 phase에선 보존
 - [ ] `npx tsc --noEmit` 통과 (ngd-studio 디렉터리)
-- [ ] `npx vitest run ngd-studio/lib/__tests__/ ngd-studio/server/stages/__tests__/ --reporter=basic` 전체 통과
-- [ ] `grep -rn "schoolLevel?:\|examType?:\|school_level?:\|exam_type?:" ngd-studio --include="*.ts" --include="*.tsx"` 결과가 `lib/exam/meta.ts` 외에 0건
+- [ ] 저장소 루트에서 `cd ngd-studio && npx vitest run lib/__tests__/ server/stages/__tests__/ --reporter=basic` 전체 통과
+- [ ] 저장소 루트에서 `rg -n "schoolLevel\\?:|examType\\?:|school_level\\?:|exam_type\\?:" ngd-studio -g "*.{ts,tsx}"` 결과가 `lib/exam/meta.ts` 외에 0건
 
 ## 영향 범위
 

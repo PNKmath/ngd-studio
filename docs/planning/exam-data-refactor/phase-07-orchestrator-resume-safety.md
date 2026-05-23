@@ -52,7 +52,7 @@ P1-P4가 끝나 데이터 컨트랙트는 깨끗하다. 이제 4개 logic 결함
 → 메인 run과 followup이 다른 SSE 처리 → followup에서 Navigator dot 누락 가능.
 
 ### F8: stage counter race (cache hit miscounting)
-`orchestrator.ts:511-518`: extractor cache hit이면 SSE만 흘리고 stageCounter는 안 건드림. 일부 hit + 일부 miss 시 done 카운팅 부족 → UI 영구 running.
+`orchestrator.ts:511-578` 부근의 extractor/solver/verifier cache-hit 분기가 SSE만 흘리고 stageCounter는 안 건드림. 일부 hit + 일부 miss 시 done 카운팅 부족 → UI 영구 running.
 
 ## 설계
 
@@ -89,7 +89,7 @@ async function deleteExamData(cache: StageCache, tryDelete: (p: string) => Promi
 ```ts
 export interface FigureRunnerInput {
   // ...
-  /** 특정 문제만 재처리. orchestrator의 followup --q=N 경로에서 전달. */
+  /** 특정 문제만 재처리. 단일 문제는 --question N으로 전달. */
   questionNumber?: number;
 }
 ```
@@ -98,7 +98,7 @@ export interface FigureRunnerInput {
 
 ```ts
 // orchestrator.ts (figure stage 호출 부)
-const figureResult = await runFigureStage({
+const figureResult = await runTargetedFigureStage({
   examDataPath: cache.paths.examData,
   outputDir: path.join(baseDir, "outputs", "images"),
   statusOutPath: cache.paths.figureStatus,
@@ -106,13 +106,35 @@ const figureResult = await runFigureStage({
   imageProvider,
   baseDir,
   env: runtimeEnv as NodeJS.ProcessEnv,
-  questionNumber: input.targetQuestionNumber,  // ← 추가
+  targetQuestionNumbers: input.targetQuestionNumbers,
 });
 ```
 
-`OrchestratorInput`에 `targetQuestionNumber?: number` 추가. followup route(`run/[jobId]/followup/route.ts`)가 `targetQuestions?.length === 1`일 때 `targetQuestionNumber: targetQuestions[0]` 전달.
+`OrchestratorInput`에는 `targetQuestionNumbers?: number[]`를 추가한다. followup route(`run/[jobId]/followup/route.ts`)가 `targetQuestions`를 그대로 전달한다.
 
-> targetQuestions이 2개 이상이면 모두 처리하는 게 정합 (figure_processor에 `--questions 5,7` 옵션 추가 또는 반복 호출 — 후자 권장, P10 manual smoke에서 검증).
+figure stage 실행 정책:
+- `targetQuestionNumbers`가 없으면 기존처럼 전체 figure 문제를 1회 처리한다.
+- `targetQuestionNumbers.length === 1`이면 `runFigureStage(..., questionNumber: targetQuestionNumbers[0])`로 `--question N`을 전달한다.
+- `targetQuestionNumbers.length > 1`이면 번호별로 `runFigureStage`를 반복 호출한다. `figure_processor.py`가 현재 `figure_status.json`을 덮어쓰므로, 반복 호출 결과는 orchestrator가 각 실행 직후 읽어 병합하거나, P7에서 `figure_processor.py`에 `--merge-status`/`--questions`를 추가해 기존 status를 보존해야 한다. 권장 구현은 TS에서 status merge helper를 두는 방식이다.
+
+```ts
+type TargetedFigureInput = FigureRunnerInput & { targetQuestionNumbers?: number[] };
+
+async function runTargetedFigureStage(input: TargetedFigureInput): Promise<FigureRunnerOutput> {
+  const targets = input.targetQuestionNumbers;
+  if (!targets || targets.length === 0) return runFigureStage(input);
+  if (targets.length === 1) return runFigureStage({ ...input, questionNumber: targets[0] });
+
+  const merged = createEmptyFigureStatus();
+  for (const n of targets) {
+    const result = await runFigureStage({ ...input, questionNumber: n });
+    await mergeFigureStatusInto(merged, input.statusOutPath);
+    if (result.status === "failed") markFailed(merged, n);
+  }
+  await writeMergedFigureStatus(input.statusOutPath, merged);
+  return summarizeMergedFigureStatus(merged, input.statusOutPath);
+}
+```
 
 ### 3) SSE 핸들러 단일화 — `lib/sseClient.ts`
 
@@ -171,31 +193,43 @@ export function applySSEEvent(event: SSEEvent, store: Store): void {
 
 ### 4) stage counter cache-hit 카운팅 정정
 
-`orchestrator.ts:processQuestion` 내부 cache-hit 분기에도 `onEnter`/`onLeave` 호출:
+`orchestrator.ts:processQuestion` 내부 extractor/solver/verifier cache-hit 분기에도 `onEnter`/`onLeave` 호출:
 
 ```ts
 if (skipExtractor) {
   extractedOutput = await readCacheJson(cache.extractorResultPath(n));
   if (extractedOutput != null) {
-    onEnter("extractor", n);   // ← 추가
-    onLeave("extractor", n, "completed");  // ← 추가
+    markCacheHit("extractor", n); // internally calls onEnter + onLeave("completed")
     send({ event: "question", data: { number: n, stage: "extracted", status: "ok", data: extractedOutput } });
   }
 }
 ```
 
-단 `stageCounter.extractor.total`도 cache-hit 분 포함하도록 사전 계산 단계(`orchestrator.ts:834-840`) 수정:
+동일 패턴을 solver/verifier에도 적용한다:
+
+```ts
+function markCacheHit(stage: PipelineStageName, n: number): void {
+  onEnter(stage, n);
+  onLeave(stage, n, "completed");
+}
+```
+
+단 `stageCounter.*.total`도 cache-hit 분 포함하도록 사전 계산 단계(`orchestrator.ts:834-840`) 수정:
 
 ```ts
 // total = pipeline에 들어가는 전체 문제 수 (hit + miss 모두 포함)
-if (runExtractor) stageCounter.extractor.total++;  // forceExtracted/state.extracted 분기 제거
+if (runExtractor) stageCounter.extractor.total++;
+if (runSolver) stageCounter.solver.total++;
+if (runVerifier) stageCounter.verifier.total++;
 ```
 
 → cache-hit도 `entered/completed` 카운트, total과 일치. UI race 해소.
 
+주의: stage가 `stillUnder(stage) === false`인 경우에는 해당 stage 자체가 이번 run의 관측 대상이 아니므로 total에 포함하지 않는다. `runExtractor/runSolver/runVerifier` 계산이 `stillUnder`를 이미 반영하지 않는다면 total 계산에서 별도로 반영한다.
+
 ### 5) followup 라우트의 stopAfterStage 확장
 
-`run/[jobId]/followup/route.ts:317-321`: stopAfterStage가 per-Q 분기에서만 set. 이미 동작 OK. `targetQuestionNumber` 전달 추가:
+`run/[jobId]/followup/route.ts:317-321`: stopAfterStage가 per-Q 분기에서만 set. 이미 동작 OK. `targetQuestionNumbers` 전달 추가:
 
 ```ts
 const orchResult = await runStageOrchestrator({
@@ -205,7 +239,7 @@ const orchResult = await runStageOrchestrator({
   questionImages,
   stageOverrides,
   stopAfterStage,
-  targetQuestionNumber: targetQuestions && targetQuestions.length === 1 ? targetQuestions[0] : undefined,
+  targetQuestionNumbers: targetQuestions,
   // ...
 });
 ```
@@ -216,16 +250,17 @@ const orchResult = await runStageOrchestrator({
 - `figureRunner.test.ts`: `questionNumber` 전달 시 `--question N` 인자 확인 (spawn args 검증)
 - `orchestrator.pipeline.test.ts`:
   - resume-from-builder 시 exam_data 새 rebuild되고 final_image가 figure_status에서 복원되어 HWPX에 그림 포함
-  - cache hit + miss 혼합 시 stage counter `entered === total === completed` 결과
+  - cache hit + miss 혼합 시 extractor/solver/verifier stage counter 각각 `entered === total === completed` 결과
+  - `resume --q=2,3 --from=figure` 시 두 문제만 재처리되고 `figure_status.json`이 두 결과를 모두 보존
 - 신규 `sseClient.test.ts`: `applySSEEvent`가 두 경로(메인 run / followup)에서 동일하게 store 갱신
 
 ## 체크리스트
 - [ ] `cleanup.ts` 매트릭스 갱신 — 모든 fromStage에서 `exam_data.json` 삭제 (helper `deleteExamData` 추가)
-- [ ] `orchestrator.ts`에 `targetQuestionNumber?: number` 받아 `runFigureStage(..., questionNumber: input.targetQuestionNumber)` 전달
-- [ ] `run/[jobId]/followup/route.ts`에서 `targetQuestions.length === 1`일 때 `targetQuestionNumber` 전달
+- [ ] `orchestrator.ts`에 `targetQuestionNumbers?: number[]` 받아 단일 target은 `--question N`, 다중 target은 반복 실행 + `figure_status.json` 병합 처리
+- [ ] `run/[jobId]/followup/route.ts`에서 `targetQuestions`를 `targetQuestionNumbers`로 전달
 - [ ] `lib/sseClient.ts` 신설 — `applySSEEvent` 단일 구현
 - [ ] `useJobRunner.ts`와 `components/results/question-result/resume.ts`에서 로컬 `handleSSEEvent` 삭제하고 `applySSEEvent` 사용
-- [ ] `orchestrator.ts:processQuestion` cache-hit 분기에서 `onEnter`/`onLeave` 호출, `stageCounter.total` 계산 시 hit 포함
+- [ ] `orchestrator.ts:processQuestion` extractor/solver/verifier cache-hit 분기에서 `onEnter`/`onLeave` 호출, `stageCounter.total` 계산 시 hit 포함
 - [ ] `cleanup.test.ts` / `figureRunner.test.ts` / `orchestrator.pipeline.test.ts` 갱신
 - [ ] 신규 `sseClient.test.ts` 케이스 추가
 - [ ] `npx tsc --noEmit` + `npx vitest run server/stages/__tests__/ lib/__tests__/ --reporter=basic` 전체 통과
@@ -247,5 +282,6 @@ npx vitest run server/stages/__tests__/ lib/__tests__/ --reporter=basic
 # manual (사후 검증)
 # 1) resume --from=builder 후 HWPX에 그림 포함 확인
 # 2) resume --q=5 --from=figure 후 figure_processor 호출 로그에 --question 5 포함
-# 3) cache hit + miss 혼합 (일부 _extracted만 있는 상태에서 resume) → UI 모든 stage가 done에 도달
+# 3) resume --q=2,3 --from=figure 후 두 문제만 재처리되고 figure_status에 두 결과 보존
+# 4) cache hit + miss 혼합 (extractor/solver/verifier 각각 일부 cache hit) → UI 모든 stage가 done에 도달
 ```

@@ -137,7 +137,7 @@ function sanitizeExtractedChoices(extracted: ExtractorOutput): ExtractorOutput {
 - [ ] `extractor.ts`에 `sanitizeExtractedChoices` 추가하고 디스크 write 직전 호출
 - [ ] `examData.test.ts` 갱신: dual emit / aggregate 케이스 제거, 새 컨트랙트 검증
 - [ ] `extractor.test.ts`에 `sanitizeExtractedChoices` 단위 케이스 추가
-- [ ] `npx vitest run ngd-studio/server/stages/__tests__/examData.test.ts ngd-studio/server/stages/__tests__/extractor.test.ts --reporter=basic` 통과
+- [ ] 저장소 루트에서 `cd ngd-studio && npx vitest run server/stages/__tests__/examData.test.ts server/stages/__tests__/extractor.test.ts --reporter=basic` 통과
 
 ## 영향 범위
 

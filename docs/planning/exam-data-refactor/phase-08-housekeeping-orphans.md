@@ -82,18 +82,18 @@ e2e_triggers: []
 
 **권장: 옵션 A** (가장 단순, P6과 자연스럽게 통합).
 
-`app/api/create/start/route.ts`의 stage 3 시작 부분에 추가:
+P6의 create/start는 commit 전까지 final path를 건드리지 않는 원칙이 있다. 따라서 `outputs/images/`도 write/temp 단계에서 미리 지우면 안 된다. 새 `.v3cache`/`question_images` commit이 성공한 뒤에만 파생 산출물로 보고 정리한다.
 
 ```ts
 const OUTPUTS_IMAGES_DIR = path.join(BASE_DIR, "outputs", "images");
-// stage 3 시작:
+// create/start commit 성공 후:
 if (await exists(OUTPUTS_IMAGES_DIR)) {
   await rm(OUTPUTS_IMAGES_DIR, { recursive: true, force: true });
 }
 await mkdir(OUTPUTS_IMAGES_DIR, { recursive: true });
 ```
 
-백업은 안 함(outputs/images는 derivable artifact라 rollback 불요). 트랜잭션 무결성에 영향 없음.
+백업은 안 함(outputs/images는 derivable artifact). 단 commit 전 실패 시 직전 시험지의 `figure_status.json`이 기존 `outputs/images`를 계속 참조할 수 있으므로 반드시 commit 성공 후에만 지운다.
 
 > ⚠ 같은 시점에 outputs/의 HWPX는 보존(사용자 다운로드 가능). 이미지만 정리.
 
@@ -116,7 +116,7 @@ await mkdir(OUTPUTS_IMAGES_DIR, { recursive: true });
 - [ ] `cache.ts:StageCachePaths.previousCacheDir` 필드 삭제 + 생성자에서 path.join 줄 제거
 - [ ] `app/api/create/start/route.ts`: `PREV_DIR` rename 대신 백업본 rm으로 변경 (rotate 없음)
 - [ ] `app/api/v3cache-reset/route.ts`: 호출처 grep 후 0건이면 route 파일 삭제, 있으면 PREV_DIR 로직만 제거
-- [ ] `app/api/create/start/route.ts`: stage 3 시작 시 outputs/images/ 클리어 + 재생성
+- [ ] `app/api/create/start/route.ts`: 새 작업 commit 성공 후 outputs/images/ 클리어 + 재생성 (commit 전 write/temp 단계에서는 final outputs/images untouched)
 - [ ] `lib/__tests__/stageFoundation.test.ts`: previousCacheDir 케이스 갱신/삭제, outputs/images 클리어 검증 추가
 - [ ] `npx tsc --noEmit` + `npx vitest run lib/__tests__/ --reporter=basic` 통과
 

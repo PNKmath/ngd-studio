@@ -159,9 +159,15 @@ describe("resume safety regressions", () => {
   });
 
   it("F8: cache hit + miss mixed → stageCounter total == entered == completed", async () => {
-    // setup: Q1 has _extracted, Q2 doesn't
+    // setup: extractor/solver/verifier 각각 Q1 cache hit, Q2 miss 같은 혼합 상태
     // run pipeline
-    // assert: stageCounter.extractor 모든 카운트 일치
+    // assert: stageCounter.extractor/solver/verifier 모든 카운트 일치
+  });
+
+  it("F3: resume --q=2,3 --from=figure reprocesses only targeted figures and preserves merged status", async () => {
+    // setup: figure_status.json has existing results for multiple figure questions
+    // run followup/orchestrator with targetQuestionNumbers=[2, 3]
+    // assert: figure runner invoked only for 2 and 3, final figure_status keeps both updated entries
   });
 });
 ```
@@ -171,9 +177,16 @@ describe("resume safety regressions", () => {
 ```ts
 it("L2: handleExtract failure preserves previous exam state (rollback)", async () => {
   // setup: 이전 시험지 디스크 상태 (.v3cache + session_meta + 이미지)
-  // mock writeFile to fail mid-stage 3
+  // mock writeFile to fail while writing .next_<txid> temp dirs
   // POST /api/create/start
-  // assert: 디스크가 이전 시험지 상태 그대로
+  // assert: final .v3cache/question_images 디스크가 이전 시험지 상태 그대로
+  // assert: partial temp contents are not visible through /api/question-images or /api/v3cache-meta
+});
+
+it("L2: reader APIs do not expose partial final state during create/start commit lock", async () => {
+  // setup: .create_start.lock exists and final dirs are mid-swap
+  // GET /api/question-images and /api/v3cache-meta
+  // assert: pending/409 response, no stale/new mixed payload
 });
 
 it("L1: session_meta lives in .v3cache and is removed on next start", async () => {
