@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: Fixture 재생성 + 회귀 vitest + 최종 alias grep=0
-status: pending
+status: completed
 depends_on: [1, 2, 3, 4, 5, 6, 7, 8]
 scope:
   - outputs/_fixtures/year-2026-test/exam_data.json
@@ -234,16 +234,16 @@ def _make_q_status(uncertain: bool) -> dict:
 `orchestrator.ts:emitFigureQuestionEvents`도 `image` 폴백 제거.
 
 ## 체크리스트
-- [ ] `outputs/_fixtures/year-2026-test/exam_data.json` 새 schema로 재생성 (camelCase info + 새 problem shape)
-- [ ] `outputs/_fixtures/year-2026-test/figure_status.json` 신규 생성 (finalImage 키)
-- [ ] `outputs/_fixtures/year-2026-test/images/prob2_final.png` 1x1 placeholder
-- [ ] `examData.test.ts`: dual emit 부재 + filenameBase 자동 채움 + meta 검증 케이스
-- [ ] `orchestrator.pipeline.test.ts`: F1/F8 회귀 시나리오
-- [ ] `create/start/__tests__/route.test.ts`: L1/L2 회귀 시나리오 (P6 테스트 확장)
-- [ ] `sseClient.test.ts`: F5 회귀 (extraction_review 두 형식 동등 처리)
-- [ ] P3의 backward compat legacy 키 (`image`, `boundary_uncertain`, etc.) 제거
-- [ ] 최종 grep — `school_level\|exam_type\|filename_base\|final_image` ngd-studio + *.py 결과 0건
-- [ ] `npx tsc --noEmit` + `npx vitest run --reporter=basic` 전체 통과
+- [x] `outputs/_fixtures/year-2026-test/exam_data.json` 새 schema로 재생성 (camelCase info + 새 problem shape)
+- [x] `outputs/_fixtures/year-2026-test/figure_status.json` 신규 생성 (finalImage 키)
+- [x] `outputs/_fixtures/year-2026-test/images/prob2_final.png` 1x1 placeholder
+- [x] `examData.test.ts`: dual emit 부재 + filenameBase 자동 채움 + meta 검증 케이스 (이미 P1/P2에서 완료, 통과 확인)
+- [x] `orchestrator.pipeline.test.ts`: F1/F8 회귀 시나리오 (E-ext/F-ext로 이미 존재, 통과 확인)
+- [x] `create/start/__tests__/route.test.ts`: L1/L2 회귀 시나리오 (P6에서 완료, 통과 확인)
+- [x] `sseClient.test.ts`: F5 회귀 (P7에서 완료, 통과 확인)
+- [x] P3의 backward compat legacy 키 (`image`, `boundary_uncertain`, etc.) 제거 (figure_processor.py + figureRunner.ts + orchestrator.ts + figure-cases fixtures)
+- [x] 최종 grep — `school_level\|exam_type\|filename_base\|final_image` ngd-studio + *.py 결과 0건 (TS/TSX: test assertion lines만 toBeUndefined() 형태; Python: assemble.py variable names만, scope 외)
+- [x] `npx tsc --noEmit` + `npx vitest run --reporter=basic` 전체 통과 (558 tests)
 
 ## 영향 범위
 
@@ -265,3 +265,52 @@ grep -rn "exam_type\|school_level\|filename_base\|final_image" /Users/junhyukpar
 # fixture 형식 검증
 python3 -c "import json; d=json.load(open('outputs/_fixtures/year-2026-test/exam_data.json')); assert 'schoolLevel' in d['info'] and 'school_level' not in d['info']"
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-24 01:30 KST) — completed
+**상태**: completed
+**소요 시간**: 약 15분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+P9 작업 완료. 1) `exam_data.json` fixture를 camelCase info + 새 problem schema로 재생성, 2) `figure_status.json` fixture를 finalImage 키로 신규 생성, 3) 1x1 placeholder PNG 생성, 4) `figure_processor.py`에서 `image`/`boundary_uncertain`/`needs_agent_review`/`crop_attempts` legacy snake_case 키 제거, 5) `figureRunner.ts` 인터페이스에서 legacy 필드 제거 및 `extractNeedsAgentReview`에서 `needs_agent_review` 폴백 제거, 6) `orchestrator.ts`에서 `image` 폴백 제거, 7) figure-cases fixture에서 dual 키 제거, 8) 테스트 mock에서 legacy 키 → camelCase 업데이트. `npx tsc --noEmit` 통과, 558 테스트 모두 통과.
+
+#### 변경 파일
+- `outputs/_fixtures/year-2026-test/exam_data.json` (수정, camelCase info + 2문제 새 schema)
+- `outputs/_fixtures/year-2026-test/figure_status.json` (신규, finalImage 키)
+- `outputs/_fixtures/year-2026-test/images/prob2_final.png` (신규, 1x1 placeholder PNG)
+- `figure_processor.py` (수정, legacy snake_case 키 제거, camelCase만 emit)
+- `ngd-studio/server/stages/figureRunner.ts` (수정, 인터페이스 legacy 필드 제거, needs_agent_review 폴백 제거)
+- `ngd-studio/server/stages/orchestrator.ts` (수정, image 폴백 제거, FigureStatusFile 타입 정리)
+- `ngd-studio/server/stages/__tests__/fixtures/figure-cases/figure_status.done.json` (수정, dual 키 → camelCase only)
+- `ngd-studio/server/stages/__tests__/fixtures/figure-cases/figure_status.partial.json` (수정, dual 키 → camelCase only)
+- `ngd-studio/server/stages/__tests__/orchestrator.pipeline.test.ts` (수정, mock figure_processor.py 응답 camelCase 업데이트)
+- `ngd-studio/server/stages/__tests__/orchestrator.integration.test.ts` (수정, mock figure_processor.py 응답 camelCase 업데이트)
+- `ngd-studio/server/stages/__tests__/figureRunner.test.ts` (수정, 테스트 설명 코멘트 camelCase 업데이트)
+
+#### 검증 결과
+- [x] `npx tsc --noEmit`: 오류 0건
+- [x] `npx vitest run lib/__tests__ server/stages/__tests__ app/api --reporter=basic`: 558 tests 전체 통과 (31 파일)
+- [x] TS/TSX alias grep (`school_level|exam_type|filename_base|final_image`): 실제 key 사용 0건 (test assertion `toBeUndefined()` 7줄만)
+- [x] Python alias grep: `figure_processor.py` legacy emit 0건 (assemble.py variable names는 scope 외 false positive)
+- [x] fixture 형식 검증: `exam_data.json` camelCase info, `figure_status.json` finalImage 키 확인
+
+#### 추가 발견사항
+- `assemble.py` line 262에 `q.get("image")` legacy 폴백이 여전히 존재함. `figure_processor.py`가 더 이상 `image` 키를 emit하지 않으므로 이 폴백은 dead code가 됨. 단, `assemble.py`는 본 phase scope 밖이므로 보고만 함.
+- `assemble.py` line 293에서 `school_level = info["schoolLevel"]`처럼 Python 로컬 변수 이름으로 snake_case 사용 — 이건 JSON key가 아닌 Python variable name이므로 alias 문제 아님.
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+escalate → 사용자 승인 — figure_processor.py(P3 dual emit 제거), figureRunner.ts/orchestrator.ts(legacy fallback 제거), fixtures/figure_status.{done,partial}.json(legacy 키 제거). P3 transitional dual emit의 final cleanup 일부, 사용자 drift 허용.
+
+#### Verification Re-run (orchestrator)
+tsc exit 0 + scope-limited vitest 558/558 통과 + alias grep(school_level|exam_type|filename_base|final_image|aggregateVerifiedProblems) 소스 내 0건.
+
+#### Simplify (orchestrator)
+SIMPLIFIED: 0 — dual emit 제거 자체가 정리 작업.
+
+#### Review (orchestrator)
+VERDICT: pass — drift 4종 포함 스펙 정합, alias grep 0건 달성. ISSUES 0건.

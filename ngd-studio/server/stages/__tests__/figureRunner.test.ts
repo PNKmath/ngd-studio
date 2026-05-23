@@ -4,7 +4,7 @@
  * Tests for runFigureStage:
  *  1. Fixture round-trip: 3 figure_status.json fixtures (done/partial/failed)
  *  2. spawn argument capture: --no-regen in non-regen mode → Gemini call 0
- *  3. boundary_uncertain=false → needsAgentReview empty (agent call 0)
+ *  3. boundaryUncertain=false → needsAgentReview empty (agent call 0)
  */
 
 import { mkdtemp, rm, stat, writeFile } from "fs/promises";
@@ -104,7 +104,7 @@ describe("runFigureStage — fixture round-trip", () => {
     });
 
     expect(result.status).toBe("partial");
-    // Q5 has boundary_uncertain=true + needs_agent_review=true
+    // Q5 has boundaryUncertain=true + needsAgentReview=true
     expect(result.needsAgentReview).toEqual([5]);
   });
 
@@ -210,11 +210,11 @@ describe("runFigureStage — spawn args", () => {
 });
 
 // ──────────────────────────────────────────────
-// 3. boundary_uncertain=false → agent call 0
+// 3. boundaryUncertain=false → agent call 0
 // ──────────────────────────────────────────────
 
 describe("runFigureStage — agent call guard", () => {
-  it("done fixture (all boundary_uncertain=false) → needsAgentReview empty", async () => {
+  it("done fixture (all boundaryUncertain=false) → needsAgentReview empty", async () => {
     const dir = await makeTempDir();
     const statusOutPath = path.join(dir, "figure_status.json");
     mockSuccessSpawn(statusOutPath, doneFixture);

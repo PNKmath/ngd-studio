@@ -180,16 +180,12 @@ def process_figure(
     def _make_q_status(uncertain: bool) -> dict:
         s: dict = {
             "status": "boundary_uncertain" if uncertain else "ok",
-            "image": str(final_path),         # legacy 키 (backward compat)
-            "finalImage": str(final_path),    # 정본 키 (camelCase, 새 컨트랙트)
-            "boundary_uncertain": uncertain,  # legacy 키 (backward compat)
-            "boundaryUncertain": uncertain,   # camelCase 키
+            "finalImage": str(final_path),
+            "boundaryUncertain": uncertain,
         }
         if uncertain:
-            s["crop_attempts"] = 1          # legacy 키 (backward compat)
-            s["cropAttempts"] = 1           # camelCase 키
-            s["needs_agent_review"] = True  # legacy 키 (backward compat)
-            s["needsAgentReview"] = True    # camelCase 키
+            s["cropAttempts"] = 1
+            s["needsAgentReview"] = True
         return s
 
     if no_regen:

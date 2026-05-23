@@ -55,14 +55,10 @@ export interface FigureRunnerOutput {
 
 interface FigureQuestionStatus {
   status: "ok" | "boundary_uncertain" | "failed";
-  image?: string;           // legacy (backward compat)
-  finalImage?: string;      // 정본 키 (camelCase, P3+)
-  boundary_uncertain?: boolean;  // legacy (backward compat)
-  boundaryUncertain?: boolean;   // camelCase (P3+)
-  crop_attempts?: number;        // legacy (backward compat)
-  cropAttempts?: number;         // camelCase (P3+)
-  needs_agent_review?: boolean;  // legacy (backward compat)
-  needsAgentReview?: boolean;    // camelCase (P3+)
+  finalImage?: string;
+  boundaryUncertain?: boolean;
+  cropAttempts?: number;
+  needsAgentReview?: boolean;
   error?: string;
 }
 
@@ -157,8 +153,7 @@ function extractNeedsAgentReview(parsed: FigureStatusJson): number[] {
   const result: number[] = [];
   for (const [key, q] of Object.entries(parsed.questions)) {
     if (
-      q.needsAgentReview === true ||  // camelCase (P3+)
-      q.needs_agent_review === true || // legacy
+      q.needsAgentReview === true ||
       q.status === "boundary_uncertain"
     ) {
       const n = Number(key);

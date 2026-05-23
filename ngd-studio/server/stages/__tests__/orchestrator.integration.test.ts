@@ -211,14 +211,14 @@ vi.mock("../commands", async (importOriginal) => {
           const examData = JSON.parse(await fsReadFile(examDataPath, "utf8")) as {
             problems?: Array<{ number?: number }>;
           };
-          const questions: Record<string, { status: "ok"; image: string; boundary_uncertain: false }> = {};
+          const questions: Record<string, { status: "ok"; finalImage: string; boundaryUncertain: false }> = {};
           await fsMkdir(outputDir, { recursive: true });
           for (const problem of examData.problems ?? []) {
             const n = problem.number;
             if (typeof n !== "number") continue;
-            const image = path.join(outputDir, `prob${n}_final.png`);
-            await fsWriteFile(image, "fake-image", "utf8");
-            questions[String(n)] = { status: "ok", image, boundary_uncertain: false };
+            const finalImage = path.join(outputDir, `prob${n}_final.png`);
+            await fsWriteFile(finalImage, "fake-image", "utf8");
+            questions[String(n)] = { status: "ok", finalImage, boundaryUncertain: false };
           }
           await fsMkdir(path.dirname(statusOutPath), { recursive: true });
           await fsWriteFile(statusOutPath, JSON.stringify({ status: "done", questions }, null, 2), "utf8");

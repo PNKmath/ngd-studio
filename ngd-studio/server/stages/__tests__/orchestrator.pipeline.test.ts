@@ -287,13 +287,13 @@ vi.mock("../commands", async (importOriginal) => {
             problems?: Array<{ number?: number }>;
           };
           await fsMkdir(outputDir, { recursive: true });
-          const questions: Record<string, { status: "ok"; image: string; boundary_uncertain: false }> = {};
+          const questions: Record<string, { status: "ok"; finalImage: string; boundaryUncertain: false }> = {};
           for (const problem of examData.problems ?? []) {
             const n = problem.number;
             if (typeof n !== "number") continue;
-            const image = path.join(outputDir, `prob${n}_final.png`);
-            await fsWriteFile(image, "fake-image", "utf8");
-            questions[String(n)] = { status: "ok", image, boundary_uncertain: false };
+            const finalImage = path.join(outputDir, `prob${n}_final.png`);
+            await fsWriteFile(finalImage, "fake-image", "utf8");
+            questions[String(n)] = { status: "ok", finalImage, boundaryUncertain: false };
           }
           await fsWriteFile(
             statusOutPath,
