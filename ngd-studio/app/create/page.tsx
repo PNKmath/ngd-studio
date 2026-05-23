@@ -386,9 +386,8 @@ export default function CreateV4Page() {
       setSubmitError(null);
       setRecoveryHint(null);
 
-      await fetch("/api/v3cache-reset", { method: "POST" }).catch(() => {});
-
       const formData = new FormData();
+      formData.append("meta", JSON.stringify(meta));
       let rIdx = 0;
       let eIdx = 0;
       for (const item of items) {
@@ -400,50 +399,31 @@ export default function CreateV4Page() {
           rIdx++;
           key = `q${String(rIdx).padStart(2, "0")}`;
         }
-        const file = new File([item.blob], `${key}.png`, { type: "image/png" });
-        formData.append(key, file);
+        formData.append(key, new File([item.blob], `${key}.png`, { type: "image/png" }));
       }
 
+      let saved: { number: number }[];
       try {
-        const res = await fetch("/api/question-images", {
-          method: "POST",
-          body: formData,
-        });
+        const res = await fetch("/api/create/start", { method: "POST", body: formData });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          throw new Error((errData as { error?: string }).error ?? `이미지 업로드 실패 (${res.status})`);
+          throw new Error((errData as { error?: string }).error ?? `작업 시작 실패 (${res.status})`);
         }
+        const data = (await res.json()) as { ok: true; images: { number: number }[] };
+        saved = data.images;
       } catch (e) {
-        setSubmitError(e instanceof Error ? e.message : "이미지 업로드 실패");
-        setSubmitting(false);
-        return;
-      }
-
-      try {
-        const res = await fetch("/api/v3cache-meta", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(meta),
-        });
-        if (!res.ok) throw new Error(`메타 저장 실패 (${res.status})`);
-      } catch (e) {
-        setSubmitError(e instanceof Error ? e.message : "메타 저장 실패");
-        setRecoveryHint("이미지는 저장됐습니다. 페이지를 새로고침하면 '이전 작업 재개' 카드에서 이어 작업할 수 있습니다.");
+        setSubmitError(e instanceof Error ? e.message : "작업 시작 실패");
+        setRecoveryHint("디스크 상태가 rollback되어 이전 상태로 복구되었습니다. 다시 시도하세요.");
         setSubmitting(false);
         return;
       }
 
       // v3Meta를 store에 설정 (startJob 전)
-      const jobMeta = { ...meta, questionCount: items.length };
+      const jobMeta = { ...meta, questionCount: saved.length };
       setV3Meta(jobMeta);
 
       try {
-        const questionImageNums = items.map((it) => it.number);
-        await startJob(
-          "create",
-          { pdf: "", questionImages: questionImageNums },
-          jobMeta
-        );
+        await startJob("create", { pdf: "", questionImages: saved.map((s) => s.number) }, jobMeta);
       } catch (e) {
         setSubmitError(e instanceof Error ? e.message : "작업 시작 실패");
         setRecoveryHint("이미지/메타 모두 저장됐습니다. 페이지를 새로고침하면 '이전 작업 재개' 카드에서 이어 작업할 수 있습니다.");

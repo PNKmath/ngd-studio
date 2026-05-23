@@ -1,11 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir, rm, readdir, readFile } from "fs/promises";
+import { writeFile, mkdir, readdir, readFile, stat } from "fs/promises";
 import path from "path";
 
 const BASE_DIR = path.resolve(process.cwd(), "..");
-const IMAGES_DIR = path.join(BASE_DIR, "inputs", "시험지 제작", "question_images");
-const CACHE_DIR = path.join(BASE_DIR, "inputs", "시험지 제작", ".v3cache");
+const EXAM_DIR = path.join(BASE_DIR, "inputs", "시험지 제작");
+const IMAGES_DIR = path.join(EXAM_DIR, "question_images");
+const CACHE_DIR = path.join(EXAM_DIR, ".v3cache");
 const FIGURE_STATUS_PATH = path.join(CACHE_DIR, "figure_status.json");
+// Lock written by /api/create/start during atomic commit window
+const LOCK_PATH = path.join(EXAM_DIR, ".create_start.lock");
+const LOCK_STALE_MS = 30_000;
+
+async function isLocked(): Promise<boolean> {
+  try {
+    const s = await stat(LOCK_PATH);
+    const ageMs = Date.now() - s.mtimeMs;
+    if (ageMs > LOCK_STALE_MS) {
+      console.warn(`[question-images] stale lock detected (age=${ageMs}ms), ignoring`);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 type FigurePhaseStatus = "ok" | "failed" | "boundary_uncertain";
 
@@ -47,6 +65,9 @@ async function scanCacheState(numbers: number[]): Promise<Record<number, Questio
 }
 
 export async function GET() {
+  if (await isLocked()) {
+    return NextResponse.json({ pending: true }, { status: 409 });
+  }
   try {
     let files: string[] = [];
     try {
@@ -123,47 +144,11 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const formData = await req.formData();
-
-    await mkdir(IMAGES_DIR, { recursive: true });
-
-    // Clear previous images
-    try {
-      await rm(IMAGES_DIR, { recursive: true });
-      await mkdir(IMAGES_DIR, { recursive: true });
-    } catch { /* ignore */ }
-
-    const saved: { number: number; kind: "regular" | "essay"; path: string }[] = [];
-
-    for (const [key, value] of formData.entries()) {
-      // Keys: "q1".."q30" (regular) or "q_s1".."q_s30" (essay).
-      if (!(value instanceof File)) continue;
-      const essay = key.startsWith("q_s");
-      const numPart = essay ? key.slice(3) : key.startsWith("q") ? key.slice(1) : null;
-      if (numPart === null) continue;
-      const num = parseInt(numPart, 10);
-      if (isNaN(num)) continue;
-
-      const padded = String(num).padStart(2, "0");
-      const ext = value.name.split(".").pop()?.toLowerCase() ?? "png";
-      const fileName = essay ? `q_s${padded}.${ext}` : `q${padded}.${ext}`;
-      const filePath = path.join(IMAGES_DIR, fileName);
-
-      const buffer = Buffer.from(await value.arrayBuffer());
-      await writeFile(filePath, buffer);
-
-      saved.push({
-        number: num,
-        kind: essay ? "essay" : "regular",
-        path: `inputs/시험지 제작/question_images/${fileName}`,
-      });
-    }
-
-    return NextResponse.json({ images: saved });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Save failed";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+// POST is deprecated — use /api/create/start for atomic reset+image+meta transaction.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function POST(_req: NextRequest) {
+  return NextResponse.json(
+    { error: "POST /api/question-images is deprecated. Use POST /api/create/start instead." },
+    { status: 410 }
+  );
 }

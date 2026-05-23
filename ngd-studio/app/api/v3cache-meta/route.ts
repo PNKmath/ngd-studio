@@ -1,18 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile, writeFile, mkdir } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 import path from "path";
 import type { ExamMetaInput } from "@/lib/exam/meta";
 
 const BASE_DIR = path.resolve(process.cwd(), "..");
-const CACHE_DIR = path.join(BASE_DIR, "inputs", "시험지 제작", ".v3cache");
+const EXAM_DIR = path.join(BASE_DIR, "inputs", "시험지 제작");
+const CACHE_DIR = path.join(EXAM_DIR, ".v3cache");
 const SESSION_META_PATH = path.join(CACHE_DIR, "session_meta.json");
+// Lock written by /api/create/start during atomic commit window
+const LOCK_PATH = path.join(EXAM_DIR, ".create_start.lock");
+const LOCK_STALE_MS = 30_000;
 
 interface MetaResult {
   found: boolean;
   meta?: ExamMetaInput;
+  pending?: boolean;
 }
 
-export async function GET(): Promise<NextResponse<MetaResult>> {
+async function isLocked(): Promise<boolean> {
+  try {
+    const s = await stat(LOCK_PATH);
+    const ageMs = Date.now() - s.mtimeMs;
+    if (ageMs > LOCK_STALE_MS) {
+      // Stale lock from a crashed server — log and ignore
+      console.warn(`[v3cache-meta] stale lock detected (age=${ageMs}ms), ignoring`);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function GET(_req: NextRequest): Promise<NextResponse<MetaResult>> {
+  if (await isLocked()) {
+    return NextResponse.json({ found: false, pending: true }, { status: 409 });
+  }
   try {
     const raw = await readFile(SESSION_META_PATH, "utf-8");
     const meta = JSON.parse(raw) as ExamMetaInput;
@@ -22,14 +45,5 @@ export async function GET(): Promise<NextResponse<MetaResult>> {
   }
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const meta = (await req.json()) as ExamMetaInput;
-    await mkdir(CACHE_DIR, { recursive: true });
-    await writeFile(SESSION_META_PATH, JSON.stringify(meta, null, 2), "utf-8");
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Save failed";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
+// POST handler removed — /api/create/start is now responsible for writing session_meta.json
+// as part of the atomic reset+image+meta transaction.

@@ -9,6 +9,7 @@ export default defineConfig({
       "server/stages/__tests__/**/*.test.ts",
       "server/__tests__/**/*.test.ts",
       "server/review/__tests__/**/*.test.ts",
+      "app/api/**/__tests__/**/*.test.ts",
     ],
   },
   resolve: {
