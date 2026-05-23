@@ -244,6 +244,27 @@ def get_subtopic_name(subtopic):
     return mapping.get(subtopic, subtopic)
 
 
+def _load_final_images(exam_data_path: str) -> dict:
+    """Read figure_status.json (sibling of exam_data.json) and return {question_number: finalImage}."""
+    cache_dir = os.path.dirname(os.path.abspath(exam_data_path))
+    fs_path = os.path.join(cache_dir, "figure_status.json")
+    if not os.path.exists(fs_path):
+        return {}
+    with open(fs_path, "r", encoding="utf-8") as f:
+        status = json.load(f)
+    result = {}
+    for key, q in (status.get("questions") or {}).items():
+        try:
+            n = int(key)
+        except ValueError:
+            continue
+        # 정본 finalImage, 폴백으로 legacy image (P3 호환)
+        img = q.get("finalImage") or q.get("image")
+        if img:
+            result[n] = img
+    return result
+
+
 def main(exam_json=None, output_dir=None, base_path=None):
     """Main entry point: build HWPX from exam_data.json"""
     # Reset counters for clean per-build isolation
@@ -263,10 +284,13 @@ def main(exam_json=None, output_dir=None, base_path=None):
     info = exam["info"]
     problems = exam["problems"]
 
+    # === Load figure_status.json (camelCase finalImage) ===
+    final_images = _load_final_images(exam_json)
+
     # === Info substitutions ===
-    YEAR_SEMESTER = f"{info['year']}년 {info['semester']} {info['exam_type']}"
+    YEAR_SEMESTER = f"{info['year']}년 {info['semester']} {info['examType']}"
     SCHOOL_NAME = info["school"]
-    school_level = info.get("school_level", "고")
+    school_level = info["schoolLevel"]
     if school_level == "중":
         GRADE_SUBJECT = f"{info['grade']}학년"
     else:
@@ -363,9 +387,9 @@ def main(exam_json=None, output_dir=None, base_path=None):
         problem_paras.append(prob_p)
         problem_paras.append(make_empty_para())
 
-        # Figure
-        if has_figure and figure_info and figure_info.get("final_image"):
-            img_path = figure_info["final_image"]
+        # Figure — figure_status.json에서 finalImage 읽기 (figure_info["final_image"] 참조 폐기)
+        img_path = final_images.get(num)
+        if has_figure and img_path:
             if os.path.exists(img_path):
                 img_name = f"image{extra_image_counter}"
                 extra_image_counter += 1
@@ -497,19 +521,7 @@ def main(exam_json=None, output_dir=None, base_path=None):
 
     # === Output filename (with _ver{YYYYMMDD-HHMMSS} suffix) ===
     ver_suffix = datetime.now().strftime("_ver%Y%m%d-%H%M%S")
-    if "filename_base" in info:
-        filename = info["filename_base"] + ver_suffix + ".hwpx"
-    else:
-        code = info.get("code", "00000")
-        year = info.get("year", "?")
-        grade = info.get("grade", "?")
-        sem_num = "1" if "1학기" in info["semester"] else "2"
-        exam_code = "a" if "중간" in info["exam_type"] else "b"
-        region = info.get("region", "")
-        school = info.get("school", "")
-        subject_code = info.get("subject_code", info.get("subject", ""))
-        range_str = info.get("range", "").replace(" ~ ", "~")
-        filename = f"[{code}][{school_level}][{year}][{grade}-{sem_num}-{exam_code}][{region}][{school}][{subject_code}][{range_str}][{code}]{ver_suffix}.hwpx"
+    filename = info["filenameBase"] + ver_suffix + ".hwpx"  # required (P2 assertCompleteMeta 보장)
 
     output_path = os.path.join(output_dir, filename)
     os.makedirs(output_dir, exist_ok=True)

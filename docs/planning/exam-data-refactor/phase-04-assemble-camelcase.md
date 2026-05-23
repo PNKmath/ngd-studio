@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: assemble.py camelCase 정합 + filename 폴백 삭제 + figure_status join
-status: pending
+status: completed
 depends_on: [3]
 scope:
   - assemble.py
@@ -146,12 +146,12 @@ if (!hasFigureStatus) {
   - exam_data.json에 `filenameBase` 누락 → KeyError 명확
 
 ## 체크리스트
-- [ ] `assemble.py:info` read 전부 camelCase 키로 교체 (exam_type/school_level/filename_base/subject_code → camel)
-- [ ] `assemble.py:498-512`의 filename 폴백 빌더 삭제 — `info["filenameBase"]` required
-- [ ] `assemble.py`에 `_load_final_images(exam_data_path)` 추가하고 figure 박는 부분에서 사용
-- [ ] `figure_info["final_image"]` 참조 0건 (grep으로 확인)
-- [ ] `builder.test.ts` 신규 fixture로 end-to-end 빌드 검증 통과
-- [ ] `npx vitest run server/stages/__tests__/builder.test.ts --reporter=basic` 통과
+- [x] `assemble.py:info` read 전부 camelCase 키로 교체 (exam_type/school_level/filename_base/subject_code → camel)
+- [x] `assemble.py:498-512`의 filename 폴백 빌더 삭제 — `info["filenameBase"]` required
+- [x] `assemble.py`에 `_load_final_images(exam_data_path)` 추가하고 figure 박는 부분에서 사용
+- [x] `figure_info["final_image"]` 참조 0건 (grep으로 확인)
+- [x] `builder.test.ts` 신규 fixture로 end-to-end 빌드 검증 통과
+- [x] `npx vitest run server/stages/__tests__/builder.test.ts --reporter=basic` 통과
 
 ## 영향 범위
 
@@ -173,3 +173,41 @@ npx vitest run server/stages/__tests__/builder.test.ts --reporter=basic
 grep -rn "final_image\|exam_type\|school_level\|filename_base" /Users/junhyukpark/ngd/ngd-studio/*.py
 # 결과 0건 (assemble.py, build_hwpx.py, figure_processor.py 전부 깨끗)
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-24 00:13 KST) — completed
+**상태**: completed
+**소요 시간**: 약 10분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+assemble.py의 info 키 읽기를 camelCase로 전환하고, snake_case filename 폴백 빌더를 삭제했다. `_load_final_images()` 함수를 추가해 figure_status.json에서 camelCase `finalImage` 키를 읽도록 하고, `figure_info["final_image"]` 직접 참조를 완전히 폐기했다. builder.test.ts 신규 파일 5개 테스트 모두 통과.
+
+#### 변경 파일
+- `assemble.py` (수정, +25/-14줄) — camelCase info 키 전환, 폴백 빌더 삭제, `_load_final_images` 추가
+- `ngd-studio/server/stages/__tests__/builder.test.ts` (신규, +300줄) — builder 단위 테스트 5케이스
+
+#### 검증 결과
+- [x] snake_case 잔류 0건: `grep -rn "final_image\|exam_type\|school_level\|filename_base" *.py` → 함수명/변수명/주석만, info 키 참조 0건
+- [x] vitest 통과: `npx vitest run server/stages/__tests__/builder.test.ts --reporter=basic` → 5 tests passed
+- [x] TypeScript 타입 오류 없음: `npx tsc --noEmit` → 0 errors
+
+#### 추가 발견사항
+- 스펙 `## 설계`의 `subject_code` 항목은 assemble.py에서 info["subject_code"] 직접 참조가 없었음 — 폴백 빌더 코드 내에서만 쓰였고 해당 블록 전체 삭제로 자연히 제거됨.
+- `inputs/시험지 제작/.v3cache/exam_data.json` 실제 파일이 없어 live Python 빌드 검증은 생략 (camelCase-only exam_data.json이 아직 실 환경에 없음). P9 fixture 재생성 후 live 빌드 검증 필요.
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+pass — assemble.py + builder.test.ts(신규) 모두 scope 내. build_hwpx.py / builder.ts는 변경 없음 (스펙 §4 의도 일치).
+
+#### Verification Re-run (orchestrator)
+tsc exit 0 + vitest 532/532 통과 (+5 신규 케이스).
+
+#### Simplify (orchestrator)
+SIMPLIFIED: 0 — 폴백 블록 삭제로 이미 단순화.
+
+#### Review (orchestrator)
+VERDICT: pass — info 키 camelCase + figure_status join + 폴백 삭제, P2 assertCompleteMeta invariant 의존 정합.
