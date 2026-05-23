@@ -1,5 +1,6 @@
 import type { AIProviderId, AIStageKey } from "./types";
 
+export type ImageProviderId = "gemini" | "codex-cli";
 export type SelectableProviderId = Extract<
   AIProviderId,
   "auto" | "claude-cli" | "claude-sdk" | "codex-cli" | "openai-sdk"
@@ -25,6 +26,7 @@ export const DEEPSEEK_MODEL_STAGE_KEYS: AIStageKey[] = [
 export const DEFAULT_AI_SETTINGS: AISettings = {
   defaultProvider: "auto",
   stageOverrides: {},
+  imageProvider: "gemini",
   figureRegen: true,
   imageCleaningEnabled: true,
   checkerMaxAttempts: 2,
@@ -35,6 +37,8 @@ export const DEFAULT_AI_SETTINGS: AISettings = {
 export interface AISettings {
   defaultProvider: SelectableProviderId;
   stageOverrides: StageOverrideMap;
+  /** 그림/이미지 정리 단계에서 사용할 이미지 생성 provider. */
+  imageProvider: ImageProviderId;
   /** Gemini(nano-banana)로 그림을 재생성할지 여부. false면 crop+워터마크만. */
   figureRegen: boolean;
   /** nano-banana로 문제 이미지의 손글씨/필기 흔적을 정리할지 여부. false면 원본 그대로 사용. */
@@ -81,6 +85,7 @@ const stageProviders = new Set<StageProviderId>([
 ]);
 
 const stageKeys = new Set<AIStageKey>(AI_STAGE_KEYS);
+const imageProviders = new Set<ImageProviderId>(["gemini", "codex-cli"]);
 
 export function isSelectableProviderId(value: unknown): value is SelectableProviderId {
   if (typeof value !== "string") return false;
@@ -119,6 +124,15 @@ function normalizeStageProviderId(value: unknown): StageProviderId | undefined {
     return value as StageProviderId;
   }
   return undefined;
+}
+
+export function isImageProviderId(value: unknown): value is ImageProviderId {
+  return typeof value === "string" && imageProviders.has(value as ImageProviderId);
+}
+
+function normalizeImageProviderId(value: unknown): ImageProviderId {
+  if (isImageProviderId(value)) return value;
+  return DEFAULT_AI_SETTINGS.imageProvider;
 }
 
 export function normalizeStageOverrides(value: unknown): StageOverrideMap {
@@ -184,6 +198,7 @@ export function readAISettings(storage = getBrowserStorage()): AISettings {
     return {
       defaultProvider: normalizeSelectableProviderId(parsed.defaultProvider),
       stageOverrides: normalizeStageOverrides(parsed.stageOverrides),
+      imageProvider: normalizeImageProviderId(parsed.imageProvider),
       figureRegen: parsed.figureRegen !== false,
       imageCleaningEnabled: parsed.imageCleaningEnabled !== false,
       checkerMaxAttempts: normalizeCheckerMaxAttempts(parsed.checkerMaxAttempts),
@@ -208,6 +223,7 @@ export function writeAISettings(settings: AISettings, storage = getBrowserStorag
   const normalized: AISettings = {
     defaultProvider: normalizeSelectableProviderId(settings.defaultProvider),
     stageOverrides: normalizeStageOverrides(settings.stageOverrides),
+    imageProvider: normalizeImageProviderId(settings.imageProvider),
     figureRegen: settings.figureRegen !== false,
     imageCleaningEnabled: settings.imageCleaningEnabled !== false,
     checkerMaxAttempts: normalizeCheckerMaxAttempts(settings.checkerMaxAttempts),

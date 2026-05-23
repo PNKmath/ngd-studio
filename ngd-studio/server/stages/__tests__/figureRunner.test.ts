@@ -168,6 +168,26 @@ describe("runFigureStage — spawn args", () => {
     expect(callArgs.args).not.toContain("--no-regen");
   });
 
+  it("regenerate=true with imageProvider: passes --image-provider", async () => {
+    const dir = await makeTempDir();
+    const statusOutPath = path.join(dir, "figure_status.json");
+    mockSuccessSpawn(statusOutPath, doneFixture);
+
+    await runFigureStage({
+      examDataPath: path.join(dir, "exam_data.json"),
+      outputDir: path.join(dir, "images"),
+      statusOutPath,
+      regenerate: true,
+      imageProvider: "codex-cli",
+      baseDir: dir,
+    });
+
+    const callArgs = runStageCommandMock.mock.calls[0]![0] as { args: string[] };
+    const providerIdx = callArgs.args.indexOf("--image-provider");
+    expect(providerIdx).toBeGreaterThan(-1);
+    expect(callArgs.args[providerIdx + 1]).toBe("codex-cli");
+  });
+
   it("questionNumber specified: passes --question N flag", async () => {
     const dir = await makeTempDir();
     const statusOutPath = path.join(dir, "figure_status.json");

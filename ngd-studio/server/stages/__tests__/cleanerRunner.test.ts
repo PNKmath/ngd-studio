@@ -148,6 +148,25 @@ describe("runCleanerStage — spawn args", () => {
     expect(callArgs.args).not.toContain("--no-clean");
   });
 
+  it("clean=true with imageProvider → passes --image-provider", async () => {
+    const dir = await makeTempDir();
+    const statusOutPath = path.join(dir, "cleaning_status.json");
+    mockSuccessSpawn(statusOutPath, DONE_FIXTURE);
+
+    await runCleanerStage({
+      questionImagesDir: path.join(dir, "question_images"),
+      statusOutPath,
+      clean: true,
+      imageProvider: "codex-cli",
+      baseDir: dir,
+    });
+
+    const callArgs = runStageCommandMock.mock.calls[0]![0] as { args: string[] };
+    const providerIdx = callArgs.args.indexOf("--image-provider");
+    expect(providerIdx).toBeGreaterThan(-1);
+    expect(callArgs.args[providerIdx + 1]).toBe("codex-cli");
+  });
+
   it("questionNumber specified → passes --question N", async () => {
     const dir = await makeTempDir();
     const statusOutPath = path.join(dir, "cleaning_status.json");

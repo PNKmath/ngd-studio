@@ -3,7 +3,7 @@ import { readFile, stat } from "fs/promises";
 import type { SSEEvent } from "@/lib/claude";
 import type { AIProviderId } from "@/lib/ai/types";
 import { getProviderAdapter } from "@/lib/ai/registry";
-import type { StageOverrideMap, StageProviderId, StageSkipMap } from "@/lib/ai/settings";
+import type { ImageProviderId, StageOverrideMap, StageProviderId, StageSkipMap } from "@/lib/ai/settings";
 import type { ProviderTelemetryEntry } from "@/lib/ai/retry";
 import { createProviderTelemetryEntry } from "@/lib/ai/retry";
 import type { StageCache } from "./cache";
@@ -51,6 +51,8 @@ export interface OrchestratorInput {
   defaultProvider: AIProviderId;
   /** stage별 스킵 플래그. 현재는 create.verifier만 의미 있음. */
   stageSkip?: StageSkipMap;
+  /** 이미지 정리/그림 재생성 단계에서 사용할 provider. */
+  imageProvider?: ImageProviderId;
   /** Gemini로 그림을 재생성할지. false면 crop+워터마크만 (figure_processor.py --no-regen). default true. */
   figureRegen?: boolean;
   /** nano-banana로 문제 이미지의 손글씨/필기 흔적을 정리할지. default true. false면 원본 그대로. */
@@ -769,10 +771,11 @@ export async function runStageOrchestrator(
     // 토글 OFF면 원본을 cleaned/로 복사만(spawn은 함). resume에서 cleaned가 이미 있으면 skip.
     const runCleaner = shouldRunStage(startStage, "extractor") && stillUnder("cleaning");
     if (runCleaner && !checkAborted()) {
+      const imageProvider = input.imageProvider ?? "gemini";
       const cleaningEnabled = input.imageCleaningEnabled !== false;
       const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
       let cleanFlag = cleaningEnabled;
-      if (cleanFlag && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
+      if (cleanFlag && imageProvider === "gemini" && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
         send(logEvent(
           "create.cleaned",
           "GEMINI_API_KEY 미설정 — nano-banana 정리 생략, 원본 그대로 진행합니다.",
@@ -789,12 +792,13 @@ export async function runStageOrchestrator(
         send(stageEvent("create.cleaned", "running"));
         send(progressEvent("create.cleaned", 5));
         send(logEvent("create.cleaned", cleanFlag
-          ? "image_cleaner.py 실행 (nano-banana로 손글씨 제거)."
+          ? `image_cleaner.py 실행 (${imageProvider}로 손글씨 제거).`
           : "image_cleaner.py 실행 (--no-clean: 원본 복사만)."));
         const cleanerResult = await runCleanerStage({
           questionImagesDir: cache.paths.questionImagesDir,
           statusOutPath: cache.paths.cleaningStatus,
           clean: cleanFlag,
+          imageProvider,
           baseDir,
           env: runtimeEnv as NodeJS.ProcessEnv,
         });
@@ -910,9 +914,10 @@ export async function runStageOrchestrator(
 
     // ── Stage 4: Figure ────────────────────────
     if (!checkAborted() && shouldRunStage(startStage, "figure") && stillUnder("figure")) {
+      const imageProvider = input.imageProvider ?? "gemini";
       const runtimeEnv = readRuntimeEnv() as Record<string, string | undefined>;
       let regenerate = input.figureRegen !== false;
-      if (regenerate && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
+      if (regenerate && imageProvider === "gemini" && !runtimeEnv.GEMINI_API_KEY && !runtimeEnv.GOOGLE_API_KEY) {
         send(logEvent(
           "figure",
           "GEMINI_API_KEY 미설정 — Gemini 재생성 건너뛰고 crop+워터마크 폴백으로 진행합니다.",
@@ -923,7 +928,7 @@ export async function runStageOrchestrator(
       send(stageEvent("figure", "running"));
       send(progressEvent("figure", 5));
       send(logEvent("figure", regenerate
-        ? "figure_processor.py를 실행합니다 (Gemini 재생성)."
+        ? `figure_processor.py를 실행합니다 (${imageProvider} 재생성).`
         : "figure_processor.py를 실행합니다 (crop만, Gemini 호출 없음)."));
 
       const figureResult = await runFigureStage({
@@ -931,6 +936,7 @@ export async function runStageOrchestrator(
         outputDir: path.join(baseDir, "outputs", "images"),
         statusOutPath: cache.paths.figureStatus,
         regenerate,
+        imageProvider,
         baseDir,
         env: runtimeEnv as NodeJS.ProcessEnv,
       });

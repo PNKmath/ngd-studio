@@ -10,6 +10,7 @@
 
 import path from "path";
 import { readFile } from "fs/promises";
+import type { ImageProviderId } from "@/lib/ai/settings";
 import { runStageCommand } from "./commands";
 
 // ──────────────────────────────────────────────
@@ -23,6 +24,8 @@ export interface CleanerRunnerInput {
   statusOutPath: string;
   /** false → --no-clean (Gemini 호출 없이 원본 복사) */
   clean: boolean;
+  /** 이미지 정리 provider. clean=false면 사용하지 않음. */
+  imageProvider?: ImageProviderId;
   /** 단일 문제만 처리하고 싶을 때 */
   questionNumber?: number;
   /** image_cleaner.py가 위치한 디렉터리 (기본 process.cwd()) */
@@ -76,6 +79,10 @@ export async function runCleanerStage(
 
   if (!input.clean) {
     args.push("--no-clean");
+  }
+
+  if (input.clean && input.imageProvider) {
+    args.push("--image-provider", input.imageProvider);
   }
 
   if (input.questionNumber !== undefined) {

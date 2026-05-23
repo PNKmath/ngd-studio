@@ -12,6 +12,7 @@ import {
   readAISettings,
   writeAISettings,
   type AISettings,
+  type ImageProviderId,
   type SelectableProviderId,
   type StageProviderId,
 } from "@/lib/ai/settings";
@@ -110,6 +111,33 @@ const PROVIDER_LABEL: Record<AIProviderId, string> = {
   "deepseek-v4": "DeepSeek V4",
 };
 
+const IMAGE_PROVIDER_LABEL: Record<ImageProviderId, string> = {
+  gemini: "Nano Banana / Gemini",
+  "codex-cli": "Codex CLI ImageGen",
+};
+
+const imageProviderOptions: Array<{
+  id: ImageProviderId;
+  label: string;
+  detail: string;
+  authNote: string;
+  experimental?: boolean;
+}> = [
+  {
+    id: "gemini",
+    label: "Nano Banana / Gemini",
+    detail: "기존 Gemini 이미지 모델로 손글씨 제거와 figure 재생성을 수행합니다.",
+    authNote: "GEMINI_API_KEY 필요",
+  },
+  {
+    id: "codex-cli",
+    label: "Codex CLI ImageGen",
+    detail: "로컬 Codex CLI의 built-in image generation/editing tool을 실험적으로 사용합니다.",
+    authNote: "codex 설치 및 로그인 필요",
+    experimental: true,
+  },
+];
+
 // ── Tab type ─────────────────────────────────────────────────────────────────
 
 type SettingsTab = "engine" | "keys";
@@ -187,7 +215,7 @@ const apiKeyFields = [
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("engine");
-  const [settings, setSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
+  const [settings, setSettings] = useState<AISettings>(() => readAISettings());
   const [envValues, setEnvValues] = useState<Record<string, string>>({});
   const [envStatus, setEnvStatus] = useState<Record<string, EnvKeyStatus>>({});
   const [cliStatus, setCliStatus] = useState<StatusResponse>({});
@@ -227,7 +255,7 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    setSettings(readAISettings());
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-time sync with server-backed env/CLI status.
     void loadEnvSettings();
     void loadCliStatus();
   }, [loadEnvSettings, loadCliStatus]);
@@ -244,6 +272,10 @@ export default function SettingsPage() {
       next[stageKey] = provider;
     }
     setSettings(writeAISettings({ ...settings, stageOverrides: next }));
+  };
+
+  const selectImageProvider = (imageProvider: ImageProviderId) => {
+    setSettings(writeAISettings({ ...settings, imageProvider }));
   };
 
   const toggleDeepSeek = () => {
@@ -454,7 +486,7 @@ export default function SettingsPage() {
                 <div>
                   <h2 className="text-base font-medium">AI 단계별 Provider 선택</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    각 stage에서 사용할 provider를 지정합니다. "자동"은 기본 provider를 사용합니다.
+                    각 stage에서 사용할 provider를 지정합니다. &quot;자동&quot;은 기본 provider를 사용합니다.
                   </p>
                 </div>
                 <Button
@@ -539,33 +571,96 @@ export default function SettingsPage() {
               그림 처리
             </div>
 
-            <div className="rounded-lg border bg-card px-4 py-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <h2 className="text-base font-medium">Gemini로 그림 재생성</h2>
-                  <p className="text-sm text-muted-foreground">
-                    켜져 있으면 has_figure 문제의 그림을 PDF에서 crop → Gemini(nano-banana)로 깔끔하게 재생성 → 트리밍 + NGD 워터마크.
-                    끄면 crop 결과를 그대로 워터마크만 붙여 사용합니다 (Gemini API 호출 없음, 속도↑·비용↓, 손글씨/스캔 그대로).
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={settings.figureRegen}
-                  onClick={() => setSettings(writeAISettings({ ...settings, figureRegen: !settings.figureRegen }))}
-                  className={cn(
-                    "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
-                    settings.figureRegen ? "bg-primary" : "bg-muted",
-                  )}
-                >
-                  <span
-                    aria-hidden="true"
+            <div className="rounded-lg border bg-card">
+              <div className="border-b px-4 py-4">
+                <h2 className="text-base font-medium">이미지 처리 Provider</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  손글씨 제거와 figure 재생성에 사용할 이미지 provider입니다. Codex CLI는 built-in image generation tool을 사용하는 실험 옵션입니다.
+                </p>
+              </div>
+
+              <div className="grid gap-2 p-4 md:grid-cols-2">
+                {imageProviderOptions.map((option) => {
+                  const selected = option.id === settings.imageProvider;
+                  const hasWarning = option.id === "gemini"
+                    ? !(envStatus.GEMINI_API_KEY?.configured ?? false)
+                    : !(cliStatus.codexCli?.available ?? false);
+
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => selectImageProvider(option.id)}
+                      className={cn(
+                        "min-h-32 rounded-lg border p-4 text-left transition-colors",
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : hasWarning
+                          ? "border-destructive/40 hover:border-destructive/60 hover:bg-muted/40"
+                          : "border-border hover:border-primary/40 hover:bg-muted/40"
+                      )}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium">{option.label}</span>
+                          {option.experimental && (
+                            <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                              experimental
+                            </span>
+                          )}
+                          {hasWarning && (
+                            <AlertTriangle className="size-3.5 text-destructive" aria-label={option.authNote} />
+                          )}
+                        </div>
+                        <span
+                          className={cn(
+                            "flex size-5 items-center justify-center rounded-full border",
+                            selected
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-muted-foreground/30 text-transparent"
+                          )}
+                          aria-hidden="true"
+                        >
+                          <Check className="size-3.5" />
+                        </span>
+                      </div>
+                      <p className="text-xs leading-5 text-muted-foreground">{option.detail}</p>
+                      <p className={cn("mt-3 text-xs", hasWarning ? "text-destructive" : "text-muted-foreground")}>
+                        {hasWarning ? "⚠ " : ""}{option.authNote}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-4 border-t px-4 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-medium">그림 재생성</h3>
+                    <p className="text-sm text-muted-foreground">
+                      켜져 있으면 has_figure 문제의 그림을 PDF에서 crop → {IMAGE_PROVIDER_LABEL[settings.imageProvider]}로 재생성 → 트리밍 + NGD 워터마크.
+                      끄면 crop 결과를 그대로 워터마크만 붙여 사용합니다.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={settings.figureRegen}
+                    onClick={() => setSettings(writeAISettings({ ...settings, figureRegen: !settings.figureRegen }))}
                     className={cn(
-                      "pointer-events-none inline-block size-5 transform rounded-full bg-background shadow ring-0 transition-transform",
-                      settings.figureRegen ? "translate-x-5" : "translate-x-0",
+                      "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2",
+                      settings.figureRegen ? "bg-primary" : "bg-muted",
                     )}
-                  />
-                </button>
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "pointer-events-none inline-block size-5 transform rounded-full bg-background shadow ring-0 transition-transform",
+                        settings.figureRegen ? "translate-x-5" : "translate-x-0",
+                      )}
+                    />
+                  </button>
+                </div>
               </div>
             </div>
           </section>

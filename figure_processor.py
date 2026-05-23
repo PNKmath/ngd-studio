@@ -13,16 +13,11 @@ CLI usage:
 import argparse
 import io
 import json
-import os
 import sys
-import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
-from google import genai
-from google.genai import types
-
-GEMINI_MODEL = "gemini-3.1-flash-image-preview"
+from image_provider_adapter import IMAGE_PROVIDERS, ImageProviderError, create_image_provider
 
 PROMPT_TEMPLATE = (
     "You are extracting a math diagram from a scanned Korean math exam "
@@ -129,40 +124,8 @@ def trim_and_watermark(img_path: str, output_path: str) -> None:
     cropped.convert("RGB").save(output_path)
 
 
-def generate_with_gemini(
-    client, ref_path: str, desc: str, ar: str
-) -> tuple[bytes | None, str | None]:
-    """Returns (image_bytes, error_message). error_message is None on success."""
-    prompt = PROMPT_TEMPLATE.format(desc=f"{desc} " if desc else "")
-    ref_image = Image.open(ref_path)
-
-    last_error: str | None = None
-    for attempt in range(3):
-        try:
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=[prompt, ref_image],
-                config=types.GenerateContentConfig(
-                    response_modalities=["TEXT", "IMAGE"],
-                    image_config=types.ImageConfig(aspect_ratio=ar, image_size="1K"),
-                ),
-            )
-            for part in response.candidates[0].content.parts:
-                if part.inline_data is not None:
-                    return part.inline_data.data, None
-            last_error = "no image in response"
-            print(f"    attempt {attempt + 1}: 이미지 없음, 재시도...")
-        except Exception as e:
-            last_error = f"{type(e).__name__}: {e}"
-            print(f"    attempt {attempt + 1}: {e}")
-            if attempt < 2:
-                time.sleep(3)
-
-    return None, last_error
-
-
 def process_figure(
-    client,
+    provider,
     prob: dict,
     cache_dir: Path,
     question_images_dir: Path,
@@ -228,11 +191,12 @@ def process_figure(
         print(f"  [Q{n}] 완료 → {final_path}")
         return _make_q_status(_is_boundary_uncertain(box, iw, ih, None))
 
-    print(f"  [Q{n}] Gemini 생성 중... (crop={box}, aspect={ar})")
+    provider_label = getattr(provider, "label", "image provider")
+    print(f"  [Q{n}] {provider_label} 생성 중... (crop={box}, aspect={ar})")
 
-    gen_data, gen_error = generate_with_gemini(client, str(ref_path), desc, ar)
+    gen_data, gen_error = provider.regenerate_figure(ref_path, desc, ar, PROMPT_TEMPLATE)
     if gen_data is None:
-        err_msg = f"gemini generation failed after 3 attempts: {gen_error}" if gen_error else "gemini generation failed after 3 attempts"
+        err_msg = f"{provider_label} generation failed: {gen_error}" if gen_error else f"{provider_label} generation failed"
         print(f"  [Q{n}] 생성 실패: {gen_error}")
         return {"status": "failed", "error": err_msg}
 
@@ -275,7 +239,13 @@ def main() -> None:
     parser.add_argument(
         "--no-regen",
         action="store_true",
-        help="Skip Gemini regeneration — crop+watermark only",
+        help="Skip image provider regeneration — crop+watermark only",
+    )
+    parser.add_argument(
+        "--image-provider",
+        choices=IMAGE_PROVIDERS,
+        default="gemini",
+        help="Image regeneration provider (default: gemini)",
     )
     parser.add_argument(
         "--question",
@@ -297,13 +267,13 @@ def main() -> None:
         status_out_path = cache_dir / "figure_status.json"
 
     if not args.no_regen:
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            print("ERROR: GEMINI_API_KEY 환경변수 없음")
+        try:
+            provider = create_image_provider(args.image_provider)
+        except ImageProviderError as e:
+            print(f"ERROR: {e}")
             sys.exit(1)
-        client = genai.Client(api_key=api_key)
     else:
-        client = None
+        provider = None
 
     with open(str(exam_data_path), encoding="utf-8") as f:
         exam_data = json.load(f)
@@ -329,13 +299,13 @@ def main() -> None:
         )
         return
 
-    print(f"그림 처리 시작: {len(figures)}개")
+    print(f"그림 처리 시작: {len(figures)}개 (provider={args.image_provider}, no_regen={args.no_regen})")
     questions_status: dict[str, dict] = {}
 
     for prob in figures:
         n = prob["number"]
         q_result = process_figure(
-            client, prob, cache_dir, question_images_dir, output_dir, args.no_regen
+            provider, prob, cache_dir, question_images_dir, output_dir, args.no_regen
         )
         questions_status[str(n)] = q_result
         if q_result["status"] in ("ok", "boundary_uncertain"):

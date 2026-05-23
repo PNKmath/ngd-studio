@@ -15,18 +15,13 @@ CLI usage:
 import argparse
 import io
 import json
-import os
 import re
 import shutil
 import sys
-import time
 from pathlib import Path
 
 from PIL import Image
-from google import genai
-from google.genai import types
-
-GEMINI_MODEL = "gemini-3.1-flash-image-preview"
+from image_provider_adapter import IMAGE_PROVIDERS, ImageProviderError, create_image_provider
 
 # SKILL.md Step 2-0의 cleaning prompt — verbatim.
 CLEANING_PROMPT = (
@@ -54,31 +49,6 @@ def aspect_ratio_str(w: int, h: int) -> str:
         return "9:16"
 
 
-def clean_with_gemini(client, ref_path: Path, ar: str) -> bytes | None:
-    ref_image = Image.open(str(ref_path))
-
-    for attempt in range(3):
-        try:
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=[CLEANING_PROMPT, ref_image],
-                config=types.GenerateContentConfig(
-                    response_modalities=["TEXT", "IMAGE"],
-                    image_config=types.ImageConfig(aspect_ratio=ar, image_size="2K"),
-                ),
-            )
-            for part in response.candidates[0].content.parts:
-                if part.inline_data is not None:
-                    return part.inline_data.data
-            print(f"    attempt {attempt + 1}: 이미지 없음, 재시도...")
-        except Exception as e:
-            print(f"    attempt {attempt + 1}: {e}")
-            if attempt < 2:
-                time.sleep(3)
-
-    return None
-
-
 def discover_questions(question_images_dir: Path) -> list[int]:
     if not question_images_dir.is_dir():
         return []
@@ -95,7 +65,7 @@ def discover_questions(question_images_dir: Path) -> list[int]:
 
 
 def process_question(
-    client,
+    provider,
     n: int,
     question_images_dir: Path,
     cleaned_dir: Path,
@@ -116,18 +86,19 @@ def process_question(
     img = Image.open(str(src))
     iw, ih = img.size
     ar = aspect_ratio_str(iw, ih)
-    print(f"  [Q{n}] Gemini cleaning 중... (aspect={ar})")
+    provider_label = getattr(provider, "label", "image provider")
+    print(f"  [Q{n}] {provider_label} cleaning 중... (aspect={ar})")
 
-    gen_data = clean_with_gemini(client, src, ar)
+    gen_data, gen_error = provider.clean_image(src, ar, CLEANING_PROMPT)
     if gen_data is None:
         # 실패 시 원본을 복사해 다운스트림이 계속 진행되게 한다.
         shutil.copyfile(str(src), str(dst))
-        print(f"  [Q{n}] cleaning 실패 → 원본 fallback")
+        print(f"  [Q{n}] cleaning 실패 → 원본 fallback: {gen_error}")
         return {
             "status": "failed",
             "image": str(dst),
             "cleaned": False,
-            "error": "gemini cleaning failed after 3 attempts (original copied as fallback)",
+            "error": f"{provider_label} cleaning failed: {gen_error} (original copied as fallback)",
         }
 
     try:
@@ -170,7 +141,13 @@ def main() -> None:
     parser.add_argument(
         "--no-clean",
         action="store_true",
-        help="Gemini 호출 없이 원본을 cleaned/ 로 복사만",
+        help="이미지 provider 호출 없이 원본을 cleaned/ 로 복사만",
+    )
+    parser.add_argument(
+        "--image-provider",
+        choices=IMAGE_PROVIDERS,
+        default="gemini",
+        help="이미지 정리 provider (default: gemini)",
     )
     args = parser.parse_args()
 
@@ -179,13 +156,13 @@ def main() -> None:
     status_out_path = Path(args.status_out)
 
     if not args.no_clean:
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        if not api_key:
-            print("ERROR: GEMINI_API_KEY 환경변수 없음")
+        try:
+            provider = create_image_provider(args.image_provider)
+        except ImageProviderError as e:
+            print(f"ERROR: {e}")
             sys.exit(1)
-        client = genai.Client(api_key=api_key)
     else:
-        client = None
+        provider = None
 
     cleaned_dir.mkdir(parents=True, exist_ok=True)
     status_out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -203,11 +180,11 @@ def main() -> None:
         )
         return
 
-    print(f"이미지 정리 시작: {len(targets)}개 (no_clean={args.no_clean})")
+    print(f"이미지 정리 시작: {len(targets)}개 (no_clean={args.no_clean}, provider={args.image_provider})")
     questions_status: dict[str, dict] = {}
     for n in targets:
         q_result = process_question(
-            client, n, question_images_dir, cleaned_dir, args.no_clean
+            provider, n, question_images_dir, cleaned_dir, args.no_clean
         )
         questions_status[str(n)] = q_result
 

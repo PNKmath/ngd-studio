@@ -10,6 +10,7 @@
 
 import path from "path";
 import { readFile } from "fs/promises";
+import type { ImageProviderId } from "@/lib/ai/settings";
 import { runStageCommand } from "./commands";
 
 // ──────────────────────────────────────────────
@@ -25,6 +26,8 @@ export interface FigureRunnerInput {
   statusOutPath: string;
   /** false → --no-regen: crop+watermark only, skip Gemini */
   regenerate: boolean;
+  /** 이미지 재생성 provider. regenerate=false면 사용하지 않음. */
+  imageProvider?: ImageProviderId;
   /** Optional: reprocess only this question number */
   questionNumber?: number;
   /** Directory containing figure_processor.py (defaults to process.cwd()) */
@@ -93,6 +96,10 @@ export async function runFigureStage(
 
   if (!input.regenerate) {
     args.push("--no-regen");
+  }
+
+  if (input.regenerate && input.imageProvider) {
+    args.push("--image-provider", input.imageProvider);
   }
 
   if (input.questionNumber !== undefined) {

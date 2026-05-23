@@ -19,7 +19,6 @@ import { DownloadButton } from "@/components/shared/DownloadButton";
 import { FollowupChat } from "@/components/shared/FollowupChat";
 import {
   AI_STAGE_KEYS,
-  DEFAULT_AI_SETTINGS,
   readAISettings,
   writeAISettings,
   type AISettings,
@@ -192,11 +191,10 @@ export default function CreateV4Page() {
   }, [v3Meta, startJob, setV3Meta]);
 
   const [autoSplitEnabled, setAutoSplitEnabled] = useState(false);
-  const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
+  const [aiSettings, setAiSettings] = useState<AISettings>(() => readAISettings());
 
   useEffect(() => {
     setAutoSplitEnabled(loadStoredAutoSplitEnabled());
-    setAiSettings(readAISettings());
     const onFocus = () => setAiSettings(readAISettings());
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
@@ -706,7 +704,9 @@ export default function CreateV4Page() {
                 className="accent-primary w-3.5 h-3.5"
               />
               <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors font-bold tracking-tight">
-                이미지 정리 <span className="font-normal opacity-70">(손글씨 제거, Gemini API 사용)</span>
+                이미지 정리 <span className="font-normal opacity-70">
+                  (손글씨 제거, {aiSettings.imageProvider === "codex-cli" ? "Codex CLI ImageGen" : "Gemini API"} 사용)
+                </span>
               </span>
             </label>
             <div className="flex items-center gap-3">

@@ -6,6 +6,7 @@ import {
   allModelStagesUseDeepSeek,
   createDeepSeekStageOverrides,
   isAIStageKey,
+  isImageProviderId,
   isSelectableProviderId,
   isStageProviderId,
   normalizeStageOverrides,
@@ -52,9 +53,10 @@ describe("AI settings storage", () => {
 
   it("writes normalized settings", () => {
     const storage = createStorage();
-    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, figureRegen: true, imageCleaningEnabled: true, checkerMaxAttempts: 2, verifierMaxAttempts: 3, stageSkip: {} }, storage)).toEqual({
+    expect(writeAISettings({ defaultProvider: "claude-cli", stageOverrides: {}, imageProvider: "codex-cli", figureRegen: true, imageCleaningEnabled: true, checkerMaxAttempts: 2, verifierMaxAttempts: 3, stageSkip: {} }, storage)).toEqual({
       defaultProvider: "claude-cli",
       stageOverrides: {},
+      imageProvider: "codex-cli",
       figureRegen: true,
       imageCleaningEnabled: true,
       checkerMaxAttempts: 2,
@@ -62,6 +64,18 @@ describe("AI settings storage", () => {
       stageSkip: {},
     });
     expect(readDefaultProvider(storage)).toBe("claude-cli");
+  });
+
+  it("exposes image providers and defaults invalid values to gemini", () => {
+    expect(isImageProviderId("gemini")).toBe(true);
+    expect(isImageProviderId("codex-cli")).toBe(true);
+    expect(isImageProviderId("openai-sdk")).toBe(false);
+
+    const valid = createStorage(JSON.stringify({ imageProvider: "codex-cli" }));
+    expect(readAISettings(valid).imageProvider).toBe("codex-cli");
+
+    const invalid = createStorage(JSON.stringify({ imageProvider: "unknown" }));
+    expect(readAISettings(invalid).imageProvider).toBe("gemini");
   });
 
   it("exposes auto, claude-cli, claude-sdk, codex-cli, openai-sdk as selectable providers", () => {
@@ -129,6 +143,7 @@ describe("AI settings storage", () => {
       stageOverrides: {
         "review.reviewer": "deepseek-v4",
       },
+      imageProvider: "gemini",
       figureRegen: true,
       imageCleaningEnabled: true,
       checkerMaxAttempts: 2,
@@ -141,6 +156,7 @@ describe("AI settings storage", () => {
       stageOverrides: {
         "review.reviewer": "deepseek-v4",
       },
+      imageProvider: "gemini",
       figureRegen: true,
       imageCleaningEnabled: true,
       checkerMaxAttempts: 2,
@@ -188,12 +204,14 @@ describe("AI settings storage", () => {
     const storage = createStorage(JSON.stringify({
       defaultProvider: "auto",
       stageOverrides: {},
+      imageProvider: "gemini",
       figureRegen: true,
       // checkerMaxAttempts missing
     }));
     expect(readAISettings(storage)).toEqual({
       defaultProvider: "auto",
       stageOverrides: {},
+      imageProvider: "gemini",
       figureRegen: true,
       imageCleaningEnabled: true,
       checkerMaxAttempts: 2,
@@ -256,6 +274,7 @@ describe("AI settings storage", () => {
     const storage = createStorage(JSON.stringify({
       defaultProvider: "auto",
       stageOverrides: {},
+      imageProvider: "gemini",
       figureRegen: true,
       checkerMaxAttempts: 2,
       // stageSkip missing — legacy

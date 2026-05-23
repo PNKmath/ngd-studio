@@ -24,7 +24,7 @@ import {
   type AIStageKey,
 } from "../lib/ai";
 import { readRuntimeEnv } from "../lib/server/runtimeEnv";
-import { normalizeStageOverrides, normalizeStageSkip, type StageOverrideMap, type StageSkipMap } from "../lib/ai/settings";
+import { normalizeStageOverrides, normalizeStageSkip, isImageProviderId, type ImageProviderId, type StageOverrideMap, type StageSkipMap } from "../lib/ai/settings";
 import type { ProviderTelemetryEntry } from "../lib/ai/retry";
 import { buildCropPrompt } from "../lib/prompts";
 import { createJobStore } from "./stages/jobStore";
@@ -292,6 +292,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     jobId: string;
     provider?: AIProviderId;
     stageOverrides?: Partial<Record<AIStageKey, AIProviderId>>;
+    imageProvider?: ImageProviderId;
     figureRegen?: boolean;
     imageCleaningEnabled?: boolean;
     checkerMaxAttempts?: number;
@@ -311,6 +312,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   let resolvedProvider: Exclude<AIProviderId, "auto">;
   let stageOverrides: StageOverrideMap;
   let stageSkip: StageSkipMap;
+  const imageProvider = isImageProviderId(body.imageProvider) ? body.imageProvider : "gemini";
   let primaryStageKey: AIStageKey | undefined;
   try {
     requestedProvider = normalizeProviderId(body.provider);
@@ -415,6 +417,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     requestedProvider,
     provider: resolvedProvider,
     stageOverrides,
+    imageProvider,
     checkerMaxAttempts: body.checkerMaxAttempts ?? 2,
     verifierMaxAttempts: body.verifierMaxAttempts ?? 3,
     status: "running",
@@ -484,6 +487,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         questionImages: questionImagePaths,
         stageOverrides,
         stageSkip,
+        imageProvider,
         figureRegen: body.figureRegen,
         imageCleaningEnabled: body.imageCleaningEnabled,
         checkerMaxAttempts: body.checkerMaxAttempts,
@@ -548,6 +552,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         ...jobData,
         requestedProvider,
         provider: resolvedProvider,
+        imageProvider,
         providerTelemetry,
         status: finalStatus,
         finishedAt: new Date().toISOString(),
@@ -573,4 +578,3 @@ function inferPrimaryStageKey(mode: string, resumeFrom?: string): AIStageKey | u
   }
   return undefined;
 }
-
