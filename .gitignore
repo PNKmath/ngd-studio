@@ -7,6 +7,7 @@ __pycache__/
 *.backup*
 *.bak-*
 *.bak
+.DS_Store
 
 # Runtime cache
 .v3cache/
@@ -34,6 +35,7 @@ ngd-studio/sse_test*.txt
 ngd-studio/data/jobs/
 
 # Node
+node_modules/
 ngd-studio/node_modules/
 ngd-studio/.next/
 
