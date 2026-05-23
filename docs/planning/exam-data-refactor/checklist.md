@@ -19,11 +19,11 @@ created: 2026-05-23
 | 4 | [phase-04-assemble-camelcase.md](./phase-04-assemble-camelcase.md) | 6 | 6 | 100% | completed | 0a4d742 |
 | 5 | [phase-05-session-meta-move.md](./phase-05-session-meta-move.md) | 5 | 5 | 100% | completed | 6288ed0 |
 | 6 | [phase-06-create-start-atomic.md](./phase-06-create-start-atomic.md) | 8 | 7 | 88% | completed | 45747c4 |
-| 7 | [phase-07-orchestrator-resume-safety.md](./phase-07-orchestrator-resume-safety.md) | 9 | 0 | 0% | pending | - |
-| 8 | [phase-08-housekeeping-orphans.md](./phase-08-housekeeping-orphans.md) | 5 | 0 | 0% | pending | - |
+| 7 | [phase-07-orchestrator-resume-safety.md](./phase-07-orchestrator-resume-safety.md) | 9 | 9 | 100% | completed | 80612d9 |
+| 8 | [phase-08-housekeeping-orphans.md](./phase-08-housekeeping-orphans.md) | 6 | 6 | 100% | completed | 8f6214c |
 | 9 | [phase-09-fixture-regression.md](./phase-09-fixture-regression.md) | 7 | 0 | 0% | pending | - |
 | 10 | [phase-10-manual-smoke.md](./phase-10-manual-smoke.md) | 6 | 0 | 0% | pending | - |
-| **Total** | | **66** | **36** | **55%** | | |
+| **Total** | | **66** | **51** | **77%** | | |
 
 ## Phase 의존성
 
