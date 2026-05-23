@@ -4,7 +4,6 @@ import path from "path";
 export interface StageCachePaths {
   examDir: string;
   cacheDir: string;
-  previousCacheDir: string;
   questionImagesDir: string;
   cleanedImagesDir: string;
   examData: string;
@@ -51,7 +50,6 @@ export class FileBackedStageCache implements StageCache {
     this.paths = {
       examDir,
       cacheDir,
-      previousCacheDir: path.join(examDir, ".v3cache_prev"),
       questionImagesDir,
       cleanedImagesDir: path.join(questionImagesDir, "cleaned"),
       examData: path.join(cacheDir, "exam_data.json"),

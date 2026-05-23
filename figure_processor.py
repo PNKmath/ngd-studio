@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """NGD Figure Processor - V4: crop → Gemini regenerate → trim + NGD watermark
 
+Note: outputs/images/ 디렉터리는 /api/create/start 가 신규 작업 시점에
+      클리어한다. 본 스크립트는 prob{N}_final.png 를 idempotent 하게 작성만 한다.
+
 CLI usage:
   python3 figure_processor.py \
     --exam-data outputs/<sample>/exam_data.json \

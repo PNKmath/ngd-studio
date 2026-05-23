@@ -8,6 +8,7 @@
  *
  * The tests exercise the four properties specified in the phase design:
  *  1. Happy path — meta + images → .v3cache/session_meta.json + question_images/qNN.png
+ *     + old cache deleted (no .v3cache_prev) + outputs/images/ cleared and recreated
  *  2. Validation errors (no meta, no images)
  *  3. Write-stage failure → final path untouched
  *  4. Commit-stage failure → best-effort recovery + 500
@@ -42,15 +43,17 @@ async function makeTempBase(): Promise<string> {
 /**
  * Create a fake exam directory layout under baseDir, matching what the route expects
  * relative to process.cwd() (which is ngd-studio, so parent = /inputs/시험지 제작).
- * Returns { examDir, cacheDir, imagesDir, lockPath }.
+ * Returns { examDir, cacheDir, imagesDir, lockPath, outputsImagesDir }.
  */
 async function makeExamDirs(baseDir: string) {
   const examDir = path.join(baseDir, "inputs", "시험지 제작");
   const cacheDir = path.join(examDir, ".v3cache");
   const imagesDir = path.join(examDir, "question_images");
   const lockPath = path.join(examDir, ".create_start.lock");
+  const outputsImagesDir = path.join(baseDir, "outputs", "images");
   await mkdir(examDir, { recursive: true });
-  return { examDir, cacheDir, imagesDir, lockPath };
+  await mkdir(outputsImagesDir, { recursive: true });
+  return { examDir, cacheDir, imagesDir, lockPath, outputsImagesDir };
 }
 
 /**
@@ -82,14 +85,20 @@ function makeRequest(
  * Dynamically build a route handler that uses `examDir` instead of
  * the production path derived from process.cwd().
  *
- * @param examDir   Temp directory that stands in for the production exam dir.
+ * @param examDir        Temp directory that stands in for the production exam dir.
+ * @param outputsImagesDir  Temp directory that stands in for outputs/images/.
  * @param overrides Optional function overrides for fs/promises operations.
  *                  Used to inject commit-stage failures in tests.
  *
  * This avoids touching the real filesystem at /inputs/시험지 제작.
+ *
+ * NOTE: mirrors the production route.ts logic exactly:
+ *   - No .v3cache_prev rotation; old cache is deleted directly after commit.
+ *   - outputs/images/ is cleared + recreated after commit succeeds.
  */
 async function buildHandler(
   examDir: string,
+  outputsImagesDir: string,
   overrides?: {
     rename?: (oldPath: string, newPath: string) => Promise<void>;
   }
@@ -98,8 +107,8 @@ async function buildHandler(
   const rename = overrides?.rename ?? fsRename;
 
   const CACHE_DIR = path.join(examDir, ".v3cache");
-  const PREV_DIR = path.join(examDir, ".v3cache_prev");
   const IMAGES_DIR = path.join(examDir, "question_images");
+  const OUTPUTS_IMAGES_DIR = outputsImagesDir;
   const LOCK_PATH = path.join(examDir, ".create_start.lock");
 
   async function exists(p: string): Promise<boolean> {
@@ -193,9 +202,16 @@ async function buildHandler(
       await rename(nextCacheDir, CACHE_DIR);
       await rename(nextImagesDir, IMAGES_DIR);
 
-      if (await exists(PREV_DIR)) await rm(PREV_DIR, { recursive: true, force: true });
-      if (await exists(oldCacheDir)) await rename(oldCacheDir, PREV_DIR);
+      // old cache 삭제 (백업 없음 — .v3cache_prev 회전 없음)
+      if (await exists(oldCacheDir)) await rm(oldCacheDir, { recursive: true, force: true });
       if (await exists(oldImagesDir)) await rm(oldImagesDir, { recursive: true, force: true });
+
+      // outputs/images/ 클리어 + 재생성 (derivable artifact 갱신)
+      if (await exists(OUTPUTS_IMAGES_DIR)) {
+        await rm(OUTPUTS_IMAGES_DIR, { recursive: true, force: true });
+      }
+      await mkdir(OUTPUTS_IMAGES_DIR, { recursive: true });
+
       await rm(LOCK_PATH, { force: true }).catch(() => {});
     } catch (err) {
       try {
@@ -216,7 +232,7 @@ async function buildHandler(
     return NextResponse.json({ ok: true, images: saved });
   }
 
-  return { POST, CACHE_DIR, PREV_DIR, IMAGES_DIR, LOCK_PATH };
+  return { POST, CACHE_DIR, IMAGES_DIR, OUTPUTS_IMAGES_DIR, LOCK_PATH };
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -250,22 +266,25 @@ async function fileExists(p: string): Promise<boolean> {
 describe("POST /api/create/start", () => {
   let baseDir: string;
   let examDir: string;
+  let outputsImagesDir: string;
 
   beforeEach(async () => {
     baseDir = await makeTempBase();
-    ({ examDir } = await makeExamDirs(baseDir));
+    ({ examDir, outputsImagesDir } = await makeExamDirs(baseDir));
   });
 
-  it("정상 흐름: meta + images 2장 → session_meta.json + question_images 존재, .v3cache_prev 회전", async () => {
-    // Pre-populate existing .v3cache to verify rotation
+  it("정상 흐름: meta + images 2장 → session_meta.json + question_images 존재, 이전 캐시 삭제, outputs/images 클리어", async () => {
+    // Pre-populate existing .v3cache to verify old cache is deleted (not rotated to _prev)
     const existingCacheDir = path.join(examDir, ".v3cache");
     const existingImagesDir = path.join(examDir, "question_images");
     await mkdir(existingCacheDir, { recursive: true });
     await writeFile(path.join(existingCacheDir, "old_file.txt"), "old data", "utf-8");
     await mkdir(existingImagesDir, { recursive: true });
     await writeFile(path.join(existingImagesDir, "q01.png"), "old image", "utf-8");
+    // Pre-populate outputs/images with a stale file from a previous exam
+    await writeFile(path.join(outputsImagesDir, "prob5_final.png"), "stale figure", "utf-8");
 
-    const { POST, CACHE_DIR, PREV_DIR, IMAGES_DIR } = await buildHandler(examDir);
+    const { POST, CACHE_DIR, IMAGES_DIR, OUTPUTS_IMAGES_DIR } = await buildHandler(examDir, outputsImagesDir);
     const meta = { schoolLevel: "고", school: "테스트고", grade: 2, year: 2025, subject: "수학 I", semester: "1학기", examType: "중간", range: "지수~로그" };
     const req = makeRequest(meta, [
       { key: "q01", name: "q01.png", data: pngBuffer() },
@@ -293,9 +312,15 @@ describe("POST /api/create/start", () => {
     expect(imgFiles).toContain("q01.png");
     expect(imgFiles).toContain("q02.png");
 
-    // .v3cache_prev로 이전 상태 회전됐는지 확인
-    const prevFiles = await readdir(PREV_DIR);
-    expect(prevFiles).toContain("old_file.txt");
+    // 이전 캐시가 삭제됐는지 확인 (.v3cache_prev 없음)
+    expect(await fileExists(path.join(examDir, ".v3cache_prev"))).toBe(false);
+
+    // outputs/images/ 가 클리어 + 재생성됐는지 확인 (stale file 사라짐)
+    expect(await fileExists(OUTPUTS_IMAGES_DIR)).toBe(true);
+    const outputFiles = await readdir(OUTPUTS_IMAGES_DIR);
+    expect(outputFiles).not.toContain("prob5_final.png");
+    // dir itself exists (empty, ready for figure_processor)
+    expect(outputFiles).toHaveLength(0);
 
     // lock이 정리됐는지 확인
     const lockPath = path.join(examDir, ".create_start.lock");
@@ -308,7 +333,7 @@ describe("POST /api/create/start", () => {
   });
 
   it("essay 이미지 처리: q_s01 → kind=essay, 파일명 q_s01.png", async () => {
-    const { POST, IMAGES_DIR } = await buildHandler(examDir);
+    const { POST, IMAGES_DIR } = await buildHandler(examDir, outputsImagesDir);
     const meta = { schoolLevel: "고", school: "학교", grade: 1, year: 2025, subject: "수학", semester: "1학기", examType: "기말", range: "전범위" };
     const req = makeRequest(meta, [
       { key: "q_s01", name: "q_s01.png", data: pngBuffer() },
@@ -324,7 +349,7 @@ describe("POST /api/create/start", () => {
   });
 
   it("meta 필드 없음 → 400", async () => {
-    const { POST } = await buildHandler(examDir);
+    const { POST } = await buildHandler(examDir, outputsImagesDir);
     const form = new FormData();
     form.append("q01", new File([pngBuffer()], "q01.png", { type: "image/png" }));
     const req = { formData: async () => form } as unknown as NextRequest;
@@ -336,7 +361,7 @@ describe("POST /api/create/start", () => {
   });
 
   it("images 0개 → 400", async () => {
-    const { POST } = await buildHandler(examDir);
+    const { POST } = await buildHandler(examDir, outputsImagesDir);
     const meta = { school: "학교", year: 2025 };
     const req = makeRequest(meta, []);
 
@@ -352,7 +377,7 @@ describe("POST /api/create/start", () => {
     await mkdir(existingCacheDir, { recursive: true });
     await writeFile(path.join(existingCacheDir, "sentinel.txt"), "must survive", "utf-8");
 
-    const { POST, CACHE_DIR } = await buildHandler(examDir);
+    const { POST, CACHE_DIR } = await buildHandler(examDir, outputsImagesDir);
 
     // Craft a request where the key is completely invalid to trigger the
     // "saved.length !== images.length" check by using a key with no numeric part.
@@ -391,7 +416,7 @@ describe("POST /api/create/start", () => {
     await mkdir(existingImagesDir, { recursive: true });
     await writeFile(path.join(existingImagesDir, "q01.png"), "old image data", "utf-8");
 
-    const { POST, CACHE_DIR, IMAGES_DIR } = await buildHandler(examDir);
+    const { POST, CACHE_DIR, IMAGES_DIR } = await buildHandler(examDir, outputsImagesDir);
 
     // We intercept mid-write by using a proxy — but since we can't easily pause
     // async execution, we verify the invariant post-commit: temp dirs are gone.
@@ -465,7 +490,7 @@ describe("POST /api/create/start", () => {
 
   it("기존 .v3cache가 없을 때도 정상 작동 (신규 시험지 최초 작업)", async () => {
     // No pre-existing .v3cache or question_images
-    const { POST, CACHE_DIR, IMAGES_DIR } = await buildHandler(examDir);
+    const { POST, CACHE_DIR, IMAGES_DIR } = await buildHandler(examDir, outputsImagesDir);
     const meta = { school: "초기화학교" };
     const req = makeRequest(meta, [
       { key: "q01", name: "q01.png", data: pngBuffer() },
@@ -505,7 +530,7 @@ describe("POST /api/create/start", () => {
       return realRename(oldPath, newPath);
     };
 
-    const { POST } = await buildHandler(examDir, { rename: faultyRename });
+    const { POST } = await buildHandler(examDir, outputsImagesDir, { rename: faultyRename });
     const meta = { school: "새학교" };
     const req = makeRequest(meta, [
       { key: "q01", name: "q01.png", data: pngBuffer() },

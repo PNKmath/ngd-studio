@@ -6,8 +6,8 @@ import type { ExamMetaInput } from "@/lib/exam/meta";
 const BASE_DIR = path.resolve(process.cwd(), "..");
 const EXAM_DIR = path.join(BASE_DIR, "inputs", "시험지 제작");
 const CACHE_DIR = path.join(EXAM_DIR, ".v3cache");
-const PREV_DIR = path.join(EXAM_DIR, ".v3cache_prev");
 const IMAGES_DIR = path.join(EXAM_DIR, "question_images");
+const OUTPUTS_IMAGES_DIR = path.join(BASE_DIR, "outputs", "images");
 export const LOCK_PATH = path.join(EXAM_DIR, ".create_start.lock");
 
 export async function exists(p: string): Promise<boolean> {
@@ -113,8 +113,9 @@ export async function POST(req: NextRequest) {
   }
 
   // ── stage 3: commit (short locked rename window) ──
-  // P8 전까지는 old .v3cache를 .v3cache_prev로 회전한다.
+  // old .v3cache는 디버그 보존 없이 바로 삭제.
   // question_images old는 파생 입력이므로 성공 후 삭제.
+  // outputs/images/는 derivable artifact이므로 신규 작업 시작 시점에 클리어.
   try {
     await writeFile(LOCK_PATH, JSON.stringify({ txid, startedAt: new Date().toISOString() }), "utf-8");
     if (await exists(CACHE_DIR)) await rename(CACHE_DIR, oldCacheDir);
@@ -122,9 +123,16 @@ export async function POST(req: NextRequest) {
     await rename(nextCacheDir, CACHE_DIR);
     await rename(nextImagesDir, IMAGES_DIR);
 
-    if (await exists(PREV_DIR)) await rm(PREV_DIR, { recursive: true, force: true });
-    if (await exists(oldCacheDir)) await rename(oldCacheDir, PREV_DIR);
+    // old cache 삭제 (백업 없음)
+    if (await exists(oldCacheDir)) await rm(oldCacheDir, { recursive: true, force: true });
     if (await exists(oldImagesDir)) await rm(oldImagesDir, { recursive: true, force: true });
+
+    // outputs/images/ 클리어 + 재생성 (derivable artifact 갱신)
+    if (await exists(OUTPUTS_IMAGES_DIR)) {
+      await rm(OUTPUTS_IMAGES_DIR, { recursive: true, force: true });
+    }
+    await mkdir(OUTPUTS_IMAGES_DIR, { recursive: true });
+
     await rm(LOCK_PATH, { force: true }).catch(() => {});
   } catch (err) {
     // Commit 실패는 위험 상태일 수 있으므로 best-effort 복구 후 hard fail.
