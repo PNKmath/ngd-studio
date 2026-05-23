@@ -6,6 +6,7 @@ import { type CropperWorkspaceRef } from "@/components/cropper/CropperWorkspace"
 import { CropperModal } from "@/components/upload/CropperModal";
 import { HIGH_SCHOOL_SUBJECTS, MIDDLE_SCHOOL_SUBJECT, type MetaValue, type SchoolLevel } from "@/components/upload/MetaForm";
 import { parseExamMetaFromFilename } from "@/lib/pdf/filenameMeta";
+import type { ExamMetaInput } from "@/lib/exam/meta";
 import { useJobRunner } from "@/lib/useJobRunner";
 import { useJobStore } from "@/lib/store";
 import { sendResumeAction } from "@/components/results/question-result/resume";
@@ -292,22 +293,22 @@ export default function CreateV4Page() {
 
   const handleResume = useCallback(async () => {
     if (!existingImages) return;
-    let cachedMeta: Record<string, unknown> = {};
+    let cachedMeta: ExamMetaInput = {};
     try {
       const r = await fetch("/api/v3cache-meta");
-      const data = await r.json();
-      if (data.found) cachedMeta = data;
+      const data = await r.json() as { found: boolean; meta?: ExamMetaInput };
+      if (data.found && data.meta) cachedMeta = data.meta;
     } catch { /* ignore */ }
 
     const jobMeta = {
-      schoolLevel: (cachedMeta.schoolLevel as SchoolLevel) || meta.schoolLevel,
-      school: (cachedMeta.school as string) || meta.school,
-      grade: (cachedMeta.grade as number) || meta.grade,
-      year: (cachedMeta.year as number) || meta.year,
-      subject: (cachedMeta.subject as string) || meta.subject,
-      semester: (cachedMeta.semester as string) || meta.semester,
-      examType: (cachedMeta.examType as string) || meta.examType,
-      range: (cachedMeta.range as string) || meta.range,
+      schoolLevel: cachedMeta.schoolLevel ?? meta.schoolLevel,
+      school: cachedMeta.school ?? meta.school,
+      grade: cachedMeta.grade ?? meta.grade,
+      year: cachedMeta.year ?? meta.year,
+      subject: cachedMeta.subject ?? meta.subject,
+      semester: cachedMeta.semester ?? meta.semester,
+      examType: cachedMeta.examType ?? meta.examType,
+      range: cachedMeta.range ?? meta.range,
       questionCount: existingImages.count,
       resumeFrom: "auto",
     };

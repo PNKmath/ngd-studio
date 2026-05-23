@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: session_meta.json을 .v3cache/로 이동 + v3cache-meta route 단일 출처화
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - ngd-studio/app/api/v3cache-meta/route.ts
@@ -128,11 +128,11 @@ session_meta가 .v3cache 안으로 들어가면 reset이 자동으로 함께 pre
 배포 전이라 migration 불필요. 단 dev 환경에서 잔존하므로 `.gitignore` + 수동 정리 안내(README 등에).
 
 ## 체크리스트
-- [ ] `v3cache-meta/route.ts`: SESSION_META_PATH를 `.v3cache/session_meta.json`로 변경
-- [ ] `v3cache-meta/route.ts`: `extractFromInfo` 및 exam_data 폴백 분기 삭제, 응답 shape `{ found, meta }` 단순화
-- [ ] `app/create/page.tsx:handleResume`: 새 응답 shape에 맞춰 분기 단순화, dual alias 폴백 제거
-- [ ] `v3cache-reset/route.ts` 주석 갱신 (session_meta가 cache 안에 있어 자동 폐기됨 명시)
-- [ ] `npx tsc --noEmit` 통과 + `grep -rn "session_meta.json" ngd-studio` 결과는 `.v3cache/` prefix 외에 0건
+- [x] `v3cache-meta/route.ts`: SESSION_META_PATH를 `.v3cache/session_meta.json`로 변경
+- [x] `v3cache-meta/route.ts`: `extractFromInfo` 및 exam_data 폴백 분기 삭제, 응답 shape `{ found, meta }` 단순화
+- [x] `app/create/page.tsx:handleResume`: 새 응답 shape에 맞춰 분기 단순화, dual alias 폴백 제거
+- [x] `v3cache-reset/route.ts` 주석 갱신 (session_meta가 cache 안에 있어 자동 폐기됨 명시)
+- [x] `npx tsc --noEmit` 통과 + `grep -rn "session_meta.json" ngd-studio` 결과는 `.v3cache/` prefix 외에 0건
 
 ## 영향 범위
 
@@ -152,3 +152,38 @@ npx vitest run --reporter=basic
 # 3) /api/v3cache-meta GET이 found=true + meta 반환 확인 (.v3cache/session_meta.json 있을 때)
 # 4) cache 비운 상태에서 GET → found=false 응답
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-23 22:57 KST) — 완료
+**상태**: completed
+**소요 시간**: 약 8분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`session_meta.json` 위치를 `inputs/시험지 제작/session_meta.json`에서 `.v3cache/session_meta.json`으로 이동하고, `v3cache-meta/route.ts`를 단순화했다. `extractFromInfo` 함수와 `exam_data.json` 폴백 분기를 삭제하여 응답 shape를 `{ found, meta }` 형태로 단일화했으며, `create/page.tsx`의 `handleResume`도 새 응답 shape에 맞게 업데이트했다. `v3cache-reset/route.ts`에 session_meta 자동 폐기 동작 주석을 추가했다.
+
+#### 변경 파일
+- `ngd-studio/app/api/v3cache-meta/route.ts` (수정, +12/-37줄) — SESSION_META_PATH를 .v3cache/로 이동, extractFromInfo 삭제, exam_data 폴백 제거, 응답 shape 단순화
+- `ngd-studio/app/create/page.tsx` (수정, +4/-5줄) — ExamMetaInput import 추가, handleResume을 새 응답 shape에 맞게 갱신, dual alias 폴백 제거
+- `ngd-studio/app/api/v3cache-reset/route.ts` (수정, +1/-0줄) — session_meta 자동 폐기 주석 추가
+
+#### 검증 결과
+- [x] `npx tsc --noEmit`: scope 파일 관련 타입 오류 없음 (기존 실패 `examData.test.ts`는 다른 phase 대상 파일로 이 phase 변경과 무관)
+- [x] `grep -rn "session_meta.json" ngd-studio`: `.v3cache/` prefix 외 0건 — route.ts 주석 1건 + SESSION_META_PATH 1건만 확인됨
+- [ ] vitest 전체 통과: 기존부터 존재하는 36개 실패(examData/orchestrator 관련) — 이 phase 변경 파일과 무관한 오류. 신규 실패 없음.
+
+#### 추가 발견사항
+dev 환경에 기존 `inputs/시험지 제작/session_meta.json`이 잔존할 수 있으나 더 이상 읽히지 않아 무해. 팀 공유 시 수동 삭제 안내 권장.
+
+#### 질문 / 결정 사항
+없음
+
+#### Scope Audit (orchestrator)
+escalate → 사용자 승인 — `v3cache-reset/route.ts`에 주석 1줄 추가됨. P5 frontmatter scope에는 미포함이나 변경 내용이 L1 fix 동작 설명(session_meta 자동 폐기 메모)로 의미 있는 annotation. 사용자가 drift 허용 결정, P5 scope에 포함하여 commit.
+
+#### Verification Re-run (orchestrator)
+tsc exit 0 — P5 변경 파일 모두 통과. vitest의 9건 orchestrator 실패는 P2 변경(examData dual emit 제거)이 원인이며 P5 변경 파일(v3cache-meta/route.ts, page.tsx, v3cache-reset/route.ts 주석)과는 무관. P5 단독으로는 환경 영향 없음.
+
+#### Simplify (orchestrator)
+SIMPLIFIED: 0 — diff 이미 최소화 (37줄 제거, 12줄 추가). 추가 정리 대상 없음.

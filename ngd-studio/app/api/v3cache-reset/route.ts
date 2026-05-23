@@ -19,6 +19,7 @@ async function exists(p: string): Promise<boolean> {
 }
 
 // 신규 V3 작업 시작 시 호출 — 기존 .v3cache를 .v3cache_prev로 백업 후 비운다.
+// session_meta.json도 .v3cache/ 안에 있으므로 자동 폐기됨 (L1 봉합).
 // SKILL.md(0-3)의 캐시 초기화 로직과 동일하다.
 export async function POST() {
   try {
