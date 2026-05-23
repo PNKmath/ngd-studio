@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: examData.ts dual emit 제거 + stripChoicePrefix 이전 + aggregateVerifiedProblems 삭제
-status: pending
+status: completed
 depends_on: [1]
 scope:
   - ngd-studio/server/stages/examData.ts
@@ -132,12 +132,12 @@ function sanitizeExtractedChoices(extracted: ExtractorOutput): ExtractorOutput {
   - `sanitizeExtractedChoices` 단위 테스트 (① prefix가 들어있는 입력 → 제거 확인)
 
 ## 체크리스트
-- [ ] `examData.ts`에서 `normalizeMeta`, `stripChoicePrefix`, `normalizeProblem`, `aggregateVerifiedProblems`, `AggregateError`, `AggregateResult`, 로컬 `ExamMetaInput` 모두 삭제
-- [ ] `buildExamDataJson`이 `assertCompleteMeta`로 검증 + camelCase only 작성, `filenameBase` 자동 채움
-- [ ] `extractor.ts`에 `sanitizeExtractedChoices` 추가하고 디스크 write 직전 호출
-- [ ] `examData.test.ts` 갱신: dual emit / aggregate 케이스 제거, 새 컨트랙트 검증
-- [ ] `extractor.test.ts`에 `sanitizeExtractedChoices` 단위 케이스 추가
-- [ ] 저장소 루트에서 `cd ngd-studio && npx vitest run server/stages/__tests__/examData.test.ts server/stages/__tests__/extractor.test.ts --reporter=basic` 통과
+- [x] `examData.ts`에서 `normalizeMeta`, `stripChoicePrefix`, `normalizeProblem`, `aggregateVerifiedProblems`, `AggregateError`, `AggregateResult`, 로컬 `ExamMetaInput` 모두 삭제
+- [x] `buildExamDataJson`이 `assertCompleteMeta`로 검증 + camelCase only 작성, `filenameBase` 자동 채움
+- [x] `extractor.ts`에 `sanitizeExtractedChoices` 추가하고 디스크 write 직전 호출
+- [x] `examData.test.ts` 갱신: dual emit / aggregate 케이스 제거, 새 컨트랙트 검증
+- [x] `extractor.test.ts`에 `sanitizeExtractedChoices` 단위 케이스 추가
+- [x] 저장소 루트에서 `cd ngd-studio && npx vitest run server/stages/__tests__/examData.test.ts server/stages/__tests__/extractor.test.ts --reporter=basic` 통과
 
 ## 영향 범위
 
@@ -158,3 +158,77 @@ manual:
 grep -rn "normalizeMeta\|aggregateVerifiedProblems\|stripChoicePrefix" ngd-studio --include="*.ts"
 # 결과 0건
 ```
+
+## 실행 결과
+
+### 1회차 (2026-05-23 22:58 KST) — 완료
+
+**상태**: completed
+**소요 시간**: 약 15분
+**진행 모델**: claude-sonnet-4-6
+
+#### 요약
+`examData.ts`에서 `normalizeMeta`, `stripChoicePrefix`, `normalizeProblem`, `aggregateVerifiedProblems`, `AggregateError`, `AggregateResult` 삭제 및 camelCase-only `assertCompleteMeta` 도입. `extractor.ts`에 `sanitizeExtractedChoices` 추가 및 디스크 write 직전 적용. 테스트 63/63 통과, `npx tsc --noEmit` 에러 없음.
+
+#### 변경 파일
+- `ngd-studio/server/stages/examData.ts` (수정, 약 -170/+70줄 — 대규모 dead code 삭제 + assertCompleteMeta 신규)
+- `ngd-studio/server/stages/extractor.ts` (수정, +40줄 — sanitizeExtractedChoices 추가)
+- `ngd-studio/server/stages/__tests__/examData.test.ts` (수정, 전면 갱신 — aggregate/dual-emit 케이스 제거, camelCase-only/assertCompleteMeta 케이스 추가)
+- `ngd-studio/server/stages/__tests__/extractor.test.ts` (수정, +70줄 — sanitizeExtractedChoices 단위 케이스 7개 추가)
+
+#### 검증 결과
+- [x] vitest run examData.test.ts extractor.test.ts: 63/63 통과
+- [x] `npx tsc --noEmit`: 에러 없음 (초기 `as Record<string, unknown>` 형변환 오류 수정 완료)
+- [x] grep `normalizeMeta|aggregateVerifiedProblems|stripChoicePrefix` → 소스 내 0건
+
+#### 추가 발견사항
+- `ExamMetaInput` 타입은 삭제하지 않음 — `@/lib/exam/meta`에 `ExamMetaInput = Partial<ExamMeta>`로 P1에서 정의된 것을 `examData.ts`가 import하는 구조이고, orchestrator.ts 등 외부가 아직 `ExamMetaInput`을 `buildExamDataJson` 인수로 전달하므로 외부 시그니처는 유지.
+- `buildExamDataJson` 시그니처의 `meta: ExamMetaInput`은 유지하되, 함수 내부에서 `assertCompleteMeta`로 완전성 검증 후 `ExamMeta`로 좁힘.
+
+#### 질문 / 결정 사항
+없음
+
+---
+
+### 2회차 (2026-05-23 23:13 KST) — fix_required 재시도
+
+**상태**: completed (fix applied)
+**소요 시간**: 약 15분
+**진행 모델**: claude-sonnet-4-6
+
+#### 원인 분석
+
+1회차에서 `assertCompleteMeta`가 incomplete meta 시 throw하도록 설계했는데, orchestrator 통합/파이프라인 테스트들이 `{ school: "테스트고", grade: 2, subject: "수학" }` 같은 불완전 meta를 `buildExamDataJson`에 전달하고 있었음. 기존 `normalizeMeta`는 lenient(throw 없이 defaults 적용)했지만 신규 `assertCompleteMeta`는 strict.
+
+**영향 범위**:
+- `orchestrator.pipeline.test.ts` (A/B/C/verifier retry): `expect(result.status).toBe("done")` 실패
+- `orchestrator.integration.test.ts` (4건): `exam_data.json 생성 실패: expected 'failed' to be 'done'`
+- `orchestrator.test.ts` (resumeFrom=builder): builder stage event 미발행으로 `expect(builderStageEvent).toBeDefined()` 실패
+
+#### 수정 내용
+
+3개 테스트 파일에 `COMPLETE_META` 상수 추가 후 실패 테스트의 incomplete meta를 교체:
+- `orchestrator.pipeline.test.ts`: `COMPLETE_META` 상수 추가, 7개 `meta: { school: ... }` → `meta: COMPLETE_META` 일괄 교체
+- `orchestrator.integration.test.ts`: `COMPLETE_META` 상수 추가, 5개 교체
+- `orchestrator.test.ts`: `COMPLETE_META` 상수 추가, `resumeFrom=builder` 테스트의 `meta: {}` → `meta: COMPLETE_META`, pre-written `exam_data.json`의 `info: {}` → `info: COMPLETE_META`
+
+`examData.ts` / `extractor.ts`는 변경 없음 (production behavior 유지).
+
+#### 검증 결과
+- [x] vitest run lib/__tests__ server/stages/__tests__: 524/524 통과 (전체)
+- [x] `npx tsc --noEmit`: 에러 없음
+- [x] grep `normalizeMeta|aggregateVerifiedProblems|stripChoicePrefix` → 소스 내 0건
+
+#### Scope Audit (orchestrator)
+1회차: pass — examData.ts, extractor.ts, examData.test.ts, extractor.test.ts 모두 scope 내.
+2회차 (retry): escalate → 사용자 승인 — orchestrator.pipeline.test.ts, orchestrator.integration.test.ts, orchestrator.test.ts 3개는 P7 scope이나 assertCompleteMeta strict 도입에 따른 fixture 강제 갱신 필요. 사용자 drift 허용, P2 commit에 포함.
+
+#### Verification Re-run (orchestrator)
+1회차: exit 1 — orchestrator 9건 회귀 → fix_required.
+2회차 (retry 후): tsc exit 0, vitest 524/524 통과.
+
+#### Simplify (orchestrator)
+SIMPLIFIED: 0 — retry 직후 추가 정리 대상 없음.
+
+#### Review (orchestrator)
+VERDICT: pass — contract 변경(assertCompleteMeta strict)에 따른 fixture 정합. ISSUES 0건.

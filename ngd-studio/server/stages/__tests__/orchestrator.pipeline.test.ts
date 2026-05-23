@@ -366,6 +366,18 @@ const STAGE_OVERRIDES = {
   "create.verifier": "deepseek-v4" as const,
 };
 
+/** Complete meta satisfying assertCompleteMeta — used by pipeline tests that reach buildExamDataJson. */
+const COMPLETE_META = {
+  schoolLevel: "고" as const,
+  school: "테스트고",
+  grade: 2,
+  year: 2025,
+  subject: "수학",
+  semester: "1학기",
+  examType: "중간",
+  range: "전범위",
+};
+
 // ────────────────────────────────────────────────────────────────────────────
 // Scenario A: Full success — 3 questions, all verifier pass on first try
 // ────────────────────────────────────────────────────────────────────────────
@@ -402,7 +414,7 @@ describe("orchestrator per-question pipeline", () => {
     const { runStageOrchestrator } = await import("../orchestrator");
     const result = await runStageOrchestrator({
       mode: "create",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages,
       stageOverrides: STAGE_OVERRIDES,
       defaultProvider: "auto",
@@ -525,7 +537,7 @@ describe("orchestrator per-question pipeline", () => {
     const { runStageOrchestrator } = await import("../orchestrator");
     const result = await runStageOrchestrator({
       mode: "create",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages,
       stageOverrides: STAGE_OVERRIDES,
       defaultProvider: "auto",
@@ -624,7 +636,7 @@ describe("orchestrator per-question pipeline", () => {
     const result = await runStageOrchestrator({
       mode: "resume",
       resumeFrom: "extractor",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages: [{ number: 1, path: "/fake/q01.png" }],
       stageOverrides: STAGE_OVERRIDES,
       defaultProvider: "auto",
@@ -735,7 +747,7 @@ describe("orchestrator per-question pipeline", () => {
     // Start orchestrator concurrently; Q3's extractor is immediately blocked
     const orchestratorPromise = runStageOrchestrator({
       mode: "create",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages,
       stageOverrides: STAGE_OVERRIDES,
       defaultProvider: "auto",
@@ -789,7 +801,7 @@ describe("orchestrator per-question pipeline", () => {
     const { runStageOrchestrator } = await import("../orchestrator");
     const result = await runStageOrchestrator({
       mode: "create",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages: [{ number: 1, path: "/fake/q01.png" }],
       stageOverrides: STAGE_OVERRIDES,
       defaultProvider: "auto",
@@ -852,7 +864,7 @@ describe("orchestrator review mode", () => {
     const result = await runStageOrchestrator({
       mode: "review",
       hwpxPath,
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages: [],
       stageOverrides: {},
       defaultProvider: "auto",
@@ -905,7 +917,7 @@ describe("orchestrator review mode", () => {
     const result = await runStageOrchestrator({
       mode: "review",
       // hwpxPath intentionally omitted
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages: [],
       stageOverrides: {},
       defaultProvider: "auto",

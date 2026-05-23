@@ -2,7 +2,7 @@ import { mkdtemp, rm, readFile, mkdir } from "fs/promises";
 import os from "os";
 import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runExtractorStage, validateExtractorOutput } from "../extractor";
+import { runExtractorStage, validateExtractorOutput, sanitizeExtractedChoices } from "../extractor";
 import { buildExtractorPrompt } from "../prompts/extractorPrompt";
 import { FileBackedStageCache } from "../cache";
 import type { AIProviderAdapter, ProviderRunOptions } from "@/lib/ai/types";
@@ -645,5 +645,95 @@ describe("runExtractorStage — supportsTools=false rejection preserved (Phase 4
     expect(result.status).toBe("failed");
     expect(result.error?.code).toBe("extractor_provider_unsupported_tools");
     expect(result.error?.retryable).toBe(false);
+  });
+});
+
+// ─── Phase 2: sanitizeExtractedChoices unit tests ─────────────────────────────
+
+describe("sanitizeExtractedChoices", () => {
+  const BASE = {
+    has_figure: false,
+    figure_info: null,
+  };
+
+  it("strips standalone circled-number prefix (only t element — drops it)", () => {
+    const input = {
+      ...BASE,
+      choices: [
+        [{ t: "① " }, { eq: "-20" }],
+        [{ t: "② " }, { eq: "-10" }],
+        [{ t: "③ " }, { eq: "0" }],
+        [{ t: "④ " }, { eq: "10" }],
+        [{ t: "⑤ " }, { eq: "20" }],
+      ],
+    };
+    const result = sanitizeExtractedChoices(input);
+    expect(result.choices).toEqual([
+      [{ eq: "-20" }],
+      [{ eq: "-10" }],
+      [{ eq: "0" }],
+      [{ eq: "10" }],
+      [{ eq: "20" }],
+    ]);
+  });
+
+  it("strips prefix but keeps remainder text when t has trailing content", () => {
+    const input = {
+      ...BASE,
+      choices: [
+        [{ t: "① 가" }],
+        [{ t: "② 나" }],
+      ],
+    };
+    const result = sanitizeExtractedChoices(input);
+    expect(result.choices).toEqual([
+      [{ t: "가" }],
+      [{ t: "나" }],
+    ]);
+  });
+
+  it("is a no-op for choices that have no circled-number prefix", () => {
+    const choices = [[{ eq: "1 over 6" }], [{ eq: "1 over 3" }]];
+    const input = { ...BASE, choices };
+    const result = sanitizeExtractedChoices(input);
+    expect(result.choices).toEqual(choices);
+  });
+
+  it("is a no-op when choices is undefined", () => {
+    const input = { ...BASE };
+    const result = sanitizeExtractedChoices(input);
+    expect(result.choices).toBeUndefined();
+  });
+
+  it("is a no-op when choices is null", () => {
+    const input = { ...BASE, choices: null as unknown as undefined };
+    const result = sanitizeExtractedChoices(input);
+    expect(result.choices).toBeNull();
+  });
+
+  it("does not mutate the original input", () => {
+    const choices = [
+      [{ t: "① " }, { eq: "1" }],
+      [{ t: "② " }, { eq: "2" }],
+    ];
+    const input = { ...BASE, choices };
+    sanitizeExtractedChoices(input);
+    // original unchanged
+    expect((input.choices[0][0] as { t: string }).t).toBe("① ");
+  });
+
+  it("handles mixed choices — some with prefix, some without", () => {
+    const input = {
+      ...BASE,
+      choices: [
+        [{ t: "① " }, { eq: "1" }], // has prefix → strip
+        [{ eq: "2" }],               // no t → no-op
+        [{ t: "나머지" }],            // no prefix → no-op
+      ],
+    };
+    const result = sanitizeExtractedChoices(input);
+    expect(result.choices![0]).toEqual([{ eq: "1" }]);
+    expect(result.choices![1]).toEqual([{ eq: "2" }]);
+    expect(result.choices![2]).toEqual([{ t: "나머지" }]);
   });
 });

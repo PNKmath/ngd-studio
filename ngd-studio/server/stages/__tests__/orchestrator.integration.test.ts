@@ -258,6 +258,18 @@ async function makeTempDir(): Promise<string> {
   return dir;
 }
 
+/** Complete meta satisfying assertCompleteMeta — used by e2e tests that reach buildExamDataJson. */
+const COMPLETE_META = {
+  schoolLevel: "고" as const,
+  school: "테스트고",
+  grade: 2,
+  year: 2025,
+  subject: "수학",
+  semester: "1학기",
+  examType: "중간",
+  range: "전범위",
+};
+
 async function makeCache(baseDir: string): Promise<FileBackedStageCache> {
   const examDir = path.join(baseDir, "inputs", "시험지 제작");
   await mkdir(path.join(examDir, ".v3cache"), { recursive: true });
@@ -331,7 +343,7 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
     const result = await runStageOrchestrator({
       mode: "resume",
       resumeFrom: "solver",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages,
       stageOverrides: {
         "create.extractor": "claude-sdk",
@@ -390,7 +402,7 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
     await runStageOrchestrator({
       mode: "resume",
       resumeFrom: "solver",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages,
       stageOverrides: {
         "create.extractor": "claude-sdk",
@@ -438,7 +450,7 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
 
     const result = await runStageOrchestrator({
       mode: "create",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages,
       stageOverrides: {
         "create.extractor": "claude-sdk",
@@ -508,7 +520,7 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
     const result = await runStageOrchestrator({
       mode: "resume",
       resumeFrom: "solver",
-      meta: { school: "테스트고", grade: 2, subject: "수학" },
+      meta: COMPLETE_META,
       questionImages: questionNums.map((n) => ({
         number: n,
         path: path.join(FIXTURES_DIR, `q0${n}.png`),
@@ -562,7 +574,7 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
       const result = await runStageOrchestrator({
         mode: "resume",
         resumeFrom: "solver",
-        meta: { school: "테스트고", grade: 2, subject: "수학" },
+        meta: COMPLETE_META,
         questionImages,
         stageOverrides: {
           "create.solver": "deepseek-v4",

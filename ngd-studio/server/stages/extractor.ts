@@ -128,13 +128,14 @@ export async function runExtractorStage(
 
   await input.cache.ensureCacheDir();
   const outputPath = input.cache.extractorResultPath(input.questionNumber);
-  await writeFile(outputPath, `${JSON.stringify(validation.output, null, 2)}\n`, "utf8");
+  const sanitized = sanitizeExtractedChoices(validation.output);
+  await writeFile(outputPath, `${JSON.stringify(sanitized, null, 2)}\n`, "utf8");
 
   return {
     status: "completed",
-    output: validation.output,
+    output: sanitized,
     files: [{ path: outputPath, kind: "cache", label: "Extractor result", mimeType: "application/json" }],
-    validation: { ok: true, output: validation.output },
+    validation: { ok: true, output: sanitized },
     provider: {
       requestedProvider: providerResult.metadata.requestedProvider,
       provider: providerResult.metadata.provider,
@@ -242,6 +243,38 @@ export function validateExtractorOutput(value: unknown): ModelOutputValidation<E
   };
 
   return { ok: true, output };
+}
+
+/**
+ * Strip leading circled-number prefix (①②③④⑤) from choice entries.
+ *
+ * Contract: assemble.py's make_choices_xml prepends CHOICE_SYMBOLS[i] itself,
+ * so choices coming into the builder must NOT carry their own prefix. The
+ * extractor sometimes emits `[{"t": "① "}, {"eq": "-20"}]` despite the
+ * contract; if left as-is, two failures cascade:
+ *   1) is_short_choice() returns False (presence of any `t` part), forcing
+ *      eq-only choices into the 5-row layout instead of 3+2;
+ *   2) builder prepends "①" and then emits the extractor's "① " — duplicate
+ *      circled number ("① ①" before the value).
+ * Both symptoms vanish once the leading prefix is stripped here.
+ *
+ * This function is exported for unit testing.
+ */
+const CHOICE_PREFIX_RE = /^[①②③④⑤]\s*/;
+
+export function sanitizeExtractedChoices(extracted: ExtractorStageOutput): ExtractorStageOutput {
+  if (!Array.isArray(extracted.choices)) return extracted;
+  const normalized = extracted.choices.map((choice): ExtractorChoice => {
+    if (!Array.isArray(choice) || choice.length === 0) return choice;
+    const first = choice[0];
+    if (!first || typeof first !== "object" || !("t" in first)) return choice;
+    const t = (first as { t: unknown }).t;
+    if (typeof t !== "string" || !CHOICE_PREFIX_RE.test(t)) return choice;
+    const stripped = t.replace(CHOICE_PREFIX_RE, "");
+    if (stripped.length === 0) return choice.slice(1) as ExtractorChoice;
+    return [{ ...(first as Record<string, unknown>), t: stripped } as ExtractorPartObject, ...choice.slice(1)];
+  });
+  return { ...extracted, choices: normalized };
 }
 
 function toExtractorValidationFailure(

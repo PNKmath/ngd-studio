@@ -84,6 +84,18 @@ function makeSseCollector(): { events: SSEEvent[]; send: (e: SSEEvent) => void }
   return { events, send: (e) => events.push(e) };
 }
 
+/** Complete meta satisfying assertCompleteMeta — used by tests that reach buildExamDataJson. */
+const COMPLETE_META = {
+  schoolLevel: "고" as const,
+  school: "테스트고",
+  grade: 2,
+  year: 2025,
+  subject: "수학",
+  semester: "1학기",
+  examType: "중간",
+  range: "전범위",
+};
+
 const VALID_EXTRACTOR_OUTPUT = {
   question: "다음 중 옳은 것은?",
   has_figure: false,
@@ -443,14 +455,14 @@ describe("runStageOrchestrator", () => {
     await writeFile(cache.extractorResultPath(1), JSON.stringify(VALID_EXTRACTOR_OUTPUT), "utf8");
     await writeFile(cache.solverResultPath(1), JSON.stringify(VALID_SOLVER_OUTPUT), "utf8");
     await writeFile(cache.verifierResultPath(1), JSON.stringify(VALID_VERIFIER_OUTPUT_PASS), "utf8");
-    await writeFile(cache.paths.examData, JSON.stringify({ info: {}, problems: [VALID_EXTRACTOR_OUTPUT] }), "utf8");
+    await writeFile(cache.paths.examData, JSON.stringify({ info: COMPLETE_META, problems: [VALID_EXTRACTOR_OUTPUT] }), "utf8");
     // Write a fake figure_status.json so figure stage is considered done.
     await writeFile(cache.paths.figureStatus, JSON.stringify({ status: "done" }), "utf8");
 
     await runStageOrchestrator({
       mode: "resume",
       resumeFrom: "builder",
-      meta: {},
+      meta: COMPLETE_META,
       questionImages: [{ number: 1, path: "/fake/q01.png" }],
       stageOverrides: {},
       defaultProvider: "auto",
