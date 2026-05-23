@@ -16,14 +16,14 @@ created: 2026-05-23
 | 1 | [phase-01-exam-meta-type.md](./phase-01-exam-meta-type.md) | 7 | 6 | 86% | completed | 7f99e5c |
 | 2 | [phase-02-exam-data-dual-emit.md](./phase-02-exam-data-dual-emit.md) | 6 | 6 | 100% | completed | 08b8919 |
 | 3 | [phase-03-figure-status-final-image.md](./phase-03-figure-status-final-image.md) | 7 | 6 | 86% | completed | 2456427 |
-| 4 | [phase-04-assemble-camelcase.md](./phase-04-assemble-camelcase.md) | 6 | 0 | 0% | pending | - |
+| 4 | [phase-04-assemble-camelcase.md](./phase-04-assemble-camelcase.md) | 6 | 6 | 100% | completed | 0a4d742 |
 | 5 | [phase-05-session-meta-move.md](./phase-05-session-meta-move.md) | 5 | 5 | 100% | completed | 6288ed0 |
-| 6 | [phase-06-create-start-atomic.md](./phase-06-create-start-atomic.md) | 8 | 0 | 0% | pending | - |
+| 6 | [phase-06-create-start-atomic.md](./phase-06-create-start-atomic.md) | 8 | 7 | 88% | completed | 45747c4 |
 | 7 | [phase-07-orchestrator-resume-safety.md](./phase-07-orchestrator-resume-safety.md) | 9 | 0 | 0% | pending | - |
 | 8 | [phase-08-housekeeping-orphans.md](./phase-08-housekeeping-orphans.md) | 5 | 0 | 0% | pending | - |
 | 9 | [phase-09-fixture-regression.md](./phase-09-fixture-regression.md) | 7 | 0 | 0% | pending | - |
 | 10 | [phase-10-manual-smoke.md](./phase-10-manual-smoke.md) | 6 | 0 | 0% | pending | - |
-| **Total** | | **66** | **23** | **35%** | | |
+| **Total** | | **66** | **36** | **55%** | | |
 
 ## Phase 의존성
 
