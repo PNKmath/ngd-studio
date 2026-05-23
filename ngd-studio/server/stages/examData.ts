@@ -2,7 +2,7 @@ import { readFile, writeFile } from "fs/promises";
 import type { StageCache } from "./cache";
 
 /**
- * Per-question cache merge contract (A안 — verifier = gating only).
+ * Per-question cache merge contract (verifier = solver reviewer).
  *
  * Cache files store disjoint field sets, NOT progressively-enriched versions of
  * the same object. They must be merged, not picked:
@@ -19,10 +19,10 @@ import type { StageCache } from "./cache";
  *                       answer/explanation (see orchestrator.ts applyVerifierRetry).
  *
  *   _verified.json  : { number, status, issues, feedback } only
- *                     — gating ledger. NEVER contains answer/explanation_parts or
+ *                     — reviewer ledger. NEVER contains answer/explanation_parts or
  *                       problem-definition fields, so MUST NOT participate in
- *                       problem-body merge. Used by orchestrator to decide
- *                       pass/fail and to seed solver retry feedback.
+ *                       problem-body merge. Used by orchestrator to seed solver
+ *                       feedback rounds.
  *
  * The canonical merged problem = { ...extracted, ...solved }.
  * build_hwpx.py / assemble.py expect this shape (e.g. prob["type"], prob["parts"]).

@@ -201,12 +201,13 @@ describe("applyVerifierRetry — agentic→code parity (SKILL.md Step 4-2)", () 
     expect(result.feedbackHistory).toEqual(["fix calculation"]);
   });
 
-  it("escalates to manual_review after 3 consecutive failures (SKILL.md '3회 실패 → manual_review')", async () => {
+  it("adopts the solver revision after 3 verifier feedback rounds", async () => {
     let verifierCalls = 0;
+    let solverCalls = 0;
     const failAttempts: number[] = [];
 
     const result = await applyVerifierRetry(
-      async () => ({ answer: "wrong" }),
+      async () => ({ answer: `revision-${++solverCalls}` }),
       async () => {
         verifierCalls++;
         return { status: "fail", feedback: `feedback-${verifierCalls}` };
@@ -217,11 +218,13 @@ describe("applyVerifierRetry — agentic→code parity (SKILL.md Step 4-2)", () 
       }
     );
 
-    expect(result.status).toBe("manual_review");
+    expect(result.status).toBe("revised");
     expect(result.attempts).toBe(3);
     expect(verifierCalls).toBe(3);
+    expect(solverCalls).toBe(4); // initial + one solver revision per failed round
     expect(result.feedbackHistory).toHaveLength(3);
     expect(failAttempts).toHaveLength(3);
+    expect(result.finalSolverOutput).toEqual({ answer: "revision-4" });
   });
 
   it("onAttemptFail is called with correct attempt and feedback on each failure", async () => {
@@ -262,14 +265,24 @@ describe("applyVerifierRetry — agentic→code parity (SKILL.md Step 4-2)", () 
     expect((result.finalSolverOutput as { version: number }).version).toBe(2);
   });
 
-  it("manual_review with maxAttempts=1 fails immediately", async () => {
+  it("maxAttempts=1 still applies verifier feedback through one solver revision", async () => {
+    let solverCalls = 0;
+    const feedbackReceived: Array<string | undefined> = [];
+
     const result = await applyVerifierRetry(
-      async () => ({}),
+      async (feedback) => {
+        solverCalls++;
+        feedbackReceived.push(feedback);
+        return { revision: solverCalls };
+      },
       async () => ({ status: "fail" as const, feedback: "nope" }),
       { maxAttempts: 1 }
     );
 
-    expect(result.status).toBe("manual_review");
+    expect(result.status).toBe("revised");
     expect(result.attempts).toBe(1);
+    expect(solverCalls).toBe(2); // initial + feedback revision
+    expect(feedbackReceived).toEqual([undefined, "nope"]);
+    expect(result.finalSolverOutput).toEqual({ revision: 2 });
   });
 });

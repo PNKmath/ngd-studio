@@ -652,9 +652,6 @@ export async function runStageOrchestrator(
 
       onEnter("verifier", n);
 
-      // Track the last verifier result for error reporting.
-      let lastVerifierError: string | undefined;
-
       // retryAttempt tracks how many retry solver calls have been made (for telemetry attempt number).
       let retryAttempt = 0;
 
@@ -664,7 +661,10 @@ export async function runStageOrchestrator(
         async (feedback) => {
           if (isAborted()) throw new Error("aborted");
           retryAttempt++;
-          send(logEvent("verifier", `Q${n} 검증 fail — 재풀이 (시도 ${retryAttempt + 1}/3)`));
+          send(logEvent(
+            "verifier",
+            `Q${n} 검증 feedback 반영 — solver 재풀이 (라운드 ${retryAttempt}/${Math.max(1, verifierMaxAttempts)})`
+          ));
           const solverResult = await solveSem.acquire(async () =>
             runSolverStage({
               questionNumber: n,
@@ -723,7 +723,6 @@ export async function runStageOrchestrator(
               })
             );
           }
-          lastVerifierError = verifierResult.error?.message;
           if (verifierResult.status === "completed" && verifierResult.output?.status === "pass") {
             return { status: "pass" as const };
           }
@@ -737,7 +736,10 @@ export async function runStageOrchestrator(
         }
       );
 
-      if (retryResult.status === "pass") {
+      if (retryResult.status === "pass" || retryResult.status === "revised") {
+        if (retryResult.status === "revised") {
+          send(logEvent("verifier", `Q${n} 검증 feedback 반영 완료 — 수정된 solver 풀이를 채택합니다.`));
+        }
         onLeave("verifier", n, "completed");
         send({
           event: "question",
@@ -745,21 +747,6 @@ export async function runStageOrchestrator(
         });
         return { number: n };
       }
-
-      // All attempts exhausted — manual_review.
-      send(logEvent("verifier", `Q${n} 검증 실패: ${Math.max(1, verifierMaxAttempts)}회 시도 후에도 pass 못함`, "warn"));
-      onLeave("verifier", n, "failed");
-      send({
-        event: "question",
-        data: {
-          number: n,
-          stage: "verified",
-          status: "failed",
-          error: lastVerifierError ?? "verifier max attempts exceeded",
-        },
-      });
-      // Not a hard stop — partial result is still usable.
-      return { number: n };
     }
 
     return { number: n };

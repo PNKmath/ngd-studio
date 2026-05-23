@@ -8,7 +8,7 @@
  * Exports:
  *   - buildStagePlan   : resume + state → per-question stage plan
  *   - runBatches       : concurrency-limited batch runner
- *   - applyVerifierRetry : verifier feedback loop (max 3 attempts)
+ *   - applyVerifierRetry : verifier feedback rounds
  */
 
 import type { ResumeCommand, ResumeStage } from "./resumeCommand";
@@ -192,8 +192,8 @@ export interface VerifierRetryConfig {
 }
 
 export interface VerifierRetryResult {
-  /** "pass" if verifier approved within maxAttempts; "manual_review" if all failed. */
-  status: "pass" | "manual_review";
+  /** "pass" if verifier approved; "revised" if verifier feedback was applied by solver. */
+  status: "pass" | "revised";
   finalSolverOutput: unknown;
   finalVerifierOutput: unknown;
   attempts: number;
@@ -201,21 +201,22 @@ export interface VerifierRetryResult {
 }
 
 /**
- * Apply verifier feedback loop — codifies SKILL.md Step 4-2 "재시도 루프":
+ * Apply verifier feedback rounds.
  *
- *   attempt = 1
- *   while attempt <= 3:
- *       verifier 호출
- *       if status == "pass": break
- *       if attempt < 3:
- *           feedback 추출 → solver 재호출
- *           attempt += 1
- *       else: mark_manual_review(N)
+ * One round means:
+ *   1. Run verifier against the current solver output.
+ *   2. If verifier passes, finish.
+ *   3. If verifier fails, pass its feedback to solver and adopt that revised
+ *      solver output as the next current output.
+ *
+ * The final round still runs solver on fail. We do not require a follow-up
+ * verifier pass after the last feedback application; verifier is a reviewer
+ * for improving solver output, not a hard approval gate.
  *
  * @param runSolver         — Calls the solver, optionally with a feedback string.
  *                            If `initialSolverOutput` is provided, the first verifier run uses
- *                            that output directly (no initial solver call). Subsequent retries
- *                            always call `runSolver(feedback)`.
+ *                            that output directly (no initial solver call). Failed verifier
+ *                            rounds always call `runSolver(feedback)`.
  * @param runVerifier       — Calls the verifier with the current solver output.
  *                            Must return { status: "pass" | "fail"; feedback?: string }.
  * @param config            — { maxAttempts: 3, onAttemptFail?, initialSolverOutput? }
@@ -234,6 +235,7 @@ export async function applyVerifierRetry(
   let currentSolverOutput: unknown =
     initialSolverOutput !== undefined ? initialSolverOutput : await runSolver(undefined);
   let lastVerifierOutput: { status: "pass" | "fail"; feedback?: string } | undefined;
+  let revised = false;
 
   while (attempt < maxAttempts) {
     const verifierOutput = await runVerifier(currentSolverOutput);
@@ -255,17 +257,14 @@ export async function applyVerifierRetry(
     if (feedback) feedbackHistory.push(feedback);
     onAttemptFail?.(attempt, feedback);
 
-    if (attempt >= maxAttempts) {
-      // All attempts exhausted — manual_review.
-      break;
-    }
-
-    // Re-run solver with feedback before next verifier attempt.
+    // Re-run solver with feedback and adopt the revised output. If this was
+    // the final round, the revised solver output is the final result.
     currentSolverOutput = await runSolver(feedback || undefined);
+    revised = true;
   }
 
   return {
-    status: "manual_review",
+    status: revised ? "revised" : "pass",
     finalSolverOutput: currentSolverOutput,
     finalVerifierOutput: lastVerifierOutput,
     attempts: attempt,
