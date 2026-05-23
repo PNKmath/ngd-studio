@@ -13,7 +13,7 @@ created: 2026-05-23
 
 | Phase | 파일 | 항목 | 완료 | 진행률 | 상태 | 커밋 |
 |-------|------|------|------|--------|------|------|
-| 1 | [phase-01-exam-meta-type.md](./phase-01-exam-meta-type.md) | 7 | 0 | 0% | pending | - |
+| 1 | [phase-01-exam-meta-type.md](./phase-01-exam-meta-type.md) | 7 | 6 | 86% | completed | 7f99e5c |
 | 2 | [phase-02-exam-data-dual-emit.md](./phase-02-exam-data-dual-emit.md) | 6 | 0 | 0% | pending | - |
 | 3 | [phase-03-figure-status-final-image.md](./phase-03-figure-status-final-image.md) | 7 | 0 | 0% | pending | - |
 | 4 | [phase-04-assemble-camelcase.md](./phase-04-assemble-camelcase.md) | 6 | 0 | 0% | pending | - |
@@ -23,7 +23,7 @@ created: 2026-05-23
 | 8 | [phase-08-housekeeping-orphans.md](./phase-08-housekeeping-orphans.md) | 5 | 0 | 0% | pending | - |
 | 9 | [phase-09-fixture-regression.md](./phase-09-fixture-regression.md) | 7 | 0 | 0% | pending | - |
 | 10 | [phase-10-manual-smoke.md](./phase-10-manual-smoke.md) | 6 | 0 | 0% | pending | - |
-| **Total** | | **66** | **0** | **0%** | | |
+| **Total** | | **66** | **6** | **9%** | | |
 
 ## Phase 의존성
 

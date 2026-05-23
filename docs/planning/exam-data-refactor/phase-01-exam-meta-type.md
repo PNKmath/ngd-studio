@@ -216,7 +216,7 @@ SIMPLIFIED: 1, examData.ts — unused `ExamMeta` import 제거 + 미사용 re-ex
 VERDICT: pass — 스펙 일치, scope 준수, tsc + 522/522 통과. ISSUES 0건.
 
 #### Commit
-a0e1d76 — refactor(exam-meta): Phase 1 — ExamMeta 단일 타입 신설 및 11개 consumer inline 제거
+7f99e5c — refactor(exam-meta): Phase 1 — ExamMeta 단일 타입 신설 및 11개 consumer inline 제거
 
 #### E2E (orchestrator)
 skip — no e2e_triggers
