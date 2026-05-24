@@ -1,5 +1,5 @@
 import CreatePageClient from "./_components/CreatePageClient";
 
 export default function CreatePage() {
-  return <CreatePageClient />;
+  return <CreatePageClient currentYear={new Date().getFullYear()} />;
 }

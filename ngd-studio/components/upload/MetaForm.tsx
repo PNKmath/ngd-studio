@@ -2,9 +2,6 @@
 
 import type { SchoolLevel, ExamMeta } from "@/lib/exam/meta";
 
-const CURRENT_YEAR = new Date().getFullYear();
-const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
-
 export type { SchoolLevel };
 
 /** MetaValue = ExamMeta (the 8 required UI fields). */
@@ -20,6 +17,7 @@ export interface MetaFormProps {
 }
 
 export function MetaForm({ value, onChange, disabled }: MetaFormProps) {
+  const yearOptions = Array.from({ length: 6 }, (_, i) => value.year - i);
   const fieldClass =
     "w-full mt-0.5 px-2 py-1.5 rounded-md border bg-background text-sm disabled:opacity-50 disabled:cursor-not-allowed";
   const isMiddle = value.schoolLevel === "중";
@@ -51,7 +49,7 @@ export function MetaForm({ value, onChange, disabled }: MetaFormProps) {
             disabled={disabled}
             className={fieldClass}
           >
-            {YEAR_OPTIONS.map((y) => (
+            {yearOptions.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>

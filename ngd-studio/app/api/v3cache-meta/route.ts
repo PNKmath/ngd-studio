@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { readFile, stat } from "fs/promises";
 import path from "path";
 import type { ExamMetaInput } from "@/lib/exam/meta";
@@ -32,7 +32,7 @@ async function isLocked(): Promise<boolean> {
   }
 }
 
-export async function GET(_req: NextRequest): Promise<NextResponse<MetaResult>> {
+export async function GET(): Promise<NextResponse<MetaResult>> {
   if (await isLocked()) {
     return NextResponse.json({ found: false, pending: true }, { status: 409 });
   }

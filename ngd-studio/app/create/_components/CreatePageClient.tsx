@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { type CropperWorkspaceRef } from "@/components/cropper/CropperWorkspace";
 import { CropperModal } from "@/components/upload/CropperModal";
@@ -20,6 +20,7 @@ import { DownloadButton } from "@/components/shared/DownloadButton";
 import { FollowupChat } from "@/components/shared/FollowupChat";
 import {
   AI_STAGE_KEYS,
+  DEFAULT_AI_SETTINGS,
   readAISettings,
   writeAISettings,
   type AISettings,
@@ -28,11 +29,11 @@ import type { AIProviderId } from "@/lib/ai";
 import { NoActiveSessionPlaceholder } from "./NoActiveSessionPlaceholder";
 import {
   AUTO_SPLIT_LS_KEY,
-  CURRENT_YEAR,
   META_LS_KEY,
   PROVIDER_LABEL,
   STAGE_LABEL,
-  YEAR_OPTIONS,
+  createDefaultMeta,
+  createYearOptions,
   loadStoredAutoSplitEnabled,
   loadStoredMeta,
   preloadQuestionResultsFromCache,
@@ -40,7 +41,13 @@ import {
   type ExistingImages,
 } from "../_lib/createPageState";
 
-export default function CreateV4Page() {
+interface CreateV4PageProps {
+  currentYear: number;
+}
+
+export default function CreateV4Page({ currentYear }: CreateV4PageProps) {
+  const defaultMeta = useMemo(() => createDefaultMeta(currentYear), [currentYear]);
+  const yearOptions = useMemo(() => createYearOptions(currentYear), [currentYear]);
   const reset = useJobStore((s) => s.reset);
   const { startJob, stopJob, pauseJob } = useJobRunner();
   const cropperRef = useRef<CropperWorkspaceRef>(null);
@@ -92,14 +99,21 @@ export default function CreateV4Page() {
       .catch(() => {});
   }, [v3Meta, startJob, setV3Meta]);
 
-  const [autoSplitEnabled, setAutoSplitEnabled] = useState(loadStoredAutoSplitEnabled);
-  const [aiSettings, setAiSettings] = useState<AISettings>(() => readAISettings());
+  const [autoSplitEnabled, setAutoSplitEnabled] = useState(false);
+  const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
+  const [meta, setMeta] = useState<MetaValue>(() => createDefaultMeta(currentYear));
 
   useEffect(() => {
+    queueMicrotask(() => {
+      setAutoSplitEnabled(loadStoredAutoSplitEnabled());
+      setAiSettings(readAISettings());
+      setMeta(loadStoredMeta(defaultMeta));
+    });
+
     const onFocus = () => setAiSettings(readAISettings());
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, []);
+  }, [defaultMeta]);
 
   const deepSeekStages = AI_STAGE_KEYS.filter(
     (key) => aiSettings.stageOverrides[key] === "deepseek-v4"
@@ -113,8 +127,6 @@ export default function CreateV4Page() {
       localStorage.setItem(AUTO_SPLIT_LS_KEY, String(next));
     } catch {}
   }
-
-  const [meta, setMeta] = useState<MetaValue>(loadStoredMeta);
 
   function handleMetaChange(next: MetaValue) {
     setMeta(next);
@@ -148,14 +160,14 @@ export default function CreateV4Page() {
         schoolLevel: v3Meta.schoolLevel ?? "고",
         school: v3Meta.school ?? "",
         grade: v3Meta.grade ?? 2,
-        year: v3Meta.year ?? CURRENT_YEAR,
+        year: v3Meta.year ?? currentYear,
         subject: v3Meta.subject ?? "수학 I",
         semester: v3Meta.semester ?? "1학기",
         examType: v3Meta.examType ?? "중간",
         range: v3Meta.range ?? "",
       });
     });
-  }, [v3Meta, hasJob]);
+  }, [v3Meta, hasJob, currentYear]);
 
   // 이전 작업 재개 상태
   const [existingImages, setExistingImages] = useState<ExistingImages | null>(null);
@@ -378,7 +390,7 @@ export default function CreateV4Page() {
                       disabled={submitting || isRunning || hasJob}
                       className="flex-1 min-w-0 px-0 py-0.5 text-sm bg-transparent border-b border-transparent focus:border-primary outline-none cursor-pointer disabled:opacity-70"
                     >
-                      {YEAR_OPTIONS.map((y) => (
+                      {yearOptions.map((y) => (
                         <option key={y} value={y}>{y}</option>
                       ))}
                     </select>

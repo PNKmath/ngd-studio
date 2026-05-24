@@ -33,19 +33,23 @@ export type BuildStatus = {
 
 export const AUTO_SPLIT_LS_KEY = "cropper.auto-split-on-upload";
 export const META_LS_KEY = "create-v4.meta-form";
-export const CURRENT_YEAR = new Date().getFullYear();
-export const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
 
-export const DEFAULT_META: MetaValue = {
-  schoolLevel: "고",
-  school: "",
-  grade: 2,
-  year: CURRENT_YEAR,
-  subject: "수학 I",
-  semester: "1학기",
-  examType: "중간",
-  range: "",
-};
+export function createDefaultMeta(currentYear: number): MetaValue {
+  return {
+    schoolLevel: "고",
+    school: "",
+    grade: 2,
+    year: currentYear,
+    subject: "수학 I",
+    semester: "1학기",
+    examType: "중간",
+    range: "",
+  };
+}
+
+export function createYearOptions(currentYear: number): number[] {
+  return Array.from({ length: 6 }, (_, i) => currentYear - i);
+}
 
 export const PROVIDER_LABEL: Record<AIProviderId, string> = {
   auto: "auto",
@@ -72,13 +76,13 @@ export function loadStoredAutoSplitEnabled(): boolean {
   }
 }
 
-export function loadStoredMeta(): MetaValue {
-  if (typeof window === "undefined") return DEFAULT_META;
+export function loadStoredMeta(defaultMeta: MetaValue): MetaValue {
+  if (typeof window === "undefined") return defaultMeta;
   try {
     const raw = sessionStorage.getItem(META_LS_KEY);
-    return raw ? { ...DEFAULT_META, ...JSON.parse(raw) } : DEFAULT_META;
+    return raw ? { ...defaultMeta, ...JSON.parse(raw) } : defaultMeta;
   } catch {
-    return DEFAULT_META;
+    return defaultMeta;
   }
 }
 
