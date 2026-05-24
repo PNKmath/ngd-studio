@@ -26,6 +26,10 @@ import {
   logEvent,
   fileEvent,
   resultEvent,
+  emitStageStart,
+  emitStageDone,
+  emitStageFailed,
+  emitStageSkipped,
 } from "./events";
 import type { JobStore } from "./jobStore";
 import { runReviewStage } from "./reviewRunner";
@@ -272,9 +276,7 @@ async function runReviewModeOrchestrator(
 
   const reviewStartedAt = Date.now();
 
-  send(stageEvent("reviewer", "running"));
-  send(progressEvent("reviewer", 5));
-  send(logEvent("reviewer", `오검 시작: ${hwpxPath}`));
+  emitStageStart(send, "reviewer", `오검 시작: ${hwpxPath}`);
 
   try {
     const runReviewerAgent = async (
@@ -334,8 +336,7 @@ async function runReviewModeOrchestrator(
     const failedCount = reviewOutput.failed.length;
     const summary = `오검 완료: ${appliedCount}건 적용, ${failedCount}건 미적용`;
 
-    send(progressEvent("reviewer", 100));
-    send(stageEvent("reviewer", "done", { summary }));
+    emitStageDone(send, "reviewer", { summary });
     send(resultEvent("success", summary, hwpxPath));
 
     await persistTelemetry(input, providerTelemetry, "done");
@@ -348,8 +349,7 @@ async function runReviewModeOrchestrator(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    send(stageEvent("reviewer", "failed", { summary: message }));
-    send(logEvent("reviewer", `오검 실패: ${message}`, "error"));
+    emitStageFailed(send, "reviewer", { summary: message, message: `오검 실패: ${message}` });
     send(resultEvent("failed", message));
     await persistTelemetry(input, providerTelemetry, "failed");
     return { status: "failed", resultSummary: message, providerTelemetry };
@@ -822,14 +822,11 @@ export async function runStageOrchestrator(
       // 이미 모든 문제의 cleaned가 존재하면 spawn 자체를 건너뛴다.
       const needCleaning = await needsCleaningRun(cache, questionNumbers);
       if (!needCleaning) {
-        send(stageEvent("create.cleaned", "done", { summary: "캐시로 스킵" }));
-        send(progressEvent("create.cleaned", 100));
+        emitStageSkipped(send, "create.cleaned", { message: "image_cleaner.py 스킵 — 캐시 사용." });
       } else {
-        send(stageEvent("create.cleaned", "running"));
-        send(progressEvent("create.cleaned", 5));
-        send(logEvent("create.cleaned", cleanFlag
+        emitStageStart(send, "create.cleaned", cleanFlag
           ? `image_cleaner.py 실행 (${imageProvider}로 손글씨 제거).`
-          : "image_cleaner.py 실행 (--no-clean: 원본 복사만)."));
+          : "image_cleaner.py 실행 (--no-clean: 원본 복사만).");
         const cleanerResult = await runCleanerStage({
           questionImagesDir: cache.paths.questionImagesDir,
           statusOutPath: cache.paths.cleaningStatus,
@@ -839,14 +836,15 @@ export async function runStageOrchestrator(
           env: runtimeEnv as NodeJS.ProcessEnv,
         });
         if (cleanerResult.status !== "failed") {
-          send(progressEvent("create.cleaned", 100));
-          send(stageEvent("create.cleaned", "done", {
-            summary: cleanFlag ? "이미지 정리 완료" : "정리 OFF — 원본 사용",
-          }));
+          const summary = cleanFlag ? "이미지 정리 완료" : "정리 OFF — 원본 사용";
+          emitStageDone(send, "create.cleaned", { summary });
         } else {
           // cleaning 실패는 hard fail이 아님 — 원본으로 진행.
-          send(stageEvent("create.cleaned", "failed", { summary: "정리 실패, 원본으로 진행" }));
-          send(logEvent("create.cleaned", "image_cleaner.py 실패 — 원본 이미지로 진행합니다.", "warn"));
+          emitStageFailed(send, "create.cleaned", {
+            summary: "정리 실패, 원본으로 진행",
+            message: "image_cleaner.py 실패 — 원본 이미지로 진행합니다.",
+            level: "warn",
+          });
         }
       }
     }
@@ -882,12 +880,11 @@ export async function runStageOrchestrator(
       // P7: total = pipeline에 들어가는 전체 문제 수 (cache hit + miss 모두 포함).
       // markCacheHit(stage, n)이 onEnter + onLeave를 호출하므로 hit도 total에 포함해야
       // done === total 조건이 정확히 성립한다.
-      for (const img of pipelineQuestions) {
-        const forceExtracted = startStage === "solver" || startStage === "verifier";
-        if (runExtractor && !forceExtracted) stageCounter.extractor.total++;
-        if (runSolver)   stageCounter.solver.total++;
-        if (runVerifier) stageCounter.verifier.total++;
-      }
+      const forceExtracted = startStage === "solver" || startStage === "verifier";
+      const pipelineTotal = pipelineQuestions.length;
+      if (runExtractor && !forceExtracted) stageCounter.extractor.total += pipelineTotal;
+      if (runSolver) stageCounter.solver.total += pipelineTotal;
+      if (runVerifier) stageCounter.verifier.total += pipelineTotal;
 
       // If all questions already have cached results for a given stage, emit
       // a "done" event with cache-summary so UI doesn't show the card as pending.
@@ -962,11 +959,9 @@ export async function runStageOrchestrator(
         ));
         regenerate = false;
       }
-      send(stageEvent("figure", "running"));
-      send(progressEvent("figure", 5));
-      send(logEvent("figure", regenerate
+      emitStageStart(send, "figure", regenerate
         ? `figure_processor.py를 실행합니다 (${imageProvider} 재생성).`
-        : "figure_processor.py를 실행합니다 (crop만, Gemini 호출 없음)."));
+        : "figure_processor.py를 실행합니다 (crop만, Gemini 호출 없음).");
 
       const figureResult = await runTargetedFigureStage({
         examDataPath: cache.paths.examData,
@@ -984,22 +979,24 @@ export async function runStageOrchestrator(
       await emitFigureQuestionEvents(cache.paths.figureStatus, send);
 
       if (figureResult.status !== "failed") {
-        send(progressEvent("figure", 100));
-        send(stageEvent("figure", "done", { summary: "figure 처리 완료" }));
+        const counts = await summarizeFigureCounts(cache.paths.figureStatus);
+        const summary = "figure 처리 완료";
+        const message = counts
+          ? `figure_processor.py 완료: ${counts.ok}/${counts.total} 성공${counts.failed > 0 ? ` (실패 ${counts.failed})` : ""}`
+          : "figure_processor.py 완료";
+        emitStageDone(send, "figure", { summary, message });
       } else {
         const errorSummary = await summarizeFigureErrors(cache.paths.figureStatus);
         const quotaHint = "Gemini API 월 지출 한도 초과 — https://ai.studio/spend 에서 한도 상향 후 figure 단계만 재시도하세요.";
         const failSummary = errorSummary?.quotaExceeded
           ? "Gemini 지출 한도 초과"
           : "figure_processor.py 실패";
-        if (errorSummary?.quotaExceeded) {
-          send(logEvent("figure", `${quotaHint} (원인 샘플: ${errorSummary.sample})`, "error"));
-        } else if (errorSummary?.sample) {
-          send(logEvent("figure", `figure_processor.py 실패: ${errorSummary.sample}`, "error"));
-        } else {
-          send(logEvent("figure", "figure_processor.py 실패", "error"));
-        }
-        send(stageEvent("figure", "failed", { summary: failSummary }));
+        const failMessage = errorSummary?.quotaExceeded
+          ? `${quotaHint} (원인 샘플: ${errorSummary.sample})`
+          : errorSummary?.sample
+            ? `figure_processor.py 실패: ${errorSummary.sample}`
+            : "figure_processor.py 실패";
+        emitStageFailed(send, "figure", { summary: failSummary, message: failMessage });
         if (checkAborted()) return cancelled(providerTelemetry);
         return failed(providerTelemetry, failSummary);
       }
@@ -1007,9 +1004,7 @@ export async function runStageOrchestrator(
 
     // ── Stage 5: Builder ───────────────────────
     if (!checkAborted() && shouldRunStage(startStage, "builder") && stillUnder("builder")) {
-      send(stageEvent("builder", "running"));
-      send(progressEvent("builder", 5));
-      send(logEvent("builder", "deterministic builder runner를 실행합니다."));
+      emitStageStart(send, "builder", "deterministic builder runner를 실행합니다.");
 
       const builderStartedAt = Date.now();
       const builderResult = await runBuilderStage({ baseDir, cache });
@@ -1018,13 +1013,16 @@ export async function runStageOrchestrator(
         const relativeOutput = path.relative(baseDir, builderResult.output.hwpxPath);
         outputFile = relativeOutput;
         resultSummary = "builder 완료";
-        send(progressEvent("builder", 100));
-        send(stageEvent("builder", "done", { summary: resultSummary }));
+        emitStageDone(send, "builder", {
+          summary: resultSummary,
+          message: `HWPX 조립 완료 → ${relativeOutput}`,
+        });
         send(fileEvent({ type: "hwpx", name: path.basename(relativeOutput), path: relativeOutput }));
-        send(logEvent("builder", `HWPX 조립 완료 → ${relativeOutput}`, "info"));
       } else {
-        send(stageEvent("builder", "failed", { summary: builderResult.error?.message }));
-        send(logEvent("builder", "deterministic builder 실패. LLM fallback 없이 작업을 중단합니다.", "error"));
+        emitStageFailed(send, "builder", {
+          summary: builderResult.error?.message ?? "builder 실패",
+          message: "deterministic builder 실패. LLM fallback 없이 작업을 중단합니다.",
+        });
         providerTelemetry.push(
           createProviderTelemetryEntry({
             stageKey: undefined,
@@ -1062,9 +1060,7 @@ export async function runStageOrchestrator(
     // ── Stage 6: Checker (with auto-fix) ──────────
     const checkerAttempts = input.checkerMaxAttempts ?? 2;
     if (!checkAborted() && shouldRunStage(startStage, "checker") && stillUnder("checker") && checkerAttempts > 0) {
-      send(stageEvent("checker", "running"));
-      send(progressEvent("checker", 5));
-      send(logEvent("checker", "deterministic checker runner를 실행합니다."));
+      emitStageStart(send, "checker", "deterministic checker runner를 실행합니다.");
 
       const hwpxPath = outputFile
         ? (path.isAbsolute(outputFile) ? outputFile : path.join(baseDir, outputFile))
@@ -1097,16 +1093,17 @@ export async function runStageOrchestrator(
       if (checkerResult.status === "completed" && checkerResult.output) {
         const issueCount = checkerResult.output.issues.length;
         resultSummary = `checker 완료: ${issueCount} issue(s)${autofixed ? " (auto-fixed)" : ""}`;
+        // progress extra(issueCount)가 필요해 progressEvent는 primitive 사용.
         send(progressEvent("checker", 100, { issueCount }));
         send(stageEvent("checker", "done", { summary: resultSummary }));
         send(logEvent("checker", `검수 완료: ${issueCount}건 issue${autofixed ? " (auto-fixed)" : ""}`, "info"));
       } else {
         const issueCount = checkerResult.output?.issues.length ?? 0;
         const errorMsg = checkerResult.error?.message ?? `${issueCount} issue(s)`;
-        send(stageEvent("checker", "failed", {
+        emitStageFailed(send, "checker", {
           summary: errorMsg,
-        }));
-        send(logEvent("checker", `검수 실패: ${errorMsg}`, "error"));
+          message: `검수 실패: ${errorMsg}`,
+        });
       }
 
       if (checkAborted()) return cancelled(providerTelemetry);
@@ -1195,6 +1192,23 @@ interface FigureStatusFile {
  * figure_status.json을 읽어 문제별 figure 결과를 SSE `question` 이벤트로 흘려준다.
  * Navigator의 그림 dot이 완료/실패/경계불확실을 정확히 반영하도록 한다.
  */
+async function summarizeFigureCounts(
+  statusPath: string,
+): Promise<{ total: number; ok: number; failed: number } | null> {
+  const parsed = (await readCacheJson(statusPath)) as FigureStatusFile | null;
+  if (!parsed?.questions) return null;
+  let ok = 0;
+  let failed = 0;
+  let total = 0;
+  for (const q of Object.values(parsed.questions)) {
+    total += 1;
+    if (q?.status === "failed" || q?.error) failed += 1;
+    else ok += 1;
+  }
+  if (total === 0) return null;
+  return { total, ok, failed };
+}
+
 async function summarizeFigureErrors(
   statusPath: string,
 ): Promise<{ quotaExceeded: boolean; sample: string } | null> {

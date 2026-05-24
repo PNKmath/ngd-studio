@@ -57,7 +57,7 @@ describe("stage foundation helpers", () => {
     expect(cache.paths.buildStatus).toBe(path.join(cache.paths.cacheDir, "build_status.json"));
     expect(cache.questionImagePath(3)).toBe(path.join("/repo", "inputs", "시험지 제작", "question_images", "q03.png"));
     expect(cache.questionJsonPath(3)).toBe(path.join(cache.paths.cacheDir, "q03.json"));
-    expect((cache.paths as any).previousCacheDir).toBeUndefined();
+    expect(cache.paths).not.toHaveProperty("previousCacheDir");
   });
 
   it("emits SSE events with the existing client shape", () => {
