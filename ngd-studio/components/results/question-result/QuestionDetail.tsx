@@ -273,12 +273,40 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
               <TabsContent value="verify" className="m-0 p-8 focus-visible:outline-none">
                 {ver ? (
                   <div className="space-y-8 max-w-3xl animate-in slide-in-from-bottom-2 duration-500 fill-mode-both">
+                    {process.env.NODE_ENV !== "production" && (() => {
+                      console.log(`[verify-debug] Q${qr.number}`, {
+                        status: ver.status,
+                        revised: ver.revised,
+                        attempts: ver.attempts,
+                        issuesIsArray: Array.isArray(ver.issues),
+                        issuesLength: Array.isArray(ver.issues) ? (ver.issues as unknown[]).length : "N/A",
+                        ver,
+                      });
+                      return null;
+                    })()}
                     <div className="flex items-center justify-between">
                       <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em]">VERIFICATION REPORT</h4>
-                      <Badge variant="outline" className={cn("font-bold text-[10px] px-2.5 py-0.5 shadow-none border-border/60 bg-muted/10", ver.status === "pass" ? "text-emerald-600/90" : "text-red-600/90")}>
-                        {String(ver.status ?? "UNKNOWN").toUpperCase()}
+                      <Badge variant="outline" className={cn(
+                        "font-bold text-[10px] px-2.5 py-0.5 shadow-none border-border/60 bg-muted/10",
+                        ver.revised
+                          ? "text-amber-600/90"
+                          : ver.status === "pass" ? "text-emerald-600/90" : "text-red-600/90"
+                      )}>
+                        {ver.revised
+                          ? `FEEDBACK 반영 (${String(ver.attempts ?? "?")}회 시도)`
+                          : String(ver.status ?? "UNKNOWN").toUpperCase()}
                       </Badge>
                     </div>
+
+                    {Boolean(ver.revised) && (
+                      <div className="p-4 rounded-lg border border-amber-100 bg-amber-50/40 text-[12px] text-amber-900/90 leading-relaxed">
+                        <p className="font-bold mb-1 text-amber-700">현재 풀이는 아래 이슈를 반영해 재생성되었습니다.</p>
+                        <p className="text-amber-700/80">
+                          마지막 풀이는 verifier 로 재검증되지 않았으며, 아래는 직전 사이클에서 발견된 이슈입니다.
+                          필요 시 하단 &quot;검증 재실행&quot; 버튼으로 현재 풀이를 다시 검증할 수 있습니다.
+                        </p>
+                      </div>
+                    )}
 
                     {Array.isArray(ver.issues) && (ver.issues as unknown[]).length > 0 ? (
                       <div className="space-y-4">

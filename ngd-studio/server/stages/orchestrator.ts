@@ -790,9 +790,26 @@ export async function runStageOrchestrator(
           send(logEvent("verifier", `Q${n} 검증 feedback 반영 완료 — 수정된 solver 풀이를 채택합니다.`));
         }
         onLeave("verifier", n, "completed");
+        // revised 케이스: finalVerifierOutput 은 마지막 fail verifier 출력 (재풀이 후 재검증 안 함).
+        // UI 가 "재풀이로 반영된 과거 이슈" 임을 알 수 있도록 revised/attempts 메타를 합치고
+        // 디스크 캐시도 같이 갱신해 페이지 리로드 후에도 일관되게 보이도록 한다.
+        const verifiedPayload = retryResult.status === "revised"
+          ? {
+              ...(retryResult.finalVerifierOutput as Record<string, unknown>),
+              revised: true,
+              attempts: retryResult.attempts,
+            }
+          : retryResult.finalVerifierOutput;
+        if (retryResult.status === "revised") {
+          await writeFile(
+            cache.verifierResultPath(n),
+            `${JSON.stringify(verifiedPayload, null, 2)}\n`,
+            "utf8",
+          );
+        }
         send({
           event: "question",
-          data: { number: n, stage: "verified", status: "ok", data: retryResult.finalVerifierOutput },
+          data: { number: n, stage: "verified", status: "ok", data: verifiedPayload },
         });
         return { number: n };
       }

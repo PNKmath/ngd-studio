@@ -188,3 +188,9 @@ export const useJobStore = create<JobState>((set) => ({
       return changed ? { questionResults: next } : state;
     }),
 }));
+
+// Dev-only: 브라우저 콘솔에서 useJobStore.getState() 로 store 조회 가능.
+// 예) useJobStore.getState().questionResults[1].verified
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+  (window as unknown as { useJobStore: typeof useJobStore }).useJobStore = useJobStore;
+}
