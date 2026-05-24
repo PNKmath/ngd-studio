@@ -1,17 +1,14 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import type { Part } from "./types";
 import { InlineText } from "./inline/InlineText";
 import { InlinePartsEditor } from "./inline/InlinePartsEditor";
 
 export function SolutionView({
   sol,
-  onEdit,
   onSave,
 }: {
   sol: Record<string, unknown>;
-  onEdit: () => void;
   onSave: (updated: Record<string, unknown>) => Promise<void>;
 }) {
   const parts = (sol.explanation_parts as Part[] | undefined) ?? [];
@@ -19,12 +16,7 @@ export function SolutionView({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 fill-mode-both">
-      <div className="flex items-center justify-between">
-        <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em]">EXPLANATION</h4>
-        <Button variant="outline" size="sm" onClick={onEdit} className="h-7 text-xs">
-          풀이 편집
-        </Button>
-      </div>
+      <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em]">EXPLANATION</h4>
 
       <div className="relative p-7 rounded-xl border bg-card shadow-sm border-border/80">
         <InlinePartsEditor

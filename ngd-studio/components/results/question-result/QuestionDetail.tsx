@@ -1,17 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { useJobStore, type QuestionResult } from "@/lib/store";
-import { renderDataTable } from "./renderers";
 import type { Part } from "./types";
 import { QuestionImages } from "./QuestionImages";
-import { ExtractionEditor } from "./ExtractionEditor";
-import { SolutionEditor } from "./SolutionEditor";
 import { SolutionView } from "./SolutionView";
 import { ActionButtons } from "./ActionButtons";
 import { statusOf } from "./QuestionList";
@@ -19,6 +14,7 @@ import { InlineText } from "./inline/InlineText";
 import { InlineSelect } from "./inline/InlineSelect";
 import { InlinePartsEditor } from "./inline/InlinePartsEditor";
 import { ConditionBoxEditor } from "./inline/ConditionBoxEditor";
+import { InlineTableEditor } from "./inline/InlineTableEditor";
 
 function difficultyColor(diff: string) {
   switch (diff) {
@@ -42,12 +38,7 @@ function EmptyTab({ message }: { message: string }) {
 }
 
 export function QuestionDetail({ qr }: { qr: QuestionResult }) {
-  const reviewActive = useJobStore((s) => s.extractionReviewActive);
   const updateQuestionResult = useJobStore((s) => s.updateQuestionResult);
-  const [editing, setEditing] = useState(false);
-  const [editingSol, setEditingSol] = useState(false);
-  const [savedExt, setSavedExt] = useState<Record<string, unknown> | null>(null);
-  const [savedSol, setSavedSol] = useState<Record<string, unknown> | null>(null);
 
   const ext = qr.extracted as Record<string, unknown> | undefined;
   const sol = qr.solved as Record<string, unknown> | undefined;
@@ -66,7 +57,6 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
       throw new Error((j as { error?: string }).error || "저장 실패");
     }
     updateQuestionResult(qr.number, "extracted", next);
-    setSavedExt(next);
   };
 
   const saveSolve = async (next: Record<string, unknown>) => {
@@ -80,7 +70,6 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
       throw new Error((j as { error?: string }).error || "저장 실패");
     }
     updateQuestionResult(qr.number, "solved", next);
-    setSavedSol(next);
   };
 
   return (
@@ -208,30 +197,10 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
 
                     {/* Question Content: Refined Typography */}
                     <div className="space-y-8">
-                      {editing || (reviewActive && ext !== savedExt) ? (
-                        <ExtractionEditor
-                          qNum={qr.number}
-                          initial={ext}
-                          onSaved={(updated) => {
-                            updateQuestionResult(qr.number, "extracted", updated);
-                            setSavedExt(updated);
-                            setEditing(false);
-                          }}
-                          onCancel={() => {
-                            setEditing(false);
-                            setSavedExt(ext as Record<string, unknown>);
-                          }}
-                        />
-                      ) : (
-                        <div className="space-y-10 animate-in fade-in duration-500 fill-mode-both">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em]">QUESTION BODY</h4>
-                            <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="h-7 text-xs">
-                              내용 편집
-                            </Button>
-                          </div>
+                      <div className="space-y-10 animate-in fade-in duration-500 fill-mode-both">
+                        <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em]">QUESTION BODY</h4>
 
-                          <div className="relative p-7 rounded-xl border bg-card shadow-sm border-border/80">
+                        <div className="relative p-7 rounded-xl border bg-card shadow-sm border-border/80">
                             <InlinePartsEditor
                               parts={(ext.parts as Part[]) ?? []}
                               onSave={(p) => saveExtract({ ...ext, parts: p })}
@@ -254,7 +223,10 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                             <div className="space-y-3">
                               <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em] px-1">DATA TABLE</h4>
                               <div className="overflow-x-auto">
-                                {renderDataTable(ext.data_table as Record<string, unknown>)}
+                                <InlineTableEditor
+                                  dt={ext.data_table as Record<string, unknown>}
+                                  onSave={(next) => saveExtract({ ...ext, data_table: next })}
+                                />
                               </div>
                             </div>
                           )}
@@ -280,22 +252,7 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                               ))}
                             </div>
                           )}
-
-                          <div className="pt-8 flex items-center gap-6">
-                            <div className="h-px flex-1 bg-gradient-to-r from-transparent to-border/60" />
-                            <div className="px-8 py-2.5 rounded-lg border border-primary/20 bg-primary/[0.03] text-primary text-[13px] font-bold tracking-tight">
-                              <span className="text-[10px] font-bold opacity-60 mr-2 uppercase tracking-widest">정답:</span>
-                              <InlineText
-                                value={String(ext.answer ?? "")}
-                                placeholder="정답 미지정"
-                                onSave={(v) => saveExtract({ ...ext, answer: v })}
-                                inputClassName="text-[13px] font-bold w-32"
-                              />
-                            </div>
-                            <div className="h-px flex-1 bg-gradient-to-l from-transparent to-border/60" />
-                          </div>
                         </div>
-                      )}
                     </div>
                   </div>
                 ) : (
@@ -306,20 +263,7 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
               <TabsContent value="solve" className="m-0 p-8 focus-visible:outline-none">
                 {sol ? (
                   <div className="space-y-8 max-w-3xl">
-                    {editingSol ? (
-                      <SolutionEditor
-                        qNum={qr.number}
-                        initial={savedSol ?? sol}
-                        onSaved={(updated) => {
-                          updateQuestionResult(qr.number, "solved", updated);
-                          setSavedSol(updated);
-                          setEditingSol(false);
-                        }}
-                        onCancel={() => setEditingSol(false)}
-                      />
-                    ) : (
-                      <SolutionView sol={savedSol ?? sol} onEdit={() => setEditingSol(true)} onSave={saveSolve} />
-                    )}
+                    <SolutionView sol={sol} onSave={saveSolve} />
                   </div>
                 ) : (
                   <EmptyTab message="아직 해설이 생성되지 않았습니다. 추출 완료 후 진행하세요." />
