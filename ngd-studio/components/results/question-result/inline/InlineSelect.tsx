@@ -66,7 +66,7 @@ export function InlineSelect({
 
   if (editing) {
     return (
-      <span className={cn("inline-flex flex-col gap-0.5", className)}>
+      <span className={cn("inline-flex flex-col gap-0.5 relative z-10", className)}>
         <select
           ref={selectRef}
           value={draft}

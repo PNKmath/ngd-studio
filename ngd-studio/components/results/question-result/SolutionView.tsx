@@ -1,9 +1,9 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { renderParts } from "./renderers";
 import type { Part } from "./types";
 import { InlineText } from "./inline/InlineText";
+import { InlinePartsEditor } from "./inline/InlinePartsEditor";
 
 export function SolutionView({
   sol,
@@ -26,8 +26,11 @@ export function SolutionView({
         </Button>
       </div>
 
-      <div className="relative p-7 rounded-xl border bg-card leading-relaxed text-[15px] text-foreground/90 shadow-sm border-border/80">
-        {renderParts(parts)}
+      <div className="relative p-7 rounded-xl border bg-card shadow-sm border-border/80">
+        <InlinePartsEditor
+          parts={parts}
+          onSave={(p) => onSave({ ...sol, explanation_parts: p })}
+        />
       </div>
 
       <div className="pt-2 flex items-center gap-6">

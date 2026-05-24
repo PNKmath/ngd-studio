@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { useJobStore, type QuestionResult } from "@/lib/store";
-import { renderConditionBox, renderDataTable, renderParts } from "./renderers";
+import { renderDataTable } from "./renderers";
 import type { Part } from "./types";
 import { QuestionImages } from "./QuestionImages";
 import { ExtractionEditor } from "./ExtractionEditor";
@@ -17,6 +17,8 @@ import { ActionButtons } from "./ActionButtons";
 import { statusOf } from "./QuestionList";
 import { InlineText } from "./inline/InlineText";
 import { InlineSelect } from "./inline/InlineSelect";
+import { InlinePartsEditor } from "./inline/InlinePartsEditor";
+import { ConditionBoxEditor } from "./inline/ConditionBoxEditor";
 
 function difficultyColor(diff: string) {
   switch (diff) {
@@ -229,15 +231,21 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                             </Button>
                           </div>
 
-                          <div className="relative p-7 rounded-xl border bg-card leading-relaxed text-[15px] text-foreground/90 shadow-sm border-border/80">
-                            {renderParts(ext.parts as Part[])}
+                          <div className="relative p-7 rounded-xl border bg-card shadow-sm border-border/80">
+                            <InlinePartsEditor
+                              parts={(ext.parts as Part[]) ?? []}
+                              onSave={(p) => saveExtract({ ...ext, parts: p })}
+                            />
                           </div>
 
                           {ext.condition_box != null && (
                             <div className="space-y-3">
                               <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em] px-1">CONDITION BOX</h4>
                               <div className="p-6 rounded-xl border border-border/80 bg-muted/10">
-                                {renderConditionBox(ext.condition_box as Record<string, unknown>)}
+                                <ConditionBoxEditor
+                                  cb={ext.condition_box as Record<string, unknown>}
+                                  onSave={(next) => saveExtract({ ...ext, condition_box: next })}
+                                />
                               </div>
                             </div>
                           )}
@@ -254,11 +262,20 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                           {Array.isArray(ext.choices) && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
                               {(ext.choices as Part[][]).map((c: Part[], i: number) => (
-                                <div key={i} className="flex gap-4 items-center p-4 rounded-xl border border-border/80 bg-card hover:border-primary/40 hover:bg-muted/5 transition-all shadow-sm group cursor-default">
-                                  <span className="w-7 h-7 rounded-lg bg-muted border border-border group-hover:bg-primary/10 group-hover:border-primary/30 group-hover:text-primary text-muted-foreground flex items-center justify-center text-[13px] font-bold shrink-0 transition-colors">
+                                <div key={i} className="flex gap-4 items-start p-4 rounded-xl border border-border/80 bg-card shadow-sm">
+                                  <span className="w-7 h-7 rounded-lg bg-muted border border-border text-muted-foreground flex items-center justify-center text-[13px] font-bold shrink-0">
                                     {["①","②","③","④","⑤"][i]}
                                   </span>
-                                  <div className="text-[14px] text-foreground/80 font-medium">{renderParts(c)}</div>
+                                  <div className="flex-1 min-w-0">
+                                    <InlinePartsEditor
+                                      parts={c ?? []}
+                                      onSave={(p) => {
+                                        const next = (ext.choices as Part[][]).slice();
+                                        next[i] = p;
+                                        return saveExtract({ ...ext, choices: next });
+                                      }}
+                                    />
+                                  </div>
                                 </div>
                               ))}
                             </div>
