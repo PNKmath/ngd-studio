@@ -15,6 +15,8 @@ import { SolutionEditor } from "./SolutionEditor";
 import { SolutionView } from "./SolutionView";
 import { ActionButtons } from "./ActionButtons";
 import { statusOf } from "./QuestionList";
+import { InlineText } from "./inline/InlineText";
+import { InlineSelect } from "./inline/InlineSelect";
 
 function difficultyColor(diff: string) {
   switch (diff) {
@@ -51,6 +53,34 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
 
   const { color, phases } = statusOf(qr);
 
+  const saveExtract = async (next: Record<string, unknown>) => {
+    const res = await fetch(`/api/extracted-json?q=${qr.number}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error((j as { error?: string }).error || "저장 실패");
+    }
+    updateQuestionResult(qr.number, "extracted", next);
+    setSavedExt(next);
+  };
+
+  const saveSolve = async (next: Record<string, unknown>) => {
+    const res = await fetch(`/api/solver-json?q=${qr.number}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      throw new Error((j as { error?: string }).error || "저장 실패");
+    }
+    updateQuestionResult(qr.number, "solved", next);
+    setSavedSol(next);
+  };
+
   return (
     <div className="flex flex-col h-full bg-background font-sans">
       {/* Top sticky header: Minimal & Professional */}
@@ -63,7 +93,12 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
         <div className="ml-auto flex items-center gap-2">
           {ext && (
             <Badge variant="outline" className="font-mono text-[9px] px-2 py-0 bg-muted/20 border-border/50 text-muted-foreground">
-              {String(ext.subtopic ?? "단원 미지정")}
+              <InlineText
+                value={String(ext.subtopic ?? "")}
+                placeholder="단원 미지정"
+                onSave={(v) => saveExtract({ ...ext, subtopic: v })}
+                inputClassName="font-mono text-[9px] px-1 py-0 h-4 leading-none"
+              />
             </Badge>
           )}
         </div>
@@ -122,18 +157,44 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                       <div className="space-y-2">
                         <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest block">유형</span>
                         <Badge variant="outline" className="rounded-md border-border/80 text-foreground font-medium text-[11px] px-2.5 py-0.5">
-                          {String(ext.type ?? "essay") === "choice" ? "객관식" : "주관식"}
+                          <InlineSelect
+                            value={String(ext.type ?? "essay")}
+                            options={[
+                              { value: "choice", label: "객관식" },
+                              { value: "essay", label: "주관식" },
+                            ]}
+                            onSave={(v) => saveExtract({ ...ext, type: v })}
+                            selectClassName="text-[11px] px-1 py-0 h-4 leading-none"
+                          />
                         </Badge>
                       </div>
                       <div className="space-y-2">
                         <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest block">난이도</span>
                         <Badge variant="outline" className={cn("rounded-md font-bold text-[11px] px-2.5 py-0.5", difficultyColor(String(ext.difficulty ?? "중")))}>
-                          {String(ext.difficulty ?? "중")}
+                          <InlineSelect
+                            value={String(ext.difficulty ?? "중")}
+                            options={[
+                              { value: "하", label: "하" },
+                              { value: "중", label: "중" },
+                              { value: "상", label: "상" },
+                              { value: "킬", label: "킬" },
+                            ]}
+                            onSave={(v) => saveExtract({ ...ext, difficulty: v })}
+                            selectClassName="text-[11px] px-1 py-0 h-4 leading-none font-bold"
+                          />
                         </Badge>
                       </div>
                       <div className="space-y-2">
                         <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest block">배점</span>
-                        <span className="text-sm font-bold text-foreground tracking-tight">{String(ext.score ?? "0")}점</span>
+                        <span className="text-sm font-bold text-foreground tracking-tight">
+                          <InlineText
+                            value={String(ext.score ?? "")}
+                            placeholder="0"
+                            onSave={(v) => saveExtract({ ...ext, score: v })}
+                            display={<>{String(ext.score ?? "0")}점</>}
+                            inputClassName="text-sm font-bold w-16"
+                          />
+                        </span>
                       </div>
                       <div className="space-y-2">
                         <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest block">그림</span>
@@ -203,16 +264,19 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                             </div>
                           )}
 
-                          {Boolean(ext.answer) && (
-                            <div className="pt-8 flex items-center gap-6">
-                              <div className="h-px flex-1 bg-gradient-to-r from-transparent to-border/60" />
-                              <div className="px-8 py-2.5 rounded-lg border border-primary/20 bg-primary/[0.03] text-primary text-[13px] font-bold tracking-tight">
-                                <span className="text-[10px] font-bold opacity-60 mr-2 uppercase tracking-widest">정답:</span>
-                                {String(ext.answer)}
-                              </div>
-                              <div className="h-px flex-1 bg-gradient-to-l from-transparent to-border/60" />
+                          <div className="pt-8 flex items-center gap-6">
+                            <div className="h-px flex-1 bg-gradient-to-r from-transparent to-border/60" />
+                            <div className="px-8 py-2.5 rounded-lg border border-primary/20 bg-primary/[0.03] text-primary text-[13px] font-bold tracking-tight">
+                              <span className="text-[10px] font-bold opacity-60 mr-2 uppercase tracking-widest">정답:</span>
+                              <InlineText
+                                value={String(ext.answer ?? "")}
+                                placeholder="정답 미지정"
+                                onSave={(v) => saveExtract({ ...ext, answer: v })}
+                                inputClassName="text-[13px] font-bold w-32"
+                              />
                             </div>
-                          )}
+                            <div className="h-px flex-1 bg-gradient-to-l from-transparent to-border/60" />
+                          </div>
                         </div>
                       )}
                     </div>
@@ -237,7 +301,7 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                         onCancel={() => setEditingSol(false)}
                       />
                     ) : (
-                      <SolutionView sol={savedSol ?? sol} onEdit={() => setEditingSol(true)} />
+                      <SolutionView sol={savedSol ?? sol} onEdit={() => setEditingSol(true)} onSave={saveSolve} />
                     )}
                   </div>
                 ) : (
