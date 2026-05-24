@@ -387,6 +387,66 @@ describe("orchestrator.integration — 3-question mock e2e", () => {
     expect(result.providerTelemetry.length).toBeGreaterThanOrEqual(6);
   }, 30_000);
 
+  it("resume(auto) after figure+build complete: recovers hwpxPath from build_status.json", async () => {
+    const questionNums = [1, 2, 3];
+    const questionImages = questionNums.map((n) => ({
+      number: n,
+      path: path.join(FIXTURES_DIR, `q0${n}.png`),
+    }));
+    const stageOverrides = {
+      "create.extractor": "claude-sdk",
+      "create.solver": "deepseek-v4",
+      "create.verifier": "deepseek-v4",
+    } as const;
+
+    await prepopulateSolverCache(cache, questionNums);
+    const { runStageOrchestrator } = await import("../orchestrator");
+
+    // 1st run: full pipeline writes figure_status.json + build_status.json + HWPX.
+    const first = await runStageOrchestrator({
+      mode: "resume",
+      resumeFrom: "solver",
+      meta: COMPLETE_META,
+      questionImages,
+      stageOverrides,
+      defaultProvider: "auto",
+      baseDir,
+      send: makeSseCollector().send,
+      isAborted: () => false,
+      cache,
+    });
+    expect(first.status, first.resultSummary).toBe("done");
+
+    // 2nd run: [작업 재개] → resumeFrom:"auto". detectFromCache sees figure+build
+    // done → startStage="checker", so builder is skipped and outputFile is empty.
+    // The orchestrator must recover hwpxPath from build_status.json instead of
+    // failing with "Checker requires hwpxPath, sectionXmlPath, or sectionXml".
+    const second = await runStageOrchestrator({
+      mode: "resume",
+      resumeFrom: "auto",
+      meta: COMPLETE_META,
+      questionImages,
+      stageOverrides,
+      defaultProvider: "auto",
+      baseDir,
+      send: makeSseCollector().send,
+      isAborted: () => false,
+      cache,
+    });
+
+    expect(second.status, second.resultSummary).toBe("done");
+    // builder must NOT re-run (startStage resolved to checker, not builder).
+    expect(
+      second.providerTelemetry.filter((e) => e.workflowStageKey === "builder")
+    ).toHaveLength(0);
+    // checker still runs and passes against the recovered HWPX path.
+    const checkerEntries = second.providerTelemetry.filter(
+      (e) => e.workflowStageKey === "checker"
+    );
+    expect(checkerEntries).toHaveLength(1);
+    expect(checkerEntries[0]?.status).toBe("success");
+  }, 30_000);
+
   it("solver stage emits SSE events for all 3 questions", async () => {
     const { events, send } = makeSseCollector();
     const questionNums = [1, 2, 3];

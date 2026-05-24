@@ -1079,9 +1079,11 @@ export async function runStageOrchestrator(
     if (!checkAborted() && shouldRunStage(startStage, "checker") && stillUnder("checker") && checkerAttempts > 0) {
       emitStageStart(send, "checker", "deterministic checker runner를 실행합니다.");
 
+      // resume이 startStage="checker"로 바로 진입하면 builder를 건너뛰어
+      // outputFile이 비어 있다. 이전 builder 산출 경로를 복원한다.
       const hwpxPath = outputFile
         ? (path.isAbsolute(outputFile) ? outputFile : path.join(baseDir, outputFile))
-        : undefined;
+        : await loadBuilderOutputPath(cache.paths.buildStatus, baseDir);
 
       const checkerStartedAt = Date.now();
       const { result: checkerResult, autofixed } = await runCheckerWithAutoFix(
@@ -1169,6 +1171,16 @@ async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * build_status.json에서 직전 builder 산출 HWPX 경로를 복원한다.
+ * resume이 builder를 건너뛰고 checker로 바로 진입한 경우에 사용한다.
+ */
+async function loadBuilderOutputPath(buildStatusPath: string, baseDir: string): Promise<string | undefined> {
+  const parsed = (await readCacheJson(buildStatusPath)) as { status?: string; outputFile?: string } | null;
+  if (!parsed || parsed.status !== "completed" || !parsed.outputFile) return undefined;
+  return path.isAbsolute(parsed.outputFile) ? parsed.outputFile : path.join(baseDir, parsed.outputFile);
 }
 
 /** 모든 문제의 cleaned 정리본이 이미 존재하면 false (skip), 하나라도 없으면 true. */
