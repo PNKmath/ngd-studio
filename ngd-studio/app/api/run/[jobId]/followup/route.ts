@@ -4,7 +4,7 @@ import { readFile, writeFile, readdir } from "fs/promises";
 import path from "path";
 import { existsSync } from "fs";
 import { runStageOrchestrator, type OrchestratorResult } from "@/server/stages/orchestrator";
-import { normalizeStageOverrides, type StageOverrideMap } from "@/lib/ai/settings";
+import { normalizeStageOverrides, isImageProviderId, type StageOverrideMap, type ImageProviderId } from "@/lib/ai/settings";
 import { normalizeProviderId, type AIProviderId } from "@/lib/ai";
 import { createStageCache } from "@/server/stages/cache";
 import { cleanupFromStage } from "@/server/stages/cleanup";
@@ -180,6 +180,11 @@ export async function POST(
     const jobMode: string = (job.mode as string) ?? "create";
     const checkerMaxAttempts = typeof job.checkerMaxAttempts === 'number' ? job.checkerMaxAttempts : 2;
     const verifierMaxAttempts = typeof job.verifierMaxAttempts === 'number' ? job.verifierMaxAttempts : 3;
+    // 그림/이미지정리 stage는 최초 create 시 저장된 설정을 그대로 재사용한다.
+    // (전달하지 않으면 orchestrator가 gemini/true 기본값으로 폴백 → 설정한 Provider 무시)
+    const imageProvider: ImageProviderId | undefined = isImageProviderId(job.imageProvider) ? job.imageProvider : undefined;
+    const figureRegen = typeof job.figureRegen === "boolean" ? job.figureRegen : undefined;
+    const imageCleaningEnabled = typeof job.imageCleaningEnabled === "boolean" ? job.imageCleaningEnabled : undefined;
 
     // Update job status + record followup
     job.status = "running";
@@ -327,6 +332,9 @@ export async function POST(
           stageOverrides,
           stopAfterStage,
           targetQuestionNumbers: targetQuestions,
+          imageProvider,
+          figureRegen,
+          imageCleaningEnabled,
           checkerMaxAttempts,
           verifierMaxAttempts,
           defaultProvider: normalizeProviderId(job.requestedProvider as AIProviderId | undefined),

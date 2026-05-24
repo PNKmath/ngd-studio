@@ -419,6 +419,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     provider: resolvedProvider,
     stageOverrides,
     imageProvider,
+    figureRegen: body.figureRegen,
+    imageCleaningEnabled: body.imageCleaningEnabled,
     checkerMaxAttempts: body.checkerMaxAttempts ?? 2,
     verifierMaxAttempts: body.verifierMaxAttempts ?? 3,
     status: "running",
