@@ -199,8 +199,8 @@ export const CropperWorkspace = forwardRef<CropperWorkspaceRef, CropperWorkspace
       const path: string = uploadData.files?.[0]?.path;
       if (!path) throw new Error("서버 경로 없음");
 
-      const initialRotation: PdfRotation = 0;
-      const initialFlip: PdfFlip = false;
+      const initialRotation: PdfRotation = 180;
+      const initialFlip: PdfFlip = true;
       const meta = await fetchPdfMeta(path, initialRotation, initialFlip);
 
       setPdfPath(path);
