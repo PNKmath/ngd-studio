@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { QuestionResult } from "@/lib/store";
@@ -30,43 +30,48 @@ export function FigureReviewModal({
   );
 
   const [loadedSet, setLoadedSet] = useState<Set<number>>(new Set());
-  const [retryCount, setRetryCount] = useState<Record<number, number>>({});
+  // 재생성 진행 중인 문제 번호. 완료는 SSE figure 이벤트(= updatedAt 변화)로 판정한다.
+  const [regenerating, setRegenerating] = useState<Set<number>>(new Set());
+  // 재생성 클릭 시점의 updatedAt 스냅샷 — 이 값이 바뀌면 재생성 완료로 본다.
+  const regenBaselineRef = useRef<Record<number, string>>({});
 
-  // 미완료 이미지 3초마다 폴링 (모달이 열려 있을 때만)
+  // 재생성 완료 감지: regenerating 중인 문제의 updatedAt 이 baseline 과 달라지면
+  // (= 새 figure SSE 이벤트 수신) 스피너를 끈다. 이미지 src 는 &v=updatedAt 이라
+  // updatedAt 변화만으로 자동 갱신되므로 별도 캐시버스터 bump 는 필요 없다.
   useEffect(() => {
-    if (!open) return;
-    if (figureProblems.length === 0) return;
-    const unloaded = figureProblems.filter((q) => !loadedSet.has(q.number));
-    if (unloaded.length === 0) return;
-    const timer = setInterval(() => {
-      setRetryCount((prev) => {
-        const next = { ...prev };
-        for (const q of unloaded) next[q.number] = (prev[q.number] ?? 0) + 1;
-        return next;
-      });
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [open, figureProblems, loadedSet]);
+    if (regenerating.size === 0) return;
+    const done = [...regenerating].filter((num) => {
+      const q = figureProblems.find((p) => p.number === num);
+      return q && q.updatedAt && q.updatedAt !== regenBaselineRef.current[num];
+    });
+    if (done.length === 0) return;
+    setRegenerating((prev) => {
+      const s = new Set(prev);
+      for (const num of done) s.delete(num);
+      return s;
+    });
+  }, [figureProblems, regenerating]);
 
   const handleRetry = (qNum: number) => {
+    const q = figureProblems.find((p) => p.number === qNum);
+    regenBaselineRef.current[qNum] = q?.updatedAt ?? "";
     setLoadedSet((prev) => {
       const s = new Set(prev);
       s.delete(qNum);
       return s;
     });
-    setRetryCount((prev) => ({ ...prev, [qNum]: (prev[qNum] ?? 0) + 1 }));
+    setRegenerating((prev) => new Set(prev).add(qNum));
     onRetryFigure(qNum);
   };
 
-  // 전체 재생성: 개별 handleRetry와 동일하게 cache state를 비워야
-  // 이미 onLoad된 이미지가 옛 src(URL 동일)로 캐싱된 채 남지 않는다.
+  // 전체 재생성: 모든 문제를 regenerating 으로 표시하고 baseline 을 스냅샷한다.
+  // 캐시버스터 bump 는 문제별 완료(SSE) 시점에 일어난다.
   const handleRetryAll = () => {
+    for (const q of figureProblems) {
+      regenBaselineRef.current[q.number] = q.updatedAt ?? "";
+    }
     setLoadedSet(new Set());
-    setRetryCount((prev) => {
-      const next: Record<number, number> = { ...prev };
-      for (const q of figureProblems) next[q.number] = (prev[q.number] ?? 0) + 1;
-      return next;
-    });
+    setRegenerating(new Set(figureProblems.map((q) => q.number)));
     onRetryAll();
   };
 
@@ -150,7 +155,7 @@ export function FigureReviewModal({
                   variant="outline"
                   size="sm"
                   onClick={handleRetryAll}
-                  disabled={!jobId || globalLoading !== null}
+                  disabled={!jobId || globalLoading !== null || regenerating.size > 0}
                   className="h-7 text-xs"
                 >
                   전체 재생성
@@ -159,35 +164,36 @@ export function FigureReviewModal({
 
               <div className="grid grid-cols-2 gap-4">
                 {figureProblems.map((q) => {
-                  const retry = retryCount[q.number] ?? 0;
+                  const v = encodeURIComponent(q.updatedAt ?? "");
                   const finalSrc = `/api/file?path=${encodeURIComponent(
                     `outputs/images/prob${q.number}_final.png`
-                  )}&_r=${retry}`;
+                  )}&v=${v}`;
                   const refSrc = `/api/file?path=${encodeURIComponent(
                     `inputs/시험지 제작/.v3cache/prob${q.number}_ref.jpg`
-                  )}&_r=${retry}`;
+                  )}&v=${v}`;
                   const loaded = loadedSet.has(q.number);
                   const isFailed = q.figure?.status === "failed";
+                  const isRegenerating = regenerating.has(q.number);
                   return (
                     <div
                       key={q.number}
                       className={`space-y-2 rounded-lg p-3 ${isFailed ? "border border-destructive/30 bg-destructive/5" : "border border-border/40"}`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`text-sm font-bold ${isFailed ? "text-destructive" : "text-foreground"}`}>
-                          {q.number}번 {isFailed ? "✗ 생성 실패" : loaded ? "✓" : "생성 중..."}
+                        <span className={`text-sm font-bold ${isFailed && !isRegenerating ? "text-destructive" : "text-foreground"}`}>
+                          {q.number}번 {isRegenerating ? "재생성 중..." : isFailed ? "✗ 생성 실패" : loaded ? "✓" : "생성 중..."}
                         </span>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleRetry(q.number)}
-                          disabled={!jobId || globalLoading !== null}
+                          disabled={!jobId || globalLoading !== null || isRegenerating}
                           className="h-7 text-xs"
                         >
                           재생성
                         </Button>
                       </div>
-                      {isFailed ? (
+                      {isFailed && !isRegenerating ? (
                         <div className="rounded border border-destructive/20 bg-destructive/5 p-3 text-[10px] text-destructive/70 text-center min-h-[60px] flex items-center justify-center">
                           {q.figure?.error
                             ? <span className="font-mono break-all">{q.figure.error}</span>
@@ -207,17 +213,29 @@ export function FigureReviewModal({
                           </div>
                           <div className="space-y-1">
                             <p className="text-[10px] text-muted-foreground text-center">생성된 그림</p>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={finalSrc}
-                              alt={`문제 ${q.number} 생성 그림`}
-                              className={`w-full rounded border bg-white transition-opacity ${
-                                loaded ? "opacity-100" : "opacity-20"
-                              }`}
-                              onLoad={() =>
-                                setLoadedSet((prev) => new Set([...prev, q.number]))
-                              }
-                            />
+                            {/* 박스 크기는 이미지가 그대로 유지하고, 재생성 중엔 스피너를 위에 오버레이 — 레이아웃 흔들림 방지. */}
+                            <div className="relative w-full min-h-[120px]">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={finalSrc}
+                                alt={`문제 ${q.number} 생성 그림`}
+                                className={`w-full rounded border bg-white transition-opacity ${
+                                  isRegenerating ? "opacity-40" : loaded ? "opacity-100" : "opacity-20"
+                                }`}
+                                onLoad={() =>
+                                  setLoadedSet((prev) => new Set([...prev, q.number]))
+                                }
+                              />
+                              {isRegenerating && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded bg-white/40 text-muted-foreground">
+                                  <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                  </svg>
+                                  <span className="text-[10px]">재생성 중...</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
