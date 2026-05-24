@@ -101,10 +101,12 @@ async function buildHandler(
   outputsImagesDir: string,
   overrides?: {
     rename?: (oldPath: string, newPath: string) => Promise<void>;
+    rm?: (path: string, options?: Parameters<typeof import("fs/promises").rm>[1]) => Promise<void>;
   }
 ) {
-  const { mkdir, rm, rename: fsRename, writeFile, stat } = await import("fs/promises");
+  const { mkdir, rm: fsRm, rename: fsRename, writeFile, stat } = await import("fs/promises");
   const rename = overrides?.rename ?? fsRename;
+  const rm = overrides?.rm ?? fsRm;
 
   const CACHE_DIR = path.join(examDir, ".v3cache");
   const IMAGES_DIR = path.join(examDir, "question_images");
@@ -195,29 +197,51 @@ async function buildHandler(
       );
     }
 
+    let oldCacheMoved = false;
+    let oldImagesMoved = false;
+    let newCacheCommitted = false;
+    let newImagesCommitted = false;
     try {
       await writeFile(LOCK_PATH, JSON.stringify({ txid, startedAt: new Date().toISOString() }), "utf-8");
-      if (await exists(CACHE_DIR)) await rename(CACHE_DIR, oldCacheDir);
-      if (await exists(IMAGES_DIR)) await rename(IMAGES_DIR, oldImagesDir);
+      if (await exists(CACHE_DIR)) {
+        await rename(CACHE_DIR, oldCacheDir);
+        oldCacheMoved = true;
+      }
+      if (await exists(IMAGES_DIR)) {
+        await rename(IMAGES_DIR, oldImagesDir);
+        oldImagesMoved = true;
+      }
       await rename(nextCacheDir, CACHE_DIR);
+      newCacheCommitted = true;
       await rename(nextImagesDir, IMAGES_DIR);
+      newImagesCommitted = true;
 
       // old cache 삭제 (백업 없음 — .v3cache_prev 회전 없음)
       if (await exists(oldCacheDir)) await rm(oldCacheDir, { recursive: true, force: true });
       if (await exists(oldImagesDir)) await rm(oldImagesDir, { recursive: true, force: true });
 
-      // outputs/images/ 클리어 + 재생성 (derivable artifact 갱신)
-      if (await exists(OUTPUTS_IMAGES_DIR)) {
-        await rm(OUTPUTS_IMAGES_DIR, { recursive: true, force: true });
+      // outputs/images/ 클리어 + 재생성 (derivable artifact 갱신). 실패해도 입력 commit은 유지한다.
+      try {
+        if (await exists(OUTPUTS_IMAGES_DIR)) {
+          await rm(OUTPUTS_IMAGES_DIR, { recursive: true, force: true });
+        }
+        await mkdir(OUTPUTS_IMAGES_DIR, { recursive: true });
+      } catch {
+        /* derivable artifact cleanup best effort */
       }
-      await mkdir(OUTPUTS_IMAGES_DIR, { recursive: true });
 
       await rm(LOCK_PATH, { force: true }).catch(() => {});
     } catch (err) {
       try {
-        if (!(await exists(CACHE_DIR)) && (await exists(oldCacheDir)))
+        if (newCacheCommitted) {
+          await rm(CACHE_DIR, { recursive: true, force: true });
+        }
+        if (newImagesCommitted) {
+          await rm(IMAGES_DIR, { recursive: true, force: true });
+        }
+        if (oldCacheMoved && (await exists(oldCacheDir)))
           await rename(oldCacheDir, CACHE_DIR);
-        if (!(await exists(IMAGES_DIR)) && (await exists(oldImagesDir)))
+        if (oldImagesMoved && (await exists(oldImagesDir)))
           await rename(oldImagesDir, IMAGES_DIR);
         await rm(nextCacheDir, { recursive: true, force: true });
         await rm(nextImagesDir, { recursive: true, force: true });
@@ -556,5 +580,80 @@ describe("POST /api/create/start", () => {
     // lock 파일도 정리됐는지 확인
     const lockPath = path.join(examDir, ".create_start.lock");
     expect(await fileExists(lockPath)).toBe(false);
+  });
+
+  it("commit 4번째 rename 실패 시 새 cache를 제거하고 기존 cache/images를 모두 복원", async () => {
+    const existingCacheDir = path.join(examDir, ".v3cache");
+    const existingImagesDir = path.join(examDir, "question_images");
+    await mkdir(existingCacheDir, { recursive: true });
+    await writeFile(path.join(existingCacheDir, "sentinel.txt"), "original cache", "utf-8");
+    await mkdir(existingImagesDir, { recursive: true });
+    await writeFile(path.join(existingImagesDir, "q01.png"), "original image", "utf-8");
+
+    const { rename: realRename } = await import("fs/promises");
+    let renameCallCount = 0;
+    const faultyRename = async (oldPath: string, newPath: string): Promise<void> => {
+      renameCallCount++;
+      if (renameCallCount === 4) {
+        throw new Error("simulated image commit failure");
+      }
+      return realRename(oldPath, newPath);
+    };
+
+    const { POST, CACHE_DIR, IMAGES_DIR } = await buildHandler(examDir, outputsImagesDir, { rename: faultyRename });
+    const req = makeRequest({ school: "새학교" }, [
+      { key: "q01", name: "q01.png", data: pngBuffer() },
+    ]);
+
+    const res = await POST(req);
+    expect(res.status).toBe(500);
+
+    const cacheFiles = await readdir(CACHE_DIR);
+    expect(cacheFiles).toContain("sentinel.txt");
+    expect(cacheFiles).not.toContain("session_meta.json");
+
+    const imageContent = await import("fs/promises").then((fs) =>
+      fs.readFile(path.join(IMAGES_DIR, "q01.png"), "utf-8")
+    );
+    expect(imageContent).toBe("original image");
+
+    const examEntries = await readdir(examDir);
+    expect(examEntries.filter((e) => e.includes(".next_") || e.includes(".old_"))).toHaveLength(0);
+    expect(await fileExists(path.join(examDir, ".create_start.lock"))).toBe(false);
+  });
+
+  it("outputs/images cleanup 실패는 입력 commit을 rollback하지 않는다", async () => {
+    const existingCacheDir = path.join(examDir, ".v3cache");
+    const existingImagesDir = path.join(examDir, "question_images");
+    await mkdir(existingCacheDir, { recursive: true });
+    await writeFile(path.join(existingCacheDir, "old_file.txt"), "old cache", "utf-8");
+    await mkdir(existingImagesDir, { recursive: true });
+    await writeFile(path.join(existingImagesDir, "q01.png"), "old image", "utf-8");
+    await writeFile(path.join(outputsImagesDir, "stale.png"), "stale", "utf-8");
+
+    const { rm: realRm } = await import("fs/promises");
+    const faultyRm = async (target: string, options?: Parameters<typeof realRm>[1]): Promise<void> => {
+      if (target === outputsImagesDir) {
+        throw new Error("simulated outputs cleanup failure");
+      }
+      return realRm(target, options);
+    };
+
+    const { POST, CACHE_DIR, IMAGES_DIR } = await buildHandler(examDir, outputsImagesDir, { rm: faultyRm });
+    const req = makeRequest({ school: "새학교" }, [
+      { key: "q01", name: "q01.png", data: pngBuffer() },
+    ]);
+
+    const res = await POST(req);
+    const body = await res.json() as { ok: boolean };
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(true);
+
+    const cacheFiles = await readdir(CACHE_DIR);
+    expect(cacheFiles).toContain("session_meta.json");
+    expect(cacheFiles).not.toContain("old_file.txt");
+    expect(await fileExists(path.join(IMAGES_DIR, "q01.png"))).toBe(true);
+    expect(await fileExists(path.join(outputsImagesDir, "stale.png"))).toBe(true);
+    expect(await fileExists(path.join(examDir, ".create_start.lock"))).toBe(false);
   });
 });

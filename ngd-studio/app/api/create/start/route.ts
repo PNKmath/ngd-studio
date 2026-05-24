@@ -115,31 +115,57 @@ export async function POST(req: NextRequest) {
   // ── stage 3: commit (short locked rename window) ──
   // old .v3cache는 디버그 보존 없이 바로 삭제.
   // question_images old는 파생 입력이므로 성공 후 삭제.
-  // outputs/images/는 derivable artifact이므로 신규 작업 시작 시점에 클리어.
+  // outputs/images/는 derivable artifact이므로 commit 성공 후 best-effort로 클리어.
+  let oldCacheMoved = false;
+  let oldImagesMoved = false;
+  let newCacheCommitted = false;
+  let newImagesCommitted = false;
   try {
     await writeFile(LOCK_PATH, JSON.stringify({ txid, startedAt: new Date().toISOString() }), "utf-8");
-    if (await exists(CACHE_DIR)) await rename(CACHE_DIR, oldCacheDir);
-    if (await exists(IMAGES_DIR)) await rename(IMAGES_DIR, oldImagesDir);
+    if (await exists(CACHE_DIR)) {
+      await rename(CACHE_DIR, oldCacheDir);
+      oldCacheMoved = true;
+    }
+    if (await exists(IMAGES_DIR)) {
+      await rename(IMAGES_DIR, oldImagesDir);
+      oldImagesMoved = true;
+    }
     await rename(nextCacheDir, CACHE_DIR);
+    newCacheCommitted = true;
     await rename(nextImagesDir, IMAGES_DIR);
+    newImagesCommitted = true;
 
     // old cache 삭제 (백업 없음)
     if (await exists(oldCacheDir)) await rm(oldCacheDir, { recursive: true, force: true });
     if (await exists(oldImagesDir)) await rm(oldImagesDir, { recursive: true, force: true });
 
-    // outputs/images/ 클리어 + 재생성 (derivable artifact 갱신)
-    if (await exists(OUTPUTS_IMAGES_DIR)) {
-      await rm(OUTPUTS_IMAGES_DIR, { recursive: true, force: true });
+    // outputs/images/ 클리어 + 재생성 (derivable artifact 갱신). 실패해도 입력 commit은 유지한다.
+    try {
+      if (await exists(OUTPUTS_IMAGES_DIR)) {
+        await rm(OUTPUTS_IMAGES_DIR, { recursive: true, force: true });
+      }
+      await mkdir(OUTPUTS_IMAGES_DIR, { recursive: true });
+    } catch (cleanupErr) {
+      console.warn(
+        `[create/start] outputs/images cleanup failed: ${
+          cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)
+        }`
+      );
     }
-    await mkdir(OUTPUTS_IMAGES_DIR, { recursive: true });
 
     await rm(LOCK_PATH, { force: true }).catch(() => {});
   } catch (err) {
     // Commit 실패는 위험 상태일 수 있으므로 best-effort 복구 후 hard fail.
     try {
-      if (!(await exists(CACHE_DIR)) && (await exists(oldCacheDir)))
+      if (newCacheCommitted) {
+        await rm(CACHE_DIR, { recursive: true, force: true });
+      }
+      if (newImagesCommitted) {
+        await rm(IMAGES_DIR, { recursive: true, force: true });
+      }
+      if (oldCacheMoved && (await exists(oldCacheDir)))
         await rename(oldCacheDir, CACHE_DIR);
-      if (!(await exists(IMAGES_DIR)) && (await exists(oldImagesDir)))
+      if (oldImagesMoved && (await exists(oldImagesDir)))
         await rename(oldImagesDir, IMAGES_DIR);
       await rm(nextCacheDir, { recursive: true, force: true });
       await rm(nextImagesDir, { recursive: true, force: true });
