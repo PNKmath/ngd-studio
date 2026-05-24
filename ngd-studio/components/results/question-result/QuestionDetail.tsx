@@ -12,6 +12,7 @@ import type { Part } from "./types";
 import { QuestionImages } from "./QuestionImages";
 import { ExtractionEditor } from "./ExtractionEditor";
 import { SolutionEditor } from "./SolutionEditor";
+import { SolutionView } from "./SolutionView";
 import { ActionButtons } from "./ActionButtons";
 import { statusOf } from "./QuestionList";
 
@@ -40,6 +41,7 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
   const reviewActive = useJobStore((s) => s.extractionReviewActive);
   const updateQuestionResult = useJobStore((s) => s.updateQuestionResult);
   const [editing, setEditing] = useState(false);
+  const [editingSol, setEditingSol] = useState(false);
   const [savedExt, setSavedExt] = useState<Record<string, unknown> | null>(null);
   const [savedSol, setSavedSol] = useState<Record<string, unknown> | null>(null);
 
@@ -222,19 +224,21 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
 
               <TabsContent value="solve" className="m-0 p-8 focus-visible:outline-none">
                 {sol ? (
-                  <div className="space-y-8 max-w-3xl animate-in slide-in-from-bottom-2 duration-500 fill-mode-both">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em]">AI GENERATED SOLUTION</h4>
-                      <Badge variant="outline" className="bg-muted/10 text-muted-foreground border-border/60 text-[10px] px-2 font-bold uppercase">Solved</Badge>
-                    </div>
-                    <SolutionEditor
-                      qNum={qr.number}
-                      initial={savedSol ?? sol}
-                      onSaved={(updated) => {
-                        updateQuestionResult(qr.number, "solved", updated);
-                        setSavedSol(updated);
-                      }}
-                    />
+                  <div className="space-y-8 max-w-3xl">
+                    {editingSol ? (
+                      <SolutionEditor
+                        qNum={qr.number}
+                        initial={savedSol ?? sol}
+                        onSaved={(updated) => {
+                          updateQuestionResult(qr.number, "solved", updated);
+                          setSavedSol(updated);
+                          setEditingSol(false);
+                        }}
+                        onCancel={() => setEditingSol(false)}
+                      />
+                    ) : (
+                      <SolutionView sol={savedSol ?? sol} onEdit={() => setEditingSol(true)} />
+                    )}
                   </div>
                 ) : (
                   <EmptyTab message="아직 해설이 생성되지 않았습니다. 추출 완료 후 진행하세요." />
