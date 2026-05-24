@@ -1,24 +1,24 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 /**
  * 추출 결과 편집 폼.
- * Step 3.5(추출 편집)에서 사용자가 parts/choices/answer 등을 직접 수정한다.
+ * 부모(QuestionDetail) 가 editing/reviewActive 분기로 마운트한다 — 마운트 즉시 폼.
  * 저장은 PUT /api/extracted-json?q=N — 백엔드의 q{N}_extracted.json을 덮어쓴다.
- * 기본 read-only 모드. "추출 결과 편집" 버튼 클릭 시 편집 모드 진입.
  */
 export function ExtractionEditor({
   qNum,
   initial,
   onSaved,
+  onCancel,
 }: {
   qNum: number;
   initial: Record<string, unknown>;
   onSaved: (updated: Record<string, unknown>) => void;
+  onCancel: () => void;
 }) {
-  const [editMode, setEditMode] = useState(false);
   const [data, setData] = useState<Record<string, unknown>>(initial);
   const [partsText, setPartsText] = useState(JSON.stringify(initial.parts ?? [], null, 0));
   const [choicesText, setChoicesText] = useState(JSON.stringify(initial.choices ?? null, null, 0));
@@ -43,18 +43,6 @@ export function ExtractionEditor({
       return false;
     }
   }, [partsText, choicesText, conditionBoxText, dataTableText, cropText]);
-
-  const handleCancel = useCallback(() => {
-    setData(initial);
-    setPartsText(JSON.stringify(initial.parts ?? [], null, 0));
-    setChoicesText(JSON.stringify(initial.choices ?? null, null, 0));
-    setConditionBoxText(JSON.stringify(initial.condition_box ?? null, null, 0));
-    setDataTableText(JSON.stringify(initial.data_table ?? null, null, 0));
-    setCropText(JSON.stringify(((initial.figure_info as Record<string, unknown>)?.crop_ratio ?? null), null, 0));
-    setDirty(false);
-    setError(null);
-    setEditMode(false);
-  }, [initial]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -103,7 +91,6 @@ export function ExtractionEditor({
       }
       onSaved(next);
       setDirty(false);
-      setEditMode(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장 실패");
     } finally {
@@ -111,41 +98,28 @@ export function ExtractionEditor({
     }
   };
 
-  // Read-only 모드
-  if (!editMode) {
-    return (
-      <div className="pt-2 space-y-2 text-xs">
-        <div className="flex items-center justify-between">
-          <h5 className="font-medium text-blue-600">추출 결과</h5>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditMode(true)}
-            className="h-7 text-xs"
-          >
-            추출 결과 편집
-          </Button>
-        </div>
-        <pre className="text-[10px] p-3 bg-muted/30 rounded border overflow-x-auto whitespace-pre-wrap break-all">
-          {JSON.stringify(initial, null, 2)}
-        </pre>
-      </div>
-    );
-  }
-
-  // 편집 모드
   return (
     <div className="pt-2 space-y-2 text-xs">
       <div className="flex items-center justify-between">
         <h5 className="font-medium text-blue-600">추출 결과 편집</h5>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleCancel}
-          className="h-7 text-xs"
-        >
-          편집 취소
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onCancel}
+            className="h-7 text-xs"
+          >
+            편집 취소
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={!dirty || !isValid || saving}
+            className="h-7 text-xs"
+          >
+            {saving ? "저장 중..." : "이 문제 저장"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -271,17 +245,6 @@ export function ExtractionEditor({
       )}
 
       {error && <div className="text-red-600 text-[10px]">{error}</div>}
-
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          onClick={handleSave}
-          disabled={!dirty || !isValid || saving}
-          className="h-7 text-xs"
-        >
-          {saving ? "저장 중..." : "이 문제 저장"}
-        </Button>
-      </div>
     </div>
   );
 }

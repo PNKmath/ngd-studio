@@ -152,12 +152,16 @@ export function QuestionDetail({ qr }: { qr: QuestionResult }) {
                             setSavedExt(updated);
                             setEditing(false);
                           }}
+                          onCancel={() => {
+                            setEditing(false);
+                            setSavedExt(ext as Record<string, unknown>);
+                          }}
                         />
                       ) : (
                         <div className="space-y-10 animate-in fade-in duration-500 fill-mode-both">
                           <div className="flex items-center justify-between">
                             <h4 className="text-[10px] font-bold text-foreground/40 uppercase tracking-[0.2em]">QUESTION BODY</h4>
-                            <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-8 text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 transition-colors">
+                            <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="h-7 text-xs">
                               내용 편집
                             </Button>
                           </div>
