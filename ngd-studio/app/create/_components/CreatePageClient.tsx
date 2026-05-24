@@ -100,6 +100,7 @@ export default function CreateV4Page({ currentYear }: CreateV4PageProps) {
   }, [v3Meta, startJob, setV3Meta]);
 
   const [autoSplitEnabled, setAutoSplitEnabled] = useState(false);
+  const [geminiConfigured, setGeminiConfigured] = useState<boolean | null>(null);
   const [aiSettings, setAiSettings] = useState<AISettings>(DEFAULT_AI_SETTINGS);
   const [meta, setMeta] = useState<MetaValue>(() => createDefaultMeta(currentYear));
 
@@ -110,10 +111,27 @@ export default function CreateV4Page({ currentYear }: CreateV4PageProps) {
       setMeta(loadStoredMeta(defaultMeta));
     });
 
-    const onFocus = () => setAiSettings(readAISettings());
+    const loadGeminiStatus = () => {
+      fetch("/api/env-settings")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { keys?: Record<string, { configured?: boolean }> } | null) => {
+          setGeminiConfigured(Boolean(data?.keys?.GEMINI_API_KEY?.configured));
+        })
+        .catch(() => setGeminiConfigured(null));
+    };
+    loadGeminiStatus();
+
+    const onFocus = () => {
+      setAiSettings(readAISettings());
+      loadGeminiStatus();
+    };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [defaultMeta]);
+
+  // Gemini 키가 확실히 없을 때만 자동 분할을 막는다 (null=확인 전/실패 → 막지 않음).
+  const geminiMissing = geminiConfigured === false;
+  const autoSplitActive = autoSplitEnabled && !geminiMissing;
 
   const deepSeekStages = AI_STAGE_KEYS.filter(
     (key) => aiSettings.stageOverrides[key] === "deepseek-v4"
@@ -598,12 +616,31 @@ export default function CreateV4Page({ currentYear }: CreateV4PageProps) {
           )}
           
           <div className="flex flex-col gap-1.5">
-            <label className="flex items-center gap-2 cursor-pointer group">
-              <input type="checkbox" checked={autoSplitEnabled} onChange={handleAutoSplitToggle} className="accent-primary w-3.5 h-3.5" />
+            <label
+              className={cn(
+                "flex items-center gap-2 group",
+                geminiMissing ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+              )}
+            >
+              <input
+                type="checkbox"
+                checked={autoSplitActive}
+                onChange={handleAutoSplitToggle}
+                disabled={geminiMissing}
+                className="accent-primary w-3.5 h-3.5"
+              />
               <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors font-bold tracking-tight">
                 자동 분할 <span className="font-normal opacity-70">(Gemini API 사용)</span>
               </span>
             </label>
+            {geminiMissing && (
+              <a
+                href="/settings"
+                className="ml-[1.375rem] text-[10px] text-destructive/80 hover:text-destructive hover:underline"
+              >
+                Gemini API 키가 필요합니다 — 설정에서 입력
+              </a>
+            )}
             <label
               className="flex items-center gap-2 cursor-pointer group"
               title="추출 전에 nano-banana로 문제 이미지의 손글씨/필기 흔적을 제거합니다. 인쇄된 텍스트·수식·표는 그대로 유지. 체크 해제 시 원본 이미지로 진행."
@@ -813,7 +850,7 @@ export default function CreateV4Page({ currentYear }: CreateV4PageProps) {
         open={cropperOpen && !hasJob}
         onClose={() => setCropperOpen(false)}
         onExtract={handleExtract}
-        autoSplitOnUpload={autoSplitEnabled}
+        autoSplitOnUpload={autoSplitActive}
         onPdfSelected={handlePdfSelected}
       />
 

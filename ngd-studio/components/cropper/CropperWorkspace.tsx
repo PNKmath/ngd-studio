@@ -144,6 +144,25 @@ export const CropperWorkspace = forwardRef<CropperWorkspaceRef, CropperWorkspace
   const [autoCropping, setAutoCropping] = useState(false);
   const [autoCropError, setAutoCropError] = useState<string | null>(null);
 
+  // Gemini 키가 확실히 없을 때만 자동 분할을 막는다 (null=확인 전/실패 → 막지 않음).
+  const [geminiConfigured, setGeminiConfigured] = useState<boolean | null>(null);
+  const geminiMissing = geminiConfigured === false;
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/env-settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { keys?: Record<string, { configured?: boolean }> } | null) => {
+        if (!cancelled) setGeminiConfigured(Boolean(data?.keys?.GEMINI_API_KEY?.configured));
+      })
+      .catch(() => {
+        if (!cancelled) setGeminiConfigured(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const pendingAutoSplitRef = useRef(false);
 
   const [extracting, setExtracting] = useState(false);
@@ -392,6 +411,10 @@ export const CropperWorkspace = forwardRef<CropperWorkspaceRef, CropperWorkspace
 
   async function handleAutoCrop() {
     if (!pdfPath || !pdfMeta) return;
+    if (geminiMissing) {
+      setAutoCropError("Gemini API 키가 설정되지 않았습니다. 설정에서 입력 후 다시 시도하세요.");
+      return;
+    }
 
     if (boxes.length > 0) {
       const ok = window.confirm(
@@ -643,8 +666,9 @@ export const CropperWorkspace = forwardRef<CropperWorkspaceRef, CropperWorkspace
         {pdfMeta && (
           <button
             onClick={handleAutoCrop}
-            disabled={autoCropping}
-            className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            disabled={autoCropping || geminiMissing}
+            title={geminiMissing ? "Gemini API 키가 필요합니다 — 설정에서 입력" : undefined}
+            className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {autoCropping ? "자동 분할 중…" : "자동 분할"}
           </button>
