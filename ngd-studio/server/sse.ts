@@ -481,6 +481,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       providerTelemetry = cropResult.providerTelemetry;
     } else {
       // create / resume / review — 모두 orchestrator 로 통합
+      // create 모드는 figure 단계 직후 멈춰 사용자의 그림 확인을 기다린다.
+      // 확인 CTA → /api/run/[jobId]/followup `resume --from=builder` 로 builder+checker 이어 실행.
       const orchResult = await runStageOrchestrator({
         mode: mode as "create" | "resume" | "review",
         resumeFrom: meta?.resumeFrom,
@@ -493,6 +495,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         imageCleaningEnabled: body.imageCleaningEnabled,
         checkerMaxAttempts: body.checkerMaxAttempts,
         verifierMaxAttempts: body.verifierMaxAttempts,
+        stopAfterStage: mode === "create" ? "figure" : undefined,
         hwpxPath: mode === "review" ? toAbsWsl(wslFiles.hwpx) : undefined,
         additionalInstruction: mode === "review" ? meta?.additionalInstruction : undefined,
         defaultProvider: requestedProvider,

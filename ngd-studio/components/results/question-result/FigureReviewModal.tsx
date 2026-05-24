@@ -58,6 +58,18 @@ export function FigureReviewModal({
     onRetryFigure(qNum);
   };
 
+  // 전체 재생성: 개별 handleRetry와 동일하게 cache state를 비워야
+  // 이미 onLoad된 이미지가 옛 src(URL 동일)로 캐싱된 채 남지 않는다.
+  const handleRetryAll = () => {
+    setLoadedSet(new Set());
+    setRetryCount((prev) => {
+      const next: Record<number, number> = { ...prev };
+      for (const q of figureProblems) next[q.number] = (prev[q.number] ?? 0) + 1;
+      return next;
+    });
+    onRetryAll();
+  };
+
   const failedProblems = useMemo(
     () => figureProblems.filter((q) => q.figure?.status === "failed"),
     [figureProblems]
@@ -137,7 +149,7 @@ export function FigureReviewModal({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={onRetryAll}
+                  onClick={handleRetryAll}
                   disabled={!jobId || globalLoading !== null}
                   className="h-7 text-xs"
                 >

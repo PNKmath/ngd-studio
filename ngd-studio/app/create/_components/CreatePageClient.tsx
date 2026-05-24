@@ -184,6 +184,22 @@ export default function CreateV4Page({ currentYear }: CreateV4PageProps) {
   const [figureGlobalLoading, setFigureGlobalLoading] = useState<string | null>(null);
   const [cropperOpen, setCropperOpen] = useState(false);
 
+  // create 모드: figure 단계가 done이 되면 자동으로 FigureReviewModal을 연다.
+  // orchestrator(sse.ts)가 stopAfterStage="figure"로 figure 직후 멈추므로,
+  // 사용자는 그림을 확인하고 "확인 완료 → HWPX 조립 시작" CTA로 builder를 트리거한다.
+  // jobId당 1회만 자동 오픈해 사용자가 닫은 모달을 다시 띄우지 않는다.
+  const autoOpenedFigureJobIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (mode !== "create") return;
+    if (!jobId) return;
+    const figureStage = stages.find((s) => s.name === "figure");
+    if (figureStage?.status !== "done") return;
+    if (autoOpenedFigureJobIdRef.current === jobId) return;
+    autoOpenedFigureJobIdRef.current = jobId;
+    setQuestionModalOpen(false);
+    setFigureModalOpen(true);
+  }, [mode, jobId, stages]);
+
   const isMetaComplete =
     meta.school.trim().length > 0 &&
     meta.grade > 0 &&
